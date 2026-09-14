@@ -167,6 +167,31 @@
                     <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
                         {{ $createdEnrollments }} enrollment(s) created, {{ $updatedEnrollments }} updated.
                     </p>
+
+                    @if ($subjectSummary->isNotEmpty())
+                        <div class="mt-6">
+                            <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">Subjects in this session</h4>
+                            <div class="mt-2 max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                                <table class="min-w-full text-sm">
+                                    <thead class="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
+                                        <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                            <th class="py-2 px-3">Subject</th>
+                                            <th class="py-2 px-3">Students</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                        @foreach ($subjectSummary as $subject)
+                                            <tr>
+                                                <td class="py-2 px-3 text-gray-700 dark:text-gray-300">{{ $subject->code }} &mdash; {{ $subject->title }}</td>
+                                                <td class="py-2 px-3 text-gray-700 dark:text-gray-300">{{ $subject->enrollments_count }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="mt-6 flex items-center gap-3">
                         <a href="{{ route('sessions.show', $examSession) }}" wire:navigate class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500">
                             Back to Session

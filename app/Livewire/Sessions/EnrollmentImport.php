@@ -397,6 +397,15 @@ class EnrollmentImport extends Component
     #[Layout('layouts.app')]
     public function render()
     {
-        return view('livewire.sessions.enrollment-import');
+        $subjectSummary = $this->step === 'done'
+            ? Subject::whereHas('enrollments', fn ($q) => $q->where('exam_session_id', $this->examSession->id))
+                ->withCount(['enrollments' => fn ($q) => $q->where('exam_session_id', $this->examSession->id)])
+                ->orderBy('code')
+                ->get()
+            : collect();
+
+        return view('livewire.sessions.enrollment-import', [
+            'subjectSummary' => $subjectSummary,
+        ]);
     }
 }

@@ -116,6 +116,23 @@ class EnrollmentImportTest extends TestCase
         ]);
     }
 
+    public function test_done_step_shows_a_subject_student_count_summary(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        $component = Livewire::actingAs($staff)
+            ->test(EnrollmentImport::class, ['examSession' => $session])
+            ->set('file', $this->csv())
+            ->call('confirmMapping')
+            ->call('commitImport');
+
+        // 3 distinct subjects were created from the fixture CSV.
+        $summary = $component->viewData('subjectSummary');
+        $this->assertCount(3, $summary);
+        $this->assertSame(1, $summary->firstWhere('code', 'CS09186|11')->enrollments_count);
+    }
+
     public function test_reimporting_the_same_pair_updates_rather_than_duplicates(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
