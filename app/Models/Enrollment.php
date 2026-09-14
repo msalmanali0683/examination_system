@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Enrollment extends Model
 {
@@ -17,6 +18,11 @@ class Enrollment extends Model
         'section',
         'teacher_id',
     ];
+
+    public function seatAssignment(): HasOne
+    {
+        return $this->hasOne(SeatAssignment::class);
+    }
 
     public function examSession(): BelongsTo
     {

@@ -114,6 +114,24 @@
             @endif
         </div>
 
+        <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Seating</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Seats every enrolled student into a room, using the strategy selected above. Run this after generating the timetable.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="{{ route('sessions.seating', $examSession) }}" wire:navigate class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 whitespace-nowrap">
+                        View Seating
+                    </a>
+                    <button type="button" wire:click="generateSeating" wire:loading.attr="disabled" class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500 disabled:opacity-50 whitespace-nowrap">
+                        <span wire:loading.remove wire:target="generateSeating">Generate Seating</span>
+                        <span wire:loading wire:target="generateSeating">Generating&hellip;</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         @if ($conflicted->isNotEmpty())
             <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Unavoidable Clashes</h3>

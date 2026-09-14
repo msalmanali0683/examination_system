@@ -7,6 +7,7 @@ use App\Models\ExamSession;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
 use App\Services\Generation\ConflictGraphBuilder;
+use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\TimetableGenerator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -116,6 +117,28 @@ class GenerationConstraints extends Component
             $result->conflicts->isEmpty()
                 ? 'Timetable generated with no clashes.'
                 : "Timetable generated with {$result->conflicts->count()} unavoidable clash(es) — see below."
+        );
+    }
+
+    public function generateSeating(): void
+    {
+        $this->authorize('generate_roster');
+
+        $hasSlots = $this->examSession->subjectSlotAssignments()->whereNotNull('time_slot_id')->exists();
+
+        if (! $hasSlots) {
+            session()->flash('error', 'Generate the timetable first — seating needs subjects assigned to slots.');
+
+            return;
+        }
+
+        $result = (new SeatAllocationService)->generate($this->examSession);
+
+        session()->flash(
+            $result->warnings->isEmpty() ? 'status' : 'error',
+            $result->warnings->isEmpty()
+                ? 'Seating generated for every slot.'
+                : "Seating generated with {$result->warnings->count()} warning(s) — some students couldn't be seated or adjacency couldn't be avoided."
         );
     }
 
