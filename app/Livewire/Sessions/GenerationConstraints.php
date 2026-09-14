@@ -83,6 +83,32 @@ class GenerationConstraints extends Component
         );
     }
 
+    /**
+     * When checked for a subject, any teacher who teaches one or more of
+     * that subject's sections (per the enrollment file's Teacher column)
+     * gets their session duty count forced to exactly that many sections —
+     * see DutyAllocationService::sectionBasedDutyOverrides().
+     */
+    public function toggleDutyMatchesSections(int $subjectId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $existing = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
+            ->where('subject_id', $subjectId)
+            ->first();
+
+        if ($existing?->duty_matches_sections) {
+            $existing->update(['duty_matches_sections' => false]);
+
+            return;
+        }
+
+        SubjectSlotAssignment::updateOrCreate(
+            ['exam_session_id' => $this->examSession->id, 'subject_id' => $subjectId],
+            ['duty_matches_sections' => true]
+        );
+    }
+
     public function generateTimetable(): void
     {
         $this->authorize('generate_roster');
@@ -215,6 +241,14 @@ class GenerationConstraints extends Component
 
         $assignments = $this->examSession->subjectSlotAssignments()->get()->keyBy('subject_id');
 
+        $sectionBreakdown = Enrollment::where('exam_session_id', $sessionId)
+            ->select('subject_id', 'section')
+            ->selectRaw('count(*) as c')
+            ->groupBy('subject_id', 'section')
+            ->get()
+            ->groupBy('subject_id')
+            ->map(fn ($rows) => $rows->sortBy('section')->pluck('c', 'section'));
+
         // Computing this runs a full seating simulation across every slot,
         // so it's only done when the admin asks for it (Check Capacity),
         // not on every render — otherwise every unrelated click (pinning a
@@ -226,6 +260,7 @@ class GenerationConstraints extends Component
         return view('livewire.sessions.generation-constraints', [
             'subjects' => $subjects,
             'assignments' => $assignments,
+            'sectionBreakdown' => $sectionBreakdown,
             'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
             'requirements' => $requirements,

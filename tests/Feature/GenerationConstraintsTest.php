@@ -54,6 +54,44 @@ class GenerationConstraintsTest extends TestCase
         $this->assertSame(2, $session->fresh()->mixed_subjects_per_room);
     }
 
+    public function test_pin_subjects_table_shows_a_per_section_breakdown(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1B']);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+
+        $breakdown = $component->viewData('sectionBreakdown')->get($subject->id);
+        $this->assertSame(['BSAI 1A' => 2, 'BSAI 1B' => 1], $breakdown->all());
+    }
+
+    public function test_toggling_duty_matches_sections_persists_and_reverting_clears_it(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+
+        $component->call('toggleDutyMatchesSections', $subject->id);
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'duty_matches_sections' => true,
+        ]);
+
+        $component->call('toggleDutyMatchesSections', $subject->id);
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'duty_matches_sections' => false,
+        ]);
+    }
+
     public function test_pinning_and_unpinning_a_subject(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

@@ -139,16 +139,53 @@ class DutyAllocationService
     {
         $constraints = SessionTeacherConstraint::where('exam_session_id', $session->id)->get()->keyBy('teacher_id');
         $excludedIds = $constraints->where('is_excluded', true)->keys();
+        $sectionOverrides = $this->sectionBasedDutyOverrides($session);
 
         return Teacher::where('is_active', true)
             ->whereNotIn('id', $excludedIds)
             ->orderBy('id')
             ->get()
-            ->map(fn (Teacher $teacher) => [
-                'id' => $teacher->id,
-                'minDuties' => $constraints->get($teacher->id)?->effectiveMinDuties() ?? config('exam.default_min_duties'),
-                'maxDuties' => $constraints->get($teacher->id)?->effectiveMaxDuties() ?? config('exam.default_max_duties'),
-            ])
+            ->map(function (Teacher $teacher) use ($constraints, $sectionOverrides) {
+                $override = $sectionOverrides[$teacher->id] ?? null;
+
+                return [
+                    'id' => $teacher->id,
+                    'minDuties' => $override ?? ($constraints->get($teacher->id)?->effectiveMinDuties() ?? config('exam.default_min_duties')),
+                    'maxDuties' => $override ?? ($constraints->get($teacher->id)?->effectiveMaxDuties() ?? config('exam.default_max_duties')),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * For any subject marked "duty = sections taught", a teacher who
+     * teaches N distinct sections of it (per the enrollment Teacher
+     * column) gets their session duty count forced to exactly N —
+     * overriding any individual or bulk min/max override, since this is a
+     * more specific, deliberately-opted-into rule. Summed across every
+     * such subject a teacher teaches, in the (expected to be rare) case
+     * more than one is checked.
+     *
+     * @return array<int, int> teacher_id => exact duty count
+     */
+    private function sectionBasedDutyOverrides(ExamSession $session): array
+    {
+        $checkedSubjectIds = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->where('duty_matches_sections', true)
+            ->pluck('subject_id');
+
+        if ($checkedSubjectIds->isEmpty()) {
+            return [];
+        }
+
+        return Enrollment::where('exam_session_id', $session->id)
+            ->whereIn('subject_id', $checkedSubjectIds)
+            ->whereNotNull('teacher_id')
+            ->select('teacher_id', 'subject_id', 'section')
+            ->distinct()
+            ->get()
+            ->groupBy('teacher_id')
+            ->map(fn ($rows) => $rows->count())
             ->all();
     }
 

@@ -31,6 +31,19 @@
                 Apply to All
             </button>
         </div>
+
+        <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg flex items-center gap-4 flex-wrap">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Available for every teacher:</span>
+            @foreach ($this->days() as $iso => $label)
+                <label class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                    <input type="checkbox"
+                        wire:click="toggleDayForAll({{ $iso }}, $event.target.checked)"
+                        @checked($allAvailableByDay[$iso])
+                        class="rounded border-gray-300 h-3.5 w-3.5">
+                    {{ $label }}
+                </label>
+            @endforeach
+        </div>
     @endif
 
     @if ($teachers->isEmpty())

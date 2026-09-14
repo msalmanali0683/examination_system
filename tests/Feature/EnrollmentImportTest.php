@@ -131,6 +131,10 @@ class EnrollmentImportTest extends TestCase
         $summary = $component->viewData('subjectSummary');
         $this->assertCount(3, $summary);
         $this->assertSame(1, $summary->firstWhere('code', 'CS09186|11')->enrollments_count);
+
+        $subject = \App\Models\Subject::where('code', 'CS09186|11')->first();
+        $breakdown = $component->viewData('sectionBreakdown')->get($subject->id);
+        $this->assertSame(['BSAI 1B' => 1], $breakdown->all());
     }
 
     public function test_reimporting_the_same_pair_updates_rather_than_duplicates(): void

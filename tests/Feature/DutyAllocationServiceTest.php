@@ -140,6 +140,44 @@ class DutyAllocationServiceTest extends TestCase
         $this->assertDatabaseMissing('duty_assignments', ['teacher_id' => $unavailableMonday->id]);
     }
 
+    public function test_a_subject_marked_duty_matches_sections_forces_that_teachers_exact_duty_count(): void
+    {
+        $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
+
+        // Teacher A teaches 2 distinct sections of subjectX — their duty
+        // count should end up at exactly 2, capped even though there's
+        // capacity for more, and reached even though the config default
+        // min is also 2 (so this isn't just coincidentally matching it).
+        $subjectX = Subject::factory()->create();
+        $teacherA = Teacher::factory()->create(['is_active' => true]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'B']);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectX->id,
+            'duty_matches_sections' => true,
+        ]);
+
+        // A second teacher with the default 2-6 range to absorb the rest.
+        $teacherB = Teacher::factory()->create(['is_active' => true]);
+
+        // 8 slots x 1 room x 1 invigilator = 8 duty-slots, exactly A's
+        // capped 2 plus B's capped 6.
+        $subjectOther = Subject::factory()->create();
+        for ($i = 0; $i < 8; $i++) {
+            $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+            $room = Room::factory()->create();
+            $this->seatOneStudent($session, $subjectOther, $slot, $room);
+        }
+
+        $result = (new DutyAllocationService)->generate($session);
+
+        $this->assertTrue($result->warnings->isEmpty());
+        $this->assertSame(2, DutyAssignment::where('exam_session_id', $session->id)->where('teacher_id', $teacherA->id)->count());
+        $this->assertSame(6, DutyAssignment::where('exam_session_id', $session->id)->where('teacher_id', $teacherB->id)->count());
+    }
+
     public function test_teacher_subject_exclusion_keeps_a_teacher_off_their_own_subjects_slot(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1, 'teacher_subject_exclusion' => true]);

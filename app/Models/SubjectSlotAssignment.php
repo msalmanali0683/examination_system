@@ -13,10 +13,12 @@ class SubjectSlotAssignment extends Model
         'time_slot_id',
         'is_pinned',
         'conflict_note',
+        'duty_matches_sections',
     ];
 
     protected $casts = [
         'is_pinned' => 'boolean',
+        'duty_matches_sections' => 'boolean',
     ];
 
     public function examSession(): BelongsTo

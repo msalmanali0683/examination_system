@@ -193,6 +193,54 @@ class ExamSessionsTest extends TestCase
         ]);
     }
 
+    public function test_bulk_toggle_day_marks_every_active_teacher_unavailable_and_reverting_clears_it(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teachers = Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->create(['is_active' => false]); // must be left alone
+
+        $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
+
+        // Turn Saturday (ISO 6) off for everyone.
+        $component->call('toggleDayForAll', 6, false);
+
+        foreach ($teachers as $teacher) {
+            $this->assertDatabaseHas('session_teacher_constraints', [
+                'exam_session_id' => $session->id,
+                'teacher_id' => $teacher->id,
+            ]);
+            $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+                ->where('teacher_id', $teacher->id)->first();
+            $this->assertSame([6], $constraint->unavailable_days);
+        }
+        $this->assertDatabaseCount('session_teacher_constraints', 3);
+
+        // Turn Saturday back on for everyone -> rows go back to "no override".
+        $component->call('toggleDayForAll', 6, true);
+        $this->assertDatabaseCount('session_teacher_constraints', 0);
+    }
+
+    public function test_bulk_toggle_day_preserves_other_existing_unavailable_days(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+        \App\Models\SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'unavailable_days' => [1], // already unavailable Monday
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(TeacherConstraints::class, ['examSession' => $session])
+            ->call('toggleDayForAll', 6, false); // now also off Saturday
+
+        $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+            ->where('teacher_id', $teacher->id)->first();
+        $this->assertEqualsCanonicalizing([1, 6], $constraint->unavailable_days);
+    }
+
     public function test_marking_a_teacher_unavailable_on_a_day_persists_and_reverting_removes_the_row(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

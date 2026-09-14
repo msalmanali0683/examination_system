@@ -95,6 +95,31 @@ class TeacherConstraints extends Component
         $this->apply($constraint, ['unavailable_days' => $unavailable ?: null]);
     }
 
+    /**
+     * Marks every active teacher available (or unavailable) on $day at
+     * once — the bulk equivalent of clicking each teacher's checkbox for
+     * that day individually.
+     */
+    public function toggleDayForAll(int $day, bool $available): void
+    {
+        $this->authorize('manage_sessions');
+
+        DB::transaction(function () use ($day, $available) {
+            foreach (Teacher::where('is_active', true)->pluck('id') as $teacherId) {
+                $constraint = $this->constraintFor($teacherId);
+                $unavailable = $constraint->unavailable_days ?? [];
+
+                $unavailable = $available
+                    ? array_values(array_diff($unavailable, [$day]))
+                    : array_values(array_unique([...$unavailable, $day]));
+
+                $this->apply($constraint, ['unavailable_days' => $unavailable ?: null]);
+            }
+        });
+
+        session()->flash('status', 'Day availability updated for every teacher.');
+    }
+
     private function constraintFor(int $teacherId): SessionTeacherConstraint
     {
         $this->authorize('manage_sessions');
@@ -129,9 +154,18 @@ class TeacherConstraints extends Component
 
     public function render()
     {
+        $constraints = $this->examSession->sessionTeacherConstraints()->get()->keyBy('teacher_id');
+
+        // A day reads as "all available" only while no teacher has it
+        // marked unavailable — driving the bulk checkbox's checked state.
+        $allAvailableByDay = collect(self::DAYS)->keys()->mapWithKeys(
+            fn ($day) => [$day => $constraints->every(fn ($c) => ! in_array($day, $c->unavailable_days ?? [], true))]
+        );
+
         return view('livewire.sessions.teacher-constraints', [
             'teachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
-            'constraints' => $this->examSession->sessionTeacherConstraints()->get()->keyBy('teacher_id'),
+            'constraints' => $constraints,
+            'allAvailableByDay' => $allAvailableByDay,
         ]);
     }
 }

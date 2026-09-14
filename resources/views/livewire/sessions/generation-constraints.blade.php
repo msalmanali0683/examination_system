@@ -85,13 +85,24 @@
                                 <th class="py-2 pr-4">Students</th>
                                 <th class="py-2 pr-4">Assigned Slot</th>
                                 <th class="py-2 pr-4">Pin</th>
+                                <th class="py-2 pr-4">Duty = Sections Taught</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             @foreach ($subjects as $subject)
-                                @php $assignment = $assignments->get($subject->id); @endphp
+                                @php
+                                    $assignment = $assignments->get($subject->id);
+                                    $sections = $sectionBreakdown->get($subject->id, collect());
+                                @endphp
                                 <tr>
-                                    <td class="py-2 pr-4 text-gray-900 dark:text-gray-100">{{ $subject->code }} &mdash; {{ $subject->title }}</td>
+                                    <td class="py-2 pr-4 text-gray-900 dark:text-gray-100">
+                                        {{ $subject->code }} &mdash; {{ $subject->title }}
+                                        @if ($sections->count() > 1)
+                                            <div class="text-xs text-gray-400 font-normal mt-0.5">
+                                                {{ $sections->map(fn ($c, $section) => "{$section}: {$c}")->implode(', ') }}
+                                            </div>
+                                        @endif
+                                    </td>
                                     <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->enrollments_count }}</td>
                                     <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">
                                         @if ($assignment?->timeSlot)
@@ -112,6 +123,9 @@
                                                 </option>
                                             @endforeach
                                         </select>
+                                    </td>
+                                    <td class="py-2 pr-4">
+                                        <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300">
                                     </td>
                                 </tr>
                             @endforeach

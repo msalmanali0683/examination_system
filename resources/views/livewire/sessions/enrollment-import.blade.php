@@ -177,13 +177,18 @@
                                         <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                                             <th class="py-2 px-3">Subject</th>
                                             <th class="py-2 px-3">Students</th>
+                                            <th class="py-2 px-3">Sections</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                         @foreach ($subjectSummary as $subject)
+                                            @php $sections = $sectionBreakdown->get($subject->id, collect()); @endphp
                                             <tr>
                                                 <td class="py-2 px-3 text-gray-700 dark:text-gray-300">{{ $subject->code }} &mdash; {{ $subject->title }}</td>
                                                 <td class="py-2 px-3 text-gray-700 dark:text-gray-300">{{ $subject->enrollments_count }}</td>
+                                                <td class="py-2 px-3 text-gray-500 dark:text-gray-400">
+                                                    {{ $sections->map(fn ($c, $section) => "{$section}: {$c}")->implode(', ') }}
+                                                </td>
                                             </tr>
                                         @endforeach
                                     </tbody>

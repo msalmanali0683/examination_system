@@ -404,8 +404,19 @@ class EnrollmentImport extends Component
                 ->get()
             : collect();
 
+        $sectionBreakdown = $this->step === 'done'
+            ? Enrollment::where('exam_session_id', $this->examSession->id)
+                ->select('subject_id', 'section')
+                ->selectRaw('count(*) as c')
+                ->groupBy('subject_id', 'section')
+                ->get()
+                ->groupBy('subject_id')
+                ->map(fn ($rows) => $rows->sortBy('section')->pluck('c', 'section'))
+            : collect();
+
         return view('livewire.sessions.enrollment-import', [
             'subjectSummary' => $subjectSummary,
+            'sectionBreakdown' => $sectionBreakdown,
         ]);
     }
 }
