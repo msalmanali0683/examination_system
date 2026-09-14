@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\Room;
+use App\Models\SeatAssignment;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
+use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -192,5 +195,49 @@ class GenerationConstraintsTest extends TestCase
             ->call('generateSeating');
 
         $this->assertDatabaseCount('seat_assignments', 0);
+    }
+
+    public function test_generate_duties_is_blocked_until_seating_exists(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateDuties');
+
+        $this->assertDatabaseCount('duty_assignments', 0);
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_generate_duties_creates_assignments_and_marks_the_session_generated(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'draft', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SeatAssignment::create([
+            'exam_session_id' => $session->id,
+            'enrollment_id' => $enrollment->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+            'row_number' => 1,
+            'column_number' => 1,
+        ]);
+        Teacher::factory()->create(['is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateDuties');
+
+        $this->assertDatabaseCount('duty_assignments', 1);
+        $this->assertSame('generated', $session->fresh()->status);
     }
 }

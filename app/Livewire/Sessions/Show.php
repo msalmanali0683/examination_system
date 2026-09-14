@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SubjectSlotAssignment;
 use Illuminate\Support\Facades\DB;
@@ -53,11 +54,13 @@ class Show extends Component
      * Wipes every enrollment for this session so it can be re-imported
      * from scratch. Deleting an enrollment cascades to its seat
      * assignment (FK on seat_assignments.enrollment_id), but subject
-     * slot assignments are keyed by subject, not enrollment, so those
-     * are cleared explicitly — otherwise a subject with no enrollments
-     * left would still show as scheduled. Anything already generated
-     * from this data is stale once the underlying enrollments are gone,
-     * so the session drops back to 'draft'.
+     * slot assignments and duty assignments are keyed by subject/room,
+     * not enrollment, so those are cleared explicitly — otherwise a
+     * subject with no enrollments left would still show as scheduled,
+     * and duties (tied to which rooms hosted which slot) would go
+     * stale. Anything already generated from this data is stale once
+     * the underlying enrollments are gone, so the session drops back
+     * to 'draft'.
      */
     public function resetEnrollments(): void
     {
@@ -71,6 +74,7 @@ class Show extends Component
 
         DB::transaction(function () {
             SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->delete();
+            DutyAssignment::where('exam_session_id', $this->examSession->id)->delete();
             $this->examSession->enrollments()->delete();
         });
 

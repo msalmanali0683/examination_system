@@ -7,6 +7,7 @@ use App\Livewire\Sessions\RoomSelection;
 use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
 use App\Livewire\Sessions\TimeSlots;
+use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
@@ -200,6 +201,7 @@ class ExamSessionsTest extends TestCase
         $session = ExamSession::factory()->create(['status' => 'generated']);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
+        $teacher = Teacher::factory()->create();
         $room = Room::factory()->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
@@ -224,6 +226,13 @@ class ExamSessionsTest extends TestCase
             'column_number' => 1,
         ]);
 
+        DutyAssignment::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+        ]);
+
         Livewire::actingAs($staff)
             ->test(Show::class, ['examSession' => $session])
             ->call('resetEnrollments');
@@ -231,6 +240,7 @@ class ExamSessionsTest extends TestCase
         $this->assertDatabaseCount('enrollments', 0);
         $this->assertDatabaseCount('seat_assignments', 0);
         $this->assertDatabaseCount('subject_slot_assignments', 0);
+        $this->assertDatabaseCount('duty_assignments', 0);
         $this->assertSame('draft', $session->fresh()->status);
 
         // Shared catalog data (subjects/students/rooms) is untouched.

@@ -2,14 +2,19 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\SessionTeacherConstraint;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
+use App\Models\Teacher;
 use App\Services\Generation\ConflictGraphBuilder;
+use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\TimetableGenerator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -161,6 +166,31 @@ class GenerationConstraints extends Component
         );
     }
 
+    public function generateDuties(): void
+    {
+        $this->authorize('generate_roster');
+
+        if (! $this->examSession->seatAssignments()->exists()) {
+            session()->flash('error', 'Generate seating first — duties are assigned to the rooms actually in use each slot.');
+
+            return;
+        }
+
+        $result = (new DutyAllocationService)->generate($this->examSession);
+
+        // Duties are the last stage of the pipeline (timetable -> seating ->
+        // duties); once they're generated the roster as a whole is ready for
+        // review, even if some warnings remain.
+        $this->examSession->update(['status' => 'generated']);
+
+        session()->flash(
+            $result->warnings->isEmpty() ? 'status' : 'error',
+            $result->warnings->isEmpty()
+                ? 'Duties generated for every slot.'
+                : "Duties generated with {$result->warnings->count()} warning(s) — see below."
+        );
+    }
+
     #[Layout('layouts.app')]
     public function render()
     {
@@ -189,6 +219,41 @@ class GenerationConstraints extends Component
             'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
             'requirements' => $requirements,
+            'dutyFairness' => $this->dutyFairness($sessionId),
         ]);
+    }
+
+    /**
+     * A cheap aggregate (no simulation), safe to compute on every render —
+     * unlike the requirement check, this doesn't re-run seating.
+     */
+    private function dutyFairness(int $sessionId): Collection
+    {
+        $counts = DutyAssignment::where('exam_session_id', $sessionId)
+            ->selectRaw('teacher_id, count(*) as c')
+            ->groupBy('teacher_id')
+            ->pluck('c', 'teacher_id');
+
+        $constraints = SessionTeacherConstraint::where('exam_session_id', $sessionId)->get()->keyBy('teacher_id');
+
+        return Teacher::where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(function (Teacher $teacher) use ($counts, $constraints) {
+                $constraint = $constraints->get($teacher->id);
+                $excluded = $constraint?->is_excluded ?? false;
+                $min = $constraint?->effectiveMinDuties() ?? config('exam.default_min_duties');
+                $max = $constraint?->effectiveMaxDuties() ?? config('exam.default_max_duties');
+                $count = $counts->get($teacher->id, 0);
+
+                return (object) [
+                    'teacher' => $teacher,
+                    'count' => $count,
+                    'min' => $min,
+                    'max' => $max,
+                    'excluded' => $excluded,
+                    'met' => $excluded || $count >= $min,
+                ];
+            });
     }
 }

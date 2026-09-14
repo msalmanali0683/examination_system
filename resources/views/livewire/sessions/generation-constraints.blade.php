@@ -194,6 +194,52 @@
             </div>
         </div>
 
+        <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Duties</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Assigns invigilators to every room in use each slot, balancing load across teachers. Run this after generating seating.</p>
+                </div>
+                <button type="button" wire:click="generateDuties" wire:loading.attr="disabled" wire:confirm="Regenerate duties? Locked duties are left untouched; everything else will be recomputed." class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500 disabled:opacity-50 whitespace-nowrap">
+                    <span wire:loading.remove wire:target="generateDuties">Generate Duties</span>
+                    <span wire:loading wire:target="generateDuties">Generating&hellip;</span>
+                </button>
+            </div>
+
+            @if ($dutyFairness->isNotEmpty())
+                <div class="mt-4 max-h-96 overflow-y-auto overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
+                            <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                <th class="py-2 px-3">Teacher</th>
+                                <th class="py-2 px-3">Duties</th>
+                                <th class="py-2 px-3">Min / Max</th>
+                                <th class="py-2 px-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            @foreach ($dutyFairness as $row)
+                                <tr>
+                                    <td class="py-2 px-3 text-gray-900 dark:text-gray-100">{{ $row->teacher->name }}</td>
+                                    <td class="py-2 px-3 text-gray-500 dark:text-gray-400">{{ $row->count }}</td>
+                                    <td class="py-2 px-3 text-gray-500 dark:text-gray-400">{{ $row->min }} / {{ $row->max }}</td>
+                                    <td class="py-2 px-3">
+                                        @if ($row->excluded)
+                                            <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">Excluded</span>
+                                        @elseif ($row->met)
+                                            <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">OK</span>
+                                        @else
+                                            <span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Below Min</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+
         @if ($conflicted->isNotEmpty())
             <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Unavoidable Clashes</h3>
