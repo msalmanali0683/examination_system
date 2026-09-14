@@ -29,13 +29,29 @@ class GenerationConstraintsTest extends TestCase
         Livewire::actingAs($staff)
             ->test(GenerationConstraints::class, ['examSession' => $session])
             ->set('seating_strategy', 'mixed')
+            ->set('mixed_subjects_per_room', 3)
             ->set('invigilators_per_room', 3)
             ->set('teacher_subject_exclusion', true)
             ->call('saveSettings');
 
         $this->assertSame('mixed', $session->fresh()->seating_strategy);
+        $this->assertSame(3, $session->fresh()->mixed_subjects_per_room);
         $this->assertSame(3, $session->fresh()->invigilators_per_room);
         $this->assertTrue($session->fresh()->teacher_subject_exclusion);
+    }
+
+    public function test_mixed_subjects_per_room_resets_to_default_outside_mixed_mode(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('seating_strategy', 'strict')
+            ->set('mixed_subjects_per_room', 7)
+            ->call('saveSettings');
+
+        $this->assertSame(2, $session->fresh()->mixed_subjects_per_room);
     }
 
     public function test_pinning_and_unpinning_a_subject(): void

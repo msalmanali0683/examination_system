@@ -103,7 +103,7 @@ class SeatAllocationService
      */
     private function allocatePerSlot(ExamSession $session, Collection $roomPool): Collection
     {
-        $strategy = $this->strategyFor($session->seating_strategy);
+        $strategy = $this->strategyFor($session->seating_strategy, $session->mixed_subjects_per_room);
 
         $subjectToSlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
             ->whereNotNull('time_slot_id')
@@ -193,11 +193,11 @@ class SeatAllocationService
         });
     }
 
-    private function strategyFor(string $seatingStrategy): SeatingStrategy
+    private function strategyFor(string $seatingStrategy, int $mixedSubjectsPerRoom = 2): SeatingStrategy
     {
         return match ($seatingStrategy) {
             'combine_sections' => new CombineSectionsSeatingStrategy,
-            'mixed' => new MixedSeatingStrategy,
+            'mixed' => new MixedSeatingStrategy($mixedSubjectsPerRoom),
             default => new StrictSeatingStrategy,
         };
     }

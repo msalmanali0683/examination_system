@@ -26,6 +26,8 @@ class GenerationConstraints extends Component
 
     public string $seating_strategy = 'strict';
 
+    public int $mixed_subjects_per_room = 2;
+
     public int $invigilators_per_room = 2;
 
     public bool $teacher_subject_exclusion = false;
@@ -37,6 +39,7 @@ class GenerationConstraints extends Component
         $this->authorize('manage_sessions');
         $this->examSession = $examSession;
         $this->seating_strategy = $examSession->seating_strategy;
+        $this->mixed_subjects_per_room = $examSession->mixed_subjects_per_room;
         $this->invigilators_per_room = $examSession->invigilators_per_room;
         $this->teacher_subject_exclusion = $examSession->teacher_subject_exclusion;
     }
@@ -47,9 +50,16 @@ class GenerationConstraints extends Component
 
         $validated = $this->validate([
             'seating_strategy' => ['required', Rule::in(['strict', 'combine_sections', 'mixed'])],
+            'mixed_subjects_per_room' => ['required_if:seating_strategy,mixed', 'integer', 'min:2', 'max:10'],
             'invigilators_per_room' => ['required', 'integer', 'min:1', 'max:10'],
             'teacher_subject_exclusion' => ['boolean'],
         ]);
+
+        // Not relevant outside Mixed mode — keep it a sane default rather
+        // than validating/saving whatever was left in the field.
+        if ($this->seating_strategy !== 'mixed') {
+            $validated['mixed_subjects_per_room'] = 2;
+        }
 
         $this->examSession->update($validated);
         session()->flash('status', 'Settings saved.');

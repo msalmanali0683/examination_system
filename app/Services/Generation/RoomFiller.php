@@ -67,4 +67,63 @@ class RoomFiller
 
         return ['placements' => $placements, 'remaining' => $remaining];
     }
+
+    /**
+     * Same fill order convention (top to bottom within a column, in
+     * ascending column order) but restricted to a specific subset of a
+     * room's columns — used by Mixed seating, where a whole column is
+     * dedicated to one subject/section rather than the whole room.
+     *
+     * @param  int[]  $columns
+     * @return array<int, array{row: int, column: int}>
+     */
+    public function seatOrderForColumns(int $rows, array $columns): array
+    {
+        $seats = [];
+
+        foreach ($columns as $column) {
+            for ($row = 1; $row <= $rows; $row++) {
+                $seats[] = ['row' => $row, 'column' => $column];
+            }
+        }
+
+        return $seats;
+    }
+
+    /**
+     * @param  int[]  $itemIds
+     * @param  int[]  $columns
+     * @param  array<int, array{row: int, column: int}>  $occupied
+     * @return array{placements: array<int, array{item_id: int, row: int, column: int}>, remaining: int[]}
+     */
+    public function fillColumns(array $itemIds, int $rows, array $columns, array $occupied = []): array
+    {
+        $occupiedKeys = array_flip(array_map(
+            fn (array $seat) => "{$seat['row']}:{$seat['column']}",
+            $occupied
+        ));
+
+        $placements = [];
+        $remaining = $itemIds;
+
+        foreach ($this->seatOrderForColumns($rows, $columns) as $seat) {
+            if (empty($remaining)) {
+                break;
+            }
+
+            $key = "{$seat['row']}:{$seat['column']}";
+
+            if (isset($occupiedKeys[$key])) {
+                continue;
+            }
+
+            $placements[] = [
+                'item_id' => array_shift($remaining),
+                'row' => $seat['row'],
+                'column' => $seat['column'],
+            ];
+        }
+
+        return ['placements' => $placements, 'remaining' => $remaining];
+    }
 }

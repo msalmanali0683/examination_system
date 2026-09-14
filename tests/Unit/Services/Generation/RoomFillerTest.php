@@ -53,4 +53,41 @@ class RoomFillerTest extends TestCase
         $this->assertSame([], $result['placements']);
         $this->assertSame([10, 20], $result['remaining']);
     }
+
+    public function test_seat_order_for_columns_fills_only_the_given_columns_in_order(): void
+    {
+        $order = (new RoomFiller)->seatOrderForColumns(rows: 2, columns: [3, 1]);
+
+        $this->assertSame([
+            ['row' => 1, 'column' => 3],
+            ['row' => 2, 'column' => 3],
+            ['row' => 1, 'column' => 1],
+            ['row' => 2, 'column' => 1],
+        ], $order);
+    }
+
+    public function test_fill_columns_places_items_only_in_the_given_columns(): void
+    {
+        $result = (new RoomFiller)->fillColumns([10, 20, 30], rows: 2, columns: [2]);
+
+        $this->assertCount(2, $result['placements']);
+        $this->assertSame([30], $result['remaining']);
+        foreach ($result['placements'] as $p) {
+            $this->assertSame(2, $p['column']);
+        }
+    }
+
+    public function test_fill_columns_skips_occupied_seats(): void
+    {
+        $result = (new RoomFiller)->fillColumns(
+            itemIds: [10, 20],
+            rows: 2,
+            columns: [1],
+            occupied: [['row' => 1, 'column' => 1]],
+        );
+
+        $this->assertCount(1, $result['placements']);
+        $this->assertSame(['item_id' => 10, 'row' => 2, 'column' => 1], $result['placements'][0]);
+        $this->assertSame([20], $result['remaining']);
+    }
 }

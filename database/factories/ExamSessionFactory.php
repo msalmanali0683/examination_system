@@ -23,6 +23,7 @@ class ExamSessionFactory extends Factory
             'end_date' => now()->addWeeks(2)->toDateString(),
             'status' => 'draft',
             'seating_strategy' => 'strict',
+            'mixed_subjects_per_room' => 2,
             'invigilators_per_room' => 2,
             'teacher_subject_exclusion' => false,
         ];

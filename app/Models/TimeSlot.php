@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TimeSlot extends Model
 {
@@ -25,6 +26,16 @@ class TimeSlot extends Model
     public function examSession(): BelongsTo
     {
         return $this->belongsTo(ExamSession::class);
+    }
+
+    public function seatAssignments(): HasMany
+    {
+        return $this->hasMany(SeatAssignment::class);
+    }
+
+    public function dutyAssignments(): HasMany
+    {
+        return $this->hasMany(DutyAssignment::class);
     }
 
     public function getDayNameAttribute(): string

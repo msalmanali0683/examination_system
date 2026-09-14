@@ -9,140 +9,117 @@ use App\Services\Generation\RoomFiller;
 use Illuminate\Support\Collection;
 
 /**
- * Rooms are filled to capacity with students from different subjects
- * mixed together (no per-group room exclusivity), round-robin interleaved
- * by subject so neighboring seats differ where possible. Before each seat
- * is committed, its already-placed up/down/left/right neighbors are
- * checked; if every remaining candidate would clash, one is placed anyway
- * and reported as a warning rather than leaving the seat empty or failing.
+ * A room's columns are split into `groupSize` column-groups (e.g. 2: odd
+ * columns vs even columns), each column-group dedicated to exactly one
+ * subject+section for the entire room — a whole column is one subject top
+ * to bottom. Left/right neighbors (adjacent columns) always differ in
+ * subject; front/back neighbors (same column) share one, deliberately —
+ * this is simpler and more predictable to invigilate than per-seat mixing.
+ *
+ * Groups are matched to a room's column-group capacities by size (largest
+ * remaining group to the largest capacity slot) to minimize wasted seats.
+ * A group larger than its assigned slot carries its overflow to the next
+ * room; a room with fewer waiting groups than `groupSize` simply leaves
+ * the unmatched column-groups empty rather than inventing a group.
  */
 class MixedSeatingStrategy implements SeatingStrategy
 {
-    public function __construct(protected RoomFiller $filler = new RoomFiller)
+    private int $groupSize;
+
+    public function __construct(int $groupSize = 2, protected RoomFiller $filler = new RoomFiller)
     {
+        $this->groupSize = max(2, $groupSize);
     }
 
     public function allocate(Collection $enrollments, array $rooms): SeatingResult
     {
-        $queue = $this->interleaveBySubject($enrollments);
+        $queue = $enrollments
+            ->groupBy(fn ($e) => $e->subject_id.'|'.$e->section)
+            ->values()
+            ->map(fn (Collection $group) => [
+                'subject_id' => $group->first()->subject_id,
+                'ids' => $group->pluck('id')->all(),
+            ])
+            ->all();
+
         $placements = [];
-        $warnings = collect();
 
         foreach ($rooms as $room) {
+            $queue = array_values(array_filter($queue, fn ($g) => ! empty($g['ids'])));
+
             if (empty($queue)) {
                 break;
             }
 
-            $seatOrder = array_slice(
-                $this->filler->seatOrder($room['rows'], $room['columns']),
-                0,
-                max(0, $room['capacity'])
-            );
+            $columnGroups = $this->columnGroupsFor($room['columns'], $this->groupSize);
+            $capacities = array_map(fn (array $cols) => count($cols) * $room['rows'], $columnGroups);
+            arsort($capacities); // largest column-group slot first, keys preserved
 
-            $occupiedKeys = array_flip(array_map(
-                fn (array $seat) => "{$seat['row']}:{$seat['column']}",
-                $room['occupied']
-            ));
+            $order = $this->queueIndicesLargestFirst($queue);
 
-            $grid = [];
-            foreach ($room['occupied'] as $seat) {
-                $grid["{$seat['row']}:{$seat['column']}"] = $seat['subject_id'];
-            }
-
-            foreach ($seatOrder as $seat) {
-                if (empty($queue)) {
+            $pairIndex = 0;
+            foreach (array_keys($capacities) as $groupIndex) {
+                if ($pairIndex >= count($order)) {
                     break;
                 }
 
-                $key = "{$seat['row']}:{$seat['column']}";
+                $queueIndex = $order[$pairIndex];
+                $pairIndex++;
 
-                if (isset($occupiedKeys[$key])) {
-                    continue;
+                $result = $this->filler->fillColumns(
+                    $queue[$queueIndex]['ids'],
+                    $room['rows'],
+                    $columnGroups[$groupIndex],
+                    $room['occupied']
+                );
+
+                foreach ($result['placements'] as $p) {
+                    $placements[] = new SeatPlacement($p['item_id'], $room['room_id'], $p['row'], $p['column']);
                 }
 
-                $neighborSubjects = $this->neighborSubjects($seat['row'], $seat['column'], $grid);
-                $chosenIndex = $this->firstNonClashing($queue, $neighborSubjects);
-
-                if ($chosenIndex === null) {
-                    $chosenIndex = 0;
-                    $warnings->push(new SeatingWarning(
-                        $queue[0]['enrollment_id'],
-                        "Could not avoid seating this student next to another student of the same subject (room seat row {$seat['row']}, column {$seat['column']}).",
-                        type: 'adjacency',
-                    ));
-                }
-
-                $item = array_splice($queue, $chosenIndex, 1)[0];
-                $placements[] = new SeatPlacement($item['enrollment_id'], $room['room_id'], $seat['row'], $seat['column']);
-                $grid[$key] = $item['subject_id'];
+                $queue[$queueIndex]['ids'] = $result['remaining'];
             }
         }
 
-        foreach ($queue as $item) {
-            $warnings->push(new SeatingWarning($item['enrollment_id'], 'No room capacity left to seat this student.'));
+        $warnings = collect();
+
+        foreach ($queue as $group) {
+            foreach ($group['ids'] as $enrollmentId) {
+                $warnings->push(new SeatingWarning($enrollmentId, 'No room capacity left to seat this student.'));
+            }
         }
 
         return new SeatingResult($placements, $warnings);
     }
 
     /**
-     * @param  array<int, array{enrollment_id: int, subject_id: int}>  $queue
-     * @param  int[]  $avoidSubjects
-     */
-    private function firstNonClashing(array $queue, array $avoidSubjects): ?int
-    {
-        foreach ($queue as $index => $item) {
-            if (! in_array($item['subject_id'], $avoidSubjects, true)) {
-                return $index;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<string, int>  $grid  "row:column" => subject_id
-     * @return int[]
-     */
-    private function neighborSubjects(int $row, int $column, array $grid): array
-    {
-        $keys = [
-            ($row - 1).":{$column}",
-            ($row + 1).":{$column}",
-            "{$row}:".($column - 1),
-            "{$row}:".($column + 1),
-        ];
-
-        return array_values(array_filter(array_map(fn ($key) => $grid[$key] ?? null, $keys), fn ($v) => $v !== null));
-    }
-
-    /**
-     * Round-robin merge so consecutive items differ in subject wherever
-     * enough distinct subjects exist, sorted by roll number within each.
+     * Column c (1-indexed) belongs to column-group (c-1) % groupSize, so
+     * with groupSize=2 columns alternate 1,3,5.. vs 2,4,6..; with
+     * groupSize=3 they cycle 1,4.. / 2,5.. / 3,6.. and so on.
      *
-     * @param  Collection<int, object{id: int, subject_id: int}>  $enrollments
-     * @return array<int, array{enrollment_id: int, subject_id: int}>
+     * @return array<int, int[]> groupIndex => column numbers
      */
-    private function interleaveBySubject(Collection $enrollments): array
+    private function columnGroupsFor(int $columns, int $groupSize): array
     {
-        // Plain array (not a Collection) so the reference-based foreach
-        // below reliably mutates the queues in place while draining them.
-        $bySubject = $enrollments
-            ->groupBy('subject_id')
-            ->map(fn (Collection $group) => $group->pluck('id')->all())
-            ->all();
+        $groups = array_fill(0, $groupSize, []);
 
-        $result = [];
-
-        while (array_filter($bySubject)) {
-            foreach ($bySubject as $subjectId => &$ids) {
-                if (! empty($ids)) {
-                    $result[] = ['enrollment_id' => array_shift($ids), 'subject_id' => $subjectId];
-                }
-            }
-            unset($ids);
+        for ($column = 1; $column <= $columns; $column++) {
+            $groups[($column - 1) % $groupSize][] = $column;
         }
 
-        return $result;
+        return $groups;
+    }
+
+    /**
+     * @param  array<int, array{subject_id: int, ids: int[]}>  $queue
+     * @return int[] queue indices, largest remaining group first
+     */
+    private function queueIndicesLargestFirst(array $queue): array
+    {
+        $indices = array_keys($queue);
+
+        usort($indices, fn ($a, $b) => count($queue[$b]['ids']) <=> count($queue[$a]['ids']));
+
+        return $indices;
     }
 }

@@ -17,6 +17,7 @@ class ExamSession extends Model
         'end_date',
         'status',
         'seating_strategy',
+        'mixed_subjects_per_room',
         'invigilators_per_room',
         'teacher_subject_exclusion',
         'locked_at',

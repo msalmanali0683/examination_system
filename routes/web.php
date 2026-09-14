@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Rooms\Index as RoomsIndex;
+use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\Index as SessionsIndex;
@@ -56,5 +57,9 @@ Route::get('sessions/{examSession}/generate', GenerationConstraints::class)
 Route::get('sessions/{examSession}/seating', SeatingChart::class)
     ->middleware(['auth'])
     ->name('sessions.seating');
+
+Route::get('sessions/{examSession}/duties', DutyBoard::class)
+    ->middleware(['auth'])
+    ->name('sessions.duties');
 
 require __DIR__.'/auth.php';

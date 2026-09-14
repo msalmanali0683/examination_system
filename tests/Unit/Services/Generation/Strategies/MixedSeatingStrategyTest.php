@@ -7,9 +7,20 @@ use PHPUnit\Framework\TestCase;
 
 class MixedSeatingStrategyTest extends TestCase
 {
-    private function enrollment(int $id, int $subjectId): object
+    private function enrollment(int $id, int $subjectId, string $section = 'A'): object
     {
-        return (object) ['id' => $id, 'subject_id' => $subjectId, 'section' => 'A'];
+        return (object) ['id' => $id, 'subject_id' => $subjectId, 'section' => $section];
+    }
+
+    private function enrollments(int $count, int $subjectId, int &$nextId): array
+    {
+        $result = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $result[] = $this->enrollment($nextId++, $subjectId);
+        }
+
+        return $result;
     }
 
     private function room(int $roomId, int $rows, int $columns, array $occupied = []): array
@@ -17,80 +28,180 @@ class MixedSeatingStrategyTest extends TestCase
         return ['room_id' => $roomId, 'rows' => $rows, 'columns' => $columns, 'capacity' => $rows * $columns, 'occupied' => $occupied];
     }
 
-    public function test_two_subjects_with_room_to_spare_are_never_seated_adjacently(): void
+    /**
+     * @return array<int, int> enrollment_id => subject_id
+     */
+    private function subjectByEnrollmentId(array $enrollments): array
     {
-        // 3 of subject 100, 3 of subject 200, room is 3 rows x 2 columns —
-        // plenty of room to alternate subjects down each column.
-        $enrollments = collect([
-            $this->enrollment(1, 100),
-            $this->enrollment(2, 100),
-            $this->enrollment(3, 100),
-            $this->enrollment(4, 200),
-            $this->enrollment(5, 200),
-            $this->enrollment(6, 200),
-        ]);
+        return collect($enrollments)->mapWithKeys(fn ($e) => [$e->id => $e->subject_id])->all();
+    }
 
-        $result = (new MixedSeatingStrategy)->allocate($enrollments, [$this->room(1, 3, 2)]);
+    private function columnsUsedBySubject(array $placements, array $subjectByEnrollmentId, int $subjectId): array
+    {
+        return collect($placements)
+            ->filter(fn ($p) => $subjectByEnrollmentId[$p->enrollmentId] === $subjectId)
+            ->pluck('column')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    public function test_two_groups_alternate_whole_columns(): void
+    {
+        $nextId = 1;
+        $a = $this->enrollments(6, 100, $nextId);
+        $b = $this->enrollments(6, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate($enrollments, [$this->room(1, 3, 4)]);
+
+        $this->assertCount(12, $result->placements);
+        $this->assertTrue($result->warnings->isEmpty());
+
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$a, ...$b]);
+        $this->assertSame([1, 3], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100));
+        $this->assertSame([2, 4], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200));
+    }
+
+    public function test_group_size_of_three_cycles_three_subjects_across_columns(): void
+    {
+        $nextId = 1;
+        $a = $this->enrollments(4, 100, $nextId);
+        $b = $this->enrollments(4, 200, $nextId);
+        $c = $this->enrollments(4, 300, $nextId);
+        $enrollments = collect([...$a, ...$b, ...$c]);
+
+        $result = (new MixedSeatingStrategy(groupSize: 3))->allocate($enrollments, [$this->room(1, 2, 6)]);
+
+        $this->assertCount(12, $result->placements);
+        $this->assertTrue($result->warnings->isEmpty());
+
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$a, ...$b, ...$c]);
+        $used = [
+            100 => $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100),
+            200 => $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200),
+            300 => $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 300),
+        ];
+
+        // Each subject owns exactly one of the three 2-column cycles, and no
+        // two subjects share a column.
+        foreach ($used as $columns) {
+            $this->assertCount(2, $columns);
+        }
+        $this->assertCount(6, array_unique(array_merge(...array_values($used))));
+    }
+
+    public function test_the_largest_group_is_matched_to_the_largest_column_slot(): void
+    {
+        // 3 columns split 2-way: columns {1,3} (2 cols) vs {2} (1 col).
+        // With 4 rows that's 8 seats vs 4 seats.
+        $nextId = 1;
+        $big = $this->enrollments(8, 100, $nextId);
+        $small = $this->enrollments(3, 200, $nextId);
+        $enrollments = collect([...$big, ...$small]);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate($enrollments, [$this->room(1, 4, 3)]);
+
+        $this->assertCount(11, $result->placements);
+        $this->assertTrue($result->warnings->isEmpty());
+
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$big, ...$small]);
+        $this->assertSame([1, 3], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100));
+        $this->assertSame([2], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200));
+    }
+
+    public function test_a_group_too_large_for_one_rooms_slot_carries_overflow_to_the_next_room(): void
+    {
+        $nextId = 1;
+        // groupSize 2, each room is 2 rows x 2 columns -> 2 seats per column-group.
+        $a = $this->enrollments(4, 100, $nextId); // needs 2 rooms' worth of its column-group
+        $b = $this->enrollments(2, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate($enrollments, [
+            $this->room(1, 2, 2),
+            $this->room(2, 2, 2),
+        ]);
 
         $this->assertCount(6, $result->placements);
         $this->assertTrue($result->warnings->isEmpty());
 
-        $bySeat = [];
-        foreach ($result->placements as $p) {
-            $bySeat["{$p->row}:{$p->column}"] = $enrollments->firstWhere('id', $p->enrollmentId)->subject_id;
-        }
+        $roomsUsedBySubjectA = collect($result->placements)
+            ->filter(fn ($p) => in_array($p->enrollmentId, collect($a)->pluck('id')->all(), true))
+            ->pluck('roomId')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
 
-        // No two adjacent seats (up/down/left/right) share a subject.
-        foreach ($bySeat as $key => $subjectId) {
-            [$row, $col] = array_map('intval', explode(':', $key));
-            foreach ([[$row - 1, $col], [$row + 1, $col], [$row, $col - 1], [$row, $col + 1]] as [$r, $c]) {
-                if (isset($bySeat["{$r}:{$c}"])) {
-                    $this->assertNotSame($subjectId, $bySeat["{$r}:{$c}"], "Seats ({$row},{$col}) and ({$r},{$c}) share subject {$subjectId}");
-                }
-            }
-        }
+        $this->assertSame([1, 2], $roomsUsedBySubjectA);
     }
 
-    public function test_impossible_adjacency_avoidance_is_reported_not_silently_dropped(): void
+    public function test_fewer_groups_than_group_size_leaves_the_extra_column_slot_empty(): void
     {
-        // A single 1x2 room with only one subject enrolled leaves no way to
-        // avoid same-subject adjacency between the two seats — but this is
-        // a degenerate case (only one subject exists at all), included for
-        // completeness of the warning path rather than as a realistic case.
-        $enrollments = collect([
-            $this->enrollment(1, 100),
-            $this->enrollment(2, 100),
-        ]);
+        $nextId = 1;
+        $a = $this->enrollments(2, 100, $nextId);
+        $b = $this->enrollments(2, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
 
-        $result = (new MixedSeatingStrategy)->allocate($enrollments, [$this->room(1, 2, 1)]);
+        // groupSize 3 but only 2 subjects exist -> the third column-group's
+        // column stays empty rather than forcing a nonexistent third group.
+        $result = (new MixedSeatingStrategy(groupSize: 3))->allocate($enrollments, [$this->room(1, 2, 3)]);
 
-        $this->assertCount(2, $result->placements);
-        $this->assertTrue($result->warnings->isNotEmpty());
-    }
+        $this->assertCount(4, $result->placements);
+        $this->assertTrue($result->warnings->isEmpty());
 
-    public function test_locked_neighbor_seat_is_respected_for_adjacency(): void
-    {
-        // Seat (1,1) is already locked to subject 100. The only other
-        // candidate is also subject 100, so the adjacent seat (2,1) can't
-        // avoid it — must be reported.
-        $enrollments = collect([$this->enrollment(1, 100)]);
-
-        $result = (new MixedSeatingStrategy)->allocate($enrollments, [
-            $this->room(1, 2, 1, occupied: [['row' => 1, 'column' => 1, 'subject_id' => 100]]),
-        ]);
-
-        $this->assertCount(1, $result->placements);
-        $this->assertSame(2, $result->placements[0]->row);
-        $this->assertTrue($result->warnings->isNotEmpty());
+        $usedColumns = collect($result->placements)->pluck('column')->unique()->sort()->values()->all();
+        $this->assertCount(2, $usedColumns);
     }
 
     public function test_no_capacity_left_is_reported_as_a_warning(): void
     {
-        $enrollments = collect([$this->enrollment(1, 100), $this->enrollment(2, 200)]);
+        $nextId = 1;
+        $a = $this->enrollments(2, 100, $nextId);
+        $b = $this->enrollments(2, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
 
-        $result = (new MixedSeatingStrategy)->allocate($enrollments, [$this->room(1, 1, 1)]);
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate($enrollments, [$this->room(1, 1, 2)]);
+
+        $this->assertCount(2, $result->placements);
+        $this->assertCount(2, $result->warnings);
+    }
+
+    public function test_occupied_seats_are_respected_as_obstacles(): void
+    {
+        $nextId = 1;
+        // Column 1 has 2 physical seats but one (1,1) is already occupied
+        // by a locked seat from a different subject, leaving only 1 free.
+        $a = $this->enrollments(1, 100, $nextId);
+        $enrollments = collect($a);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate($enrollments, [
+            $this->room(1, 2, 2, occupied: [['row' => 1, 'column' => 1, 'subject_id' => 200]]),
+        ]);
 
         $this->assertCount(1, $result->placements);
-        $this->assertCount(1, $result->warnings);
+        $this->assertSame(2, $result->placements[0]->row);
+        $this->assertSame(1, $result->placements[0]->column);
+    }
+
+    public function test_group_size_is_never_treated_as_less_than_two(): void
+    {
+        $nextId = 1;
+        $a = $this->enrollments(2, 100, $nextId);
+        $b = $this->enrollments(2, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
+
+        // groupSize 1 would defeat the purpose of "mixed" entirely.
+        $result = (new MixedSeatingStrategy(groupSize: 1))->allocate($enrollments, [$this->room(1, 2, 2)]);
+
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$a, ...$b]);
+        $this->assertNotEmpty($this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100));
+        $this->assertNotEmpty($this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200));
+        $this->assertNotSame(
+            $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100),
+            $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200)
+        );
     }
 }

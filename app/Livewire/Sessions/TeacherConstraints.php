@@ -5,6 +5,7 @@ namespace App\Livewire\Sessions;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class TeacherConstraints extends Component
@@ -12,6 +13,10 @@ class TeacherConstraints extends Component
     private const DAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat'];
 
     public ExamSession $examSession;
+
+    public string $bulkMinDuties = '';
+
+    public string $bulkMaxDuties = '';
 
     public function days(): array
     {
@@ -42,6 +47,37 @@ class TeacherConstraints extends Component
         $this->apply($this->constraintFor($teacherId), [
             'max_duties' => $value === '' ? null : max(0, (int) $value),
         ]);
+    }
+
+    /**
+     * Sets min/max duties for every active teacher in this session at once.
+     * An empty field means "leave that field at the config default" for
+     * everyone, same as clearing an individual teacher's field — it does
+     * not skip teachers, it resets them.
+     */
+    public function applyBulkDuties(): void
+    {
+        $this->authorize('manage_sessions');
+
+        $min = $this->bulkMinDuties === '' ? null : max(0, (int) $this->bulkMinDuties);
+        $max = $this->bulkMaxDuties === '' ? null : max(0, (int) $this->bulkMaxDuties);
+
+        if ($min !== null && $max !== null && $min > $max) {
+            session()->flash('error', 'Min duties cannot be greater than max duties.');
+
+            return;
+        }
+
+        DB::transaction(function () use ($min, $max) {
+            foreach (Teacher::where('is_active', true)->pluck('id') as $teacherId) {
+                $this->apply($this->constraintFor($teacherId), [
+                    'min_duties' => $min,
+                    'max_duties' => $max,
+                ]);
+            }
+        });
+
+        session()->flash('status', 'Min/max duties updated for every teacher.');
     }
 
     /**

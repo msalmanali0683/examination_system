@@ -125,6 +125,74 @@ class ExamSessionsTest extends TestCase
         ]);
     }
 
+    public function test_bulk_apply_sets_min_and_max_duties_for_every_active_teacher(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teachers = Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->create(['is_active' => false]); // must be left alone
+
+        Livewire::actingAs($staff)
+            ->test(TeacherConstraints::class, ['examSession' => $session])
+            ->set('bulkMinDuties', '3')
+            ->set('bulkMaxDuties', '5')
+            ->call('applyBulkDuties');
+
+        foreach ($teachers as $teacher) {
+            $this->assertDatabaseHas('session_teacher_constraints', [
+                'exam_session_id' => $session->id,
+                'teacher_id' => $teacher->id,
+                'min_duties' => 3,
+                'max_duties' => 5,
+            ]);
+        }
+
+        $this->assertDatabaseCount('session_teacher_constraints', 3);
+    }
+
+    public function test_bulk_apply_with_min_greater_than_max_is_rejected(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(TeacherConstraints::class, ['examSession' => $session])
+            ->set('bulkMinDuties', '5')
+            ->set('bulkMaxDuties', '2')
+            ->call('applyBulkDuties');
+
+        $this->assertDatabaseMissing('session_teacher_constraints', [
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+        ]);
+    }
+
+    public function test_bulk_apply_with_blank_fields_clears_existing_overrides(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+        \App\Models\SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'min_duties' => 4,
+            'max_duties' => 8,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(TeacherConstraints::class, ['examSession' => $session])
+            ->set('bulkMinDuties', '')
+            ->set('bulkMaxDuties', '')
+            ->call('applyBulkDuties');
+
+        // Back to session defaults for everyone — no longer differs, so the row is removed.
+        $this->assertDatabaseMissing('session_teacher_constraints', [
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+        ]);
+    }
+
     public function test_marking_a_teacher_unavailable_on_a_day_persists_and_reverting_removes_the_row(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
