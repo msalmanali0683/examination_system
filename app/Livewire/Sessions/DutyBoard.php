@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
@@ -13,6 +14,8 @@ use Livewire\Component;
 
 class DutyBoard extends Component
 {
+    use GuardsFinalizedSession;
+
     public ExamSession $examSession;
 
     public ?int $activeSlotId = null;
@@ -43,6 +46,10 @@ class DutyBoard extends Component
     public function reassignDuty(int $dutyAssignmentId, int $newTeacherId): void
     {
         $this->authorize('edit_assignments');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $duty = DutyAssignment::where('exam_session_id', $this->examSession->id)->find($dutyAssignmentId);
 
@@ -106,6 +113,10 @@ class DutyBoard extends Component
     {
         $this->authorize('edit_assignments');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $duty = DutyAssignment::where('exam_session_id', $this->examSession->id)->find($dutyAssignmentId);
 
         if ($duty) {
@@ -116,6 +127,10 @@ class DutyBoard extends Component
     public function regenerate(): void
     {
         $this->authorize('generate_roster');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $result = (new DutyAllocationService)->generate($this->examSession);
 

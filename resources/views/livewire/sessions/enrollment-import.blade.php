@@ -2,6 +2,9 @@
     <x-page-header title="Import Enrollments" :subtitle="$examSession->name" icon="upload" :back="route('sessions.show', $examSession)" />
 </x-slot>
 
+<div class="space-y-6">
+<x-finalized-banner :session="$examSession" />
+
 <x-card class="max-w-4xl mx-auto">
     @php
         $steps = ['upload' => 'Upload', 'map' => 'Map Columns', 'review' => 'Review', 'done' => 'Done'];
@@ -224,3 +227,4 @@
         </div>
     @endif
 </x-card>
+</div>

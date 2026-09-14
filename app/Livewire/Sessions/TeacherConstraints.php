@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
@@ -10,6 +11,8 @@ use Livewire\Component;
 
 class TeacherConstraints extends Component
 {
+    use GuardsFinalizedSession;
+
     private const DAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat'];
 
     public ExamSession $examSession;
@@ -31,12 +34,20 @@ class TeacherConstraints extends Component
 
     public function toggleExcluded(int $teacherId): void
     {
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $constraint = $this->constraintFor($teacherId);
         $this->apply($constraint, ['is_excluded' => ! $constraint->is_excluded]);
     }
 
     public function updateMinDuties(int $teacherId, string $value): void
     {
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $this->apply($this->constraintFor($teacherId), [
             'min_duties' => $value === '' ? null : max(0, (int) $value),
         ]);
@@ -44,6 +55,10 @@ class TeacherConstraints extends Component
 
     public function updateMaxDuties(int $teacherId, string $value): void
     {
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $this->apply($this->constraintFor($teacherId), [
             'max_duties' => $value === '' ? null : max(0, (int) $value),
         ]);
@@ -58,6 +73,10 @@ class TeacherConstraints extends Component
     public function applyBulkDuties(): void
     {
         $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $min = $this->bulkMinDuties === '' ? null : max(0, (int) $this->bulkMinDuties);
         $max = $this->bulkMaxDuties === '' ? null : max(0, (int) $this->bulkMaxDuties);
@@ -85,6 +104,10 @@ class TeacherConstraints extends Component
      */
     public function toggleDayAvailable(int $teacherId, int $day): void
     {
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $constraint = $this->constraintFor($teacherId);
         $unavailable = $constraint->unavailable_days ?? [];
 
@@ -103,6 +126,10 @@ class TeacherConstraints extends Component
     public function toggleDayForAll(int $day, bool $available): void
     {
         $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         DB::transaction(function () use ($day, $available) {
             foreach (Teacher::where('is_active', true)->pluck('id') as $teacherId) {

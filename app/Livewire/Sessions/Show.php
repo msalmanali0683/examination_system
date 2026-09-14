@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SubjectSlotAssignment;
@@ -11,6 +13,8 @@ use Livewire\Component;
 
 class Show extends Component
 {
+    use GuardsFinalizedSession;
+
     public ExamSession $examSession;
 
     public bool $editingDetails = false;
@@ -40,6 +44,10 @@ class Show extends Component
     {
         $this->authorize('manage_sessions');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'start_date' => ['required', 'date'],
@@ -48,6 +56,32 @@ class Show extends Component
 
         $this->examSession->update($validated);
         $this->editingDetails = false;
+    }
+
+    public function finalize(): void
+    {
+        $this->authorize('finalize_sessions');
+
+        if ($this->examSession->status !== 'generated') {
+            session()->flash('error', 'Only a fully generated session can be finalized — run timetable, seating and duty generation first.');
+
+            return;
+        }
+
+        $this->examSession->update(['status' => 'finalized', 'locked_at' => now()]);
+        ActivityLog::record($this->examSession, 'session.finalized', "Finalized \"{$this->examSession->name}\" — it is now read-only.");
+
+        session()->flash('status', 'Session finalized. It is now read-only until unlocked.');
+    }
+
+    public function unlock(): void
+    {
+        $this->authorize('finalize_sessions');
+
+        $this->examSession->update(['status' => 'generated', 'locked_at' => null]);
+        ActivityLog::record($this->examSession, 'session.unlocked', "Unlocked \"{$this->examSession->name}\" for editing.");
+
+        session()->flash('status', 'Session unlocked — it can be edited again.');
     }
 
     /**
@@ -66,11 +100,11 @@ class Show extends Component
     {
         $this->authorize('manage_enrollments');
 
-        if ($this->examSession->isFinalized()) {
-            session()->flash('error', 'This session is finalized and cannot be modified.');
-
+        if ($this->blockedByFinalization($this->examSession)) {
             return;
         }
+
+        $enrollmentCount = $this->examSession->enrollments()->count();
 
         DB::transaction(function () {
             SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->delete();
@@ -82,6 +116,8 @@ class Show extends Component
             $this->examSession->update(['status' => 'draft']);
         }
 
+        ActivityLog::record($this->examSession, 'enrollments.reset', "Removed all {$enrollmentCount} enrollment(s) to re-import from scratch.");
+
         session()->flash('status', 'All enrollments for this session were removed. You can import a fresh file now.');
     }
 
@@ -92,6 +128,7 @@ class Show extends Component
             'enrollmentCount' => $this->examSession->enrollments()->count(),
             'studentCount' => $this->examSession->enrollments()->distinct()->count('student_id'),
             'subjectCount' => $this->examSession->enrollments()->distinct()->count('subject_id'),
+            'activityLogs' => $this->examSession->activityLogs()->with('user')->latest('created_at')->take(50)->get(),
         ]);
     }
 }

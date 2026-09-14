@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
@@ -12,6 +13,8 @@ use Livewire\Component;
 
 class SeatingChart extends Component
 {
+    use GuardsFinalizedSession;
+
     public ExamSession $examSession;
 
     public ?int $activeSlotId = null;
@@ -43,6 +46,10 @@ class SeatingChart extends Component
     public function moveSeat(int $enrollmentId, int $roomId, int $row, int $column): void
     {
         $this->authorize('edit_assignments');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $seat = SeatAssignment::where('exam_session_id', $this->examSession->id)
             ->where('enrollment_id', $enrollmentId)
@@ -101,6 +108,10 @@ class SeatingChart extends Component
     {
         $this->authorize('edit_assignments');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $seat = SeatAssignment::where('exam_session_id', $this->examSession->id)->find($seatAssignmentId);
 
         if ($seat) {
@@ -111,6 +122,10 @@ class SeatingChart extends Component
     public function regenerate(): void
     {
         $this->authorize('generate_roster');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $result = (new SeatAllocationService)->generate($this->examSession);
 

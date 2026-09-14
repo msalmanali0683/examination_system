@@ -15,6 +15,8 @@
     </div>
 @endif
 
+<x-finalized-banner :session="$examSession" />
+
 @if ($slots->isEmpty())
     <x-empty-state icon="clipboard" title="No duties generated yet" description="Run duty generation from the Generation Constraints page first." />
 @else

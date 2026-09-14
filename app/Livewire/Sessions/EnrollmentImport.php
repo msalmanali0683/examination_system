@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Livewire\Concerns\HandlesExcelUpload;
+use App\Models\ActivityLog;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Student;
@@ -16,6 +18,7 @@ use Livewire\Component;
 
 class EnrollmentImport extends Component
 {
+    use GuardsFinalizedSession;
     use HandlesExcelUpload;
 
     private const TARGET_FIELDS = [
@@ -144,6 +147,11 @@ class EnrollmentImport extends Component
     public function commitImport(): void
     {
         $this->authorize('manage_enrollments');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $this->raiseResourceLimits();
 
         $existingSubjects = Subject::pluck('id', 'code');
@@ -228,6 +236,8 @@ class EnrollmentImport extends Component
         $this->createdEnrollments = $created;
         $this->updatedEnrollments = $updated;
         $this->step = 'done';
+
+        ActivityLog::record($this->examSession, 'enrollments.imported', "Imported enrollments — {$created} created, {$updated} updated.");
     }
 
     public function startOver(): void

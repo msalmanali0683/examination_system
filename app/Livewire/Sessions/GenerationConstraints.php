@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
@@ -22,6 +24,8 @@ use Livewire\Component;
 
 class GenerationConstraints extends Component
 {
+    use GuardsFinalizedSession;
+
     public ExamSession $examSession;
 
     public string $seating_strategy = 'strict';
@@ -48,6 +52,10 @@ class GenerationConstraints extends Component
     {
         $this->authorize('manage_sessions');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $validated = $this->validate([
             'seating_strategy' => ['required', Rule::in(['strict', 'combine_sections', 'mixed'])],
             'mixed_subjects_per_room' => ['required_if:seating_strategy,mixed', 'integer', 'min:2', 'max:10'],
@@ -68,6 +76,10 @@ class GenerationConstraints extends Component
     public function updatePin(int $subjectId, string $value): void
     {
         $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         if ($value === '') {
             SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
@@ -92,6 +104,10 @@ class GenerationConstraints extends Component
     public function toggleDutyMatchesSections(int $subjectId): void
     {
         $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $existing = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
             ->where('subject_id', $subjectId)
@@ -119,6 +135,10 @@ class GenerationConstraints extends Component
     {
         $this->authorize('manage_sessions');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $existing = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
             ->where('subject_id', $subjectId)
             ->first();
@@ -138,6 +158,10 @@ class GenerationConstraints extends Component
     public function generateTimetable(): void
     {
         $this->authorize('generate_roster');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         $sessionId = $this->examSession->id;
 
@@ -199,6 +223,10 @@ class GenerationConstraints extends Component
         // slot, so a stale check would be misleading after regenerating.
         $this->showRequirements = false;
 
+        ActivityLog::record($this->examSession, 'timetable.generated', $result->conflicts->isEmpty()
+            ? 'Generated timetable with no clashes.'
+            : "Generated timetable with {$result->conflicts->count()} unavoidable clash(es).");
+
         session()->flash(
             $result->conflicts->isEmpty() ? 'status' : 'error',
             $result->conflicts->isEmpty()
@@ -217,6 +245,10 @@ class GenerationConstraints extends Component
     {
         $this->authorize('generate_roster');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $hasSlots = $this->examSession->subjectSlotAssignments()->whereNotNull('time_slot_id')->exists();
 
         if (! $hasSlots) {
@@ -233,6 +265,10 @@ class GenerationConstraints extends Component
 
         $result = (new SeatAllocationService)->generate($this->examSession);
 
+        ActivityLog::record($this->examSession, 'seating.generated', $result->warnings->isEmpty()
+            ? 'Generated seating for every slot.'
+            : "Generated seating with {$result->warnings->count()} warning(s).");
+
         session()->flash(
             $result->warnings->isEmpty() ? 'status' : 'error',
             $result->warnings->isEmpty()
@@ -244,6 +280,10 @@ class GenerationConstraints extends Component
     public function generateDuties(): void
     {
         $this->authorize('generate_roster');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
         if (! $this->examSession->seatAssignments()->exists()) {
             session()->flash('error', 'Generate seating first — duties are assigned to the rooms actually in use each slot.');
@@ -257,6 +297,10 @@ class GenerationConstraints extends Component
         // duties); once they're generated the roster as a whole is ready for
         // review, even if some warnings remain.
         $this->examSession->update(['status' => 'generated']);
+
+        ActivityLog::record($this->examSession, 'duties.generated', $result->warnings->isEmpty()
+            ? 'Generated duties for every slot.'
+            : "Generated duties with {$result->warnings->count()} warning(s).");
 
         session()->flash(
             $result->warnings->isEmpty() ? 'status' : 'error',

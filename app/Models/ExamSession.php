@@ -65,6 +65,11 @@ class ExamSession extends Model
         return $this->hasMany(DutyAssignment::class);
     }
 
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
     public function rooms(): BelongsToMany
     {
         return $this->belongsToMany(Room::class, 'session_rooms')

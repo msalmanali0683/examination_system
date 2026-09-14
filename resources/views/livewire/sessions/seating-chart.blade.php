@@ -15,6 +15,8 @@
     </div>
 @endif
 
+<x-finalized-banner :session="$examSession" />
+
 @if ($slots->isEmpty())
     <x-empty-state icon="grid" title="No seating generated yet" description="Run seat generation from the Generation Constraints page first." />
 @else

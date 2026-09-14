@@ -2,12 +2,15 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Models\ExamSession;
 use App\Models\TimeSlot;
 use Livewire\Component;
 
 class TimeSlots extends Component
 {
+    use GuardsFinalizedSession;
+
     public ExamSession $examSession;
 
     public bool $showForm = false;
@@ -52,6 +55,10 @@ class TimeSlots extends Component
     {
         $this->authorize('manage_sessions');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $validated = $this->validate([
             'date' => ['required', 'date'],
             'start_time' => ['required', 'date_format:H:i'],
@@ -69,6 +76,11 @@ class TimeSlots extends Component
     public function deleteSlot(int $id): void
     {
         $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $this->examSession->timeSlots()->findOrFail($id)->delete();
     }
 

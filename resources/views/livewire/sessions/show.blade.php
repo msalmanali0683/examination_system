@@ -1,7 +1,16 @@
 <x-slot name="header">
     <x-page-header :title="$examSession->name" icon="calendar" :back="route('sessions.index')">
         <x-slot name="actions">
-            <x-btn :href="route('sessions.generate', $examSession)" wire:navigate icon="lightning">Generate Timetable</x-btn>
+            @if (! $examSession->isFinalized())
+                <x-btn :href="route('sessions.generate', $examSession)" wire:navigate icon="lightning">Generate Timetable</x-btn>
+            @endif
+            @can('finalize_sessions')
+                @if ($examSession->isFinalized())
+                    <x-btn wire:click="unlock" wire:confirm="Unlock this session for editing again?" variant="secondary" icon="lock">Unlock</x-btn>
+                @elseif ($examSession->status === 'generated')
+                    <x-btn wire:click="finalize" wire:confirm="Finalize this session? It becomes read-only until unlocked — no more edits to rooms, teachers, enrollments, or generated seats/duties." variant="dark" icon="lock">Finalize</x-btn>
+                @endif
+            @endcan
         </x-slot>
     </x-page-header>
 </x-slot>
@@ -20,6 +29,8 @@
         </div>
     @endif
 
+    <x-finalized-banner :session="$examSession" />
+
     <x-card>
         <div class="flex items-center justify-between gap-4 flex-wrap">
             <div class="flex items-center gap-3">
@@ -30,7 +41,7 @@
                     {{ $examSession->start_date->format('d M Y') }} &ndash; {{ $examSession->end_date->format('d M Y') }}
                 </span>
             </div>
-            @if (! $editingDetails)
+            @if (! $editingDetails && ! $examSession->isFinalized())
                 <button type="button" wire:click="editDetails" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
             @endif
         </div>
@@ -75,10 +86,16 @@
                 <x-icon name="users" class="h-4 w-4" /> Enrollments
             </button>
             @can('view_reports')
+                <button type="button" @click="tab = 'lookup'" :class="tab === 'lookup' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="search" class="h-4 w-4" /> Find Student
+                </button>
                 <button type="button" @click="tab = 'reports'" :class="tab === 'reports' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="download" class="h-4 w-4" /> Reports
                 </button>
             @endcan
+            <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                <x-icon name="clipboard" class="h-4 w-4" /> Activity
+            </button>
         </div>
 
         <div class="p-4 sm:p-6">
@@ -106,22 +123,44 @@
                         <div class="text-xs text-gray-500 dark:text-gray-400">Subjects</div>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 flex-wrap">
-                    <x-btn :href="route('sessions.enrollments.import', $examSession)" wire:navigate icon="upload">Import Enrollments</x-btn>
-                    @can('manage_enrollments')
-                        @if ($enrollmentCount > 0 && ! $examSession->isFinalized())
-                            <x-btn wire:click="resetEnrollments" wire:confirm="This deletes all {{ $enrollmentCount }} enrollment(s) (and any generated seating) for this session so you can re-import from scratch. This cannot be undone. Continue?" variant="danger" icon="trash">
-                                Reset Enrollments
-                            </x-btn>
-                        @endif
-                    @endcan
-                </div>
+                @if (! $examSession->isFinalized())
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <x-btn :href="route('sessions.enrollments.import', $examSession)" wire:navigate icon="upload">Import Enrollments</x-btn>
+                        @can('manage_enrollments')
+                            @if ($enrollmentCount > 0)
+                                <x-btn wire:click="resetEnrollments" wire:confirm="This deletes all {{ $enrollmentCount }} enrollment(s) (and any generated seating) for this session so you can re-import from scratch. This cannot be undone. Continue?" variant="danger" icon="trash">
+                                    Reset Enrollments
+                                </x-btn>
+                            @endif
+                        @endcan
+                    </div>
+                @endif
             </div>
             @can('view_reports')
+                <div x-show="tab === 'lookup'">
+                    <livewire:sessions.student-lookup :exam-session="$examSession" :key="'lookup-'.$examSession->id" />
+                </div>
                 <div x-show="tab === 'reports'">
                     <livewire:sessions.report-downloads :exam-session="$examSession" :key="'reports-show-'.$examSession->id" />
                 </div>
             @endcan
+            <div x-show="tab === 'activity'">
+                @if ($activityLogs->isEmpty())
+                    <x-empty-state icon="clipboard" title="No activity yet" description="Actions taken on this session will show up here." />
+                @else
+                    <div class="divide-y divide-gray-100 dark:divide-gray-700 -mx-4 sm:-mx-6">
+                        @foreach ($activityLogs as $log)
+                            <div class="px-4 sm:px-6 py-3 flex items-start justify-between gap-4">
+                                <div class="min-w-0">
+                                    <div class="text-sm text-gray-900 dark:text-gray-100">{{ $log->description }}</div>
+                                    <div class="text-xs text-gray-400 mt-0.5">{{ $log->user?->name ?? 'System' }} &middot; {{ $log->created_at->format('d M Y, g:i A') }}</div>
+                                </div>
+                                <x-badge color="gray">{{ $log->action }}</x-badge>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
         </div>
     </x-card>
 </div>
