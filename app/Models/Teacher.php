@@ -28,4 +28,9 @@ class Teacher extends Model
     {
         return $this->hasMany(SessionTeacherConstraint::class);
     }
+
+    public function taughtEnrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
 }

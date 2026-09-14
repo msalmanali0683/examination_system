@@ -50,6 +50,10 @@ class Show extends Component
     #[Layout('layouts.app')]
     public function render()
     {
-        return view('livewire.sessions.show');
+        return view('livewire.sessions.show', [
+            'enrollmentCount' => $this->examSession->enrollments()->count(),
+            'studentCount' => $this->examSession->enrollments()->distinct()->count('student_id'),
+            'subjectCount' => $this->examSession->enrollments()->distinct()->count('subject_id'),
+        ]);
     }
 }

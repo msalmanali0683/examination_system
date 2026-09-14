@@ -2,18 +2,15 @@
 
 namespace App\Livewire\Teachers;
 
+use App\Livewire\Concerns\HandlesExcelUpload;
 use App\Models\Teacher;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
-use Livewire\WithFileUploads;
-use Maatwebsite\Excel\Facades\Excel;
 
 class Import extends Component
 {
-    use WithFileUploads;
+    use HandlesExcelUpload;
 
     private const TARGET_FIELDS = [
         'name' => 'Name',
@@ -22,13 +19,6 @@ class Import extends Component
         'email' => 'Email',
         'phone' => 'Phone',
     ];
-
-    public $file;
-
-    public ?string $storedPath = null;
-
-    /** @var array<int, array{index:int, label:string}> */
-    public array $sourceColumns = [];
 
     /** @var array<string, string|int|null> target field => source column index */
     public array $mapping = [];
@@ -57,26 +47,20 @@ class Import extends Component
 
         $this->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
 
-        // Livewire's TemporaryUploadedFile::store() does not reliably mirror to the
-        // destination disk under Storage::fake() in tests, so copy bytes directly.
-        $destination = 'imports/'.Str::uuid().'.'.$this->file->getClientOriginalExtension();
-        Storage::disk('local')->put($destination, file_get_contents($this->file->getRealPath()));
-        $this->storedPath = $destination;
-        $this->file = null;
-
-        $sheet = Excel::toCollection(null, $this->storedPath, 'local')->first();
-        $headerRow = $sheet->first() ?? collect();
-
-        $this->sourceColumns = $headerRow
-            ->map(fn ($value, $index) => [
-                'index' => $index,
-                'label' => trim((string) $value) !== '' ? trim((string) $value) : $this->columnLetter($index),
-            ])
-            ->values()
-            ->all();
+        $this->storeUploadedFile();
+        $this->detectBestSheet();
+        $this->loadSourceColumns();
 
         $this->mapping = $this->guessMapping();
         $this->step = 'map';
+    }
+
+    public function selectSheet(int $index): void
+    {
+        $this->authorize('manage_teachers');
+        $this->selectedSheetIndex = $index;
+        $this->loadSourceColumns();
+        $this->mapping = $this->guessMapping();
     }
 
     public function confirmMapping(): void
@@ -130,7 +114,7 @@ class Import extends Component
             }
         }
 
-        $this->cleanupFile();
+        $this->cleanupUploadedFile();
         $this->createdCount = $created;
         $this->updatedCount = $updated;
         $this->step = 'done';
@@ -138,8 +122,8 @@ class Import extends Component
 
     public function startOver(): void
     {
-        $this->cleanupFile();
-        $this->reset(['file', 'storedPath', 'sourceColumns', 'mapping', 'report', 'createdCount', 'updatedCount']);
+        $this->cleanupUploadedFile();
+        $this->reset(['file', 'storedPath', 'sourceColumns', 'availableSheets', 'selectedSheetIndex', 'mapping', 'report', 'createdCount', 'updatedCount']);
         $this->step = 'upload';
     }
 
@@ -196,18 +180,6 @@ class Import extends Component
         ];
     }
 
-    private function readDataRows(): Collection
-    {
-        $sheet = Excel::toCollection(null, $this->storedPath, 'local')->first();
-
-        return $sheet->slice(1);
-    }
-
-    private function rowIsBlank(Collection $row): bool
-    {
-        return $row->filter(fn ($value) => trim((string) $value) !== '')->isEmpty();
-    }
-
     private function cell(Collection $row, string $field): ?string
     {
         $index = $this->mappedIndex($field);
@@ -239,27 +211,6 @@ class Import extends Component
 
             return [$field => $match['index'] ?? null];
         })->all();
-    }
-
-    private function columnLetter(int $index): string
-    {
-        $letter = '';
-        $index++;
-
-        while ($index > 0) {
-            $mod = ($index - 1) % 26;
-            $letter = chr(65 + $mod).$letter;
-            $index = intdiv($index - 1, 26);
-        }
-
-        return $letter;
-    }
-
-    private function cleanupFile(): void
-    {
-        if ($this->storedPath) {
-            Storage::delete($this->storedPath);
-        }
     }
 
     #[Layout('layouts.app')]

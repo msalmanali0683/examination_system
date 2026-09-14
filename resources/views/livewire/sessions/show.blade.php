@@ -66,6 +66,9 @@
                 <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 dark:text-gray-400'" class="py-4 border-b-2 text-sm font-medium">
                     Time Slots
                 </button>
+                <button type="button" @click="tab = 'enrollments'" :class="tab === 'enrollments' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 dark:text-gray-400'" class="py-4 border-b-2 text-sm font-medium">
+                    Enrollments
+                </button>
             </div>
 
             <div class="p-4 sm:p-8">
@@ -77,6 +80,25 @@
                 </div>
                 <div x-show="tab === 'slots'">
                     <livewire:sessions.time-slots :exam-session="$examSession" :key="'slots-'.$examSession->id" />
+                </div>
+                <div x-show="tab === 'enrollments'">
+                    <div class="grid grid-cols-3 gap-4 text-center mb-6">
+                        <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $enrollmentCount }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Enrollments</div>
+                        </div>
+                        <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $studentCount }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Students</div>
+                        </div>
+                        <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $subjectCount }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Subjects</div>
+                        </div>
+                    </div>
+                    <a href="{{ route('sessions.enrollments.import', $examSession) }}" wire:navigate class="px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700">
+                        Import Enrollments
+                    </a>
                 </div>
             </div>
         </div>

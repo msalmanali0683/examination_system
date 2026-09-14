@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Rooms\Index as RoomsIndex;
+use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\Index as SessionsIndex;
 use App\Livewire\Sessions\Show as SessionsShow;
 use App\Livewire\Teachers\Import as TeachersImport;
@@ -41,5 +42,9 @@ Route::get('sessions', SessionsIndex::class)
 Route::get('sessions/{examSession}', SessionsShow::class)
     ->middleware(['auth'])
     ->name('sessions.show');
+
+Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
+    ->middleware(['auth'])
+    ->name('sessions.enrollments.import');
 
 require __DIR__.'/auth.php';
