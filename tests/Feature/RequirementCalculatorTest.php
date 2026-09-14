@@ -1,0 +1,167 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Enrollment;
+use App\Models\ExamSession;
+use App\Models\Room;
+use App\Models\SessionRoom;
+use App\Models\SessionTeacherConstraint;
+use App\Models\Student;
+use App\Models\Subject;
+use App\Models\Teacher;
+use App\Models\TimeSlot;
+use App\Services\Generation\RequirementCalculator;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class RequirementCalculatorTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private static int $rollNoSequence = 0;
+
+    private function enrollStudents(ExamSession $session, Subject $subject, string $section, int $count): void
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            $student = Student::factory()->create(['roll_no' => str_pad((string) ++self::$rollNoSequence, 8, '0', STR_PAD_LEFT)]);
+            Enrollment::factory()->create([
+                'exam_session_id' => $session->id,
+                'student_id' => $student->id,
+                'subject_id' => $subject->id,
+                'section' => $section,
+            ]);
+        }
+    }
+
+    private function assignSubjectToSlot(ExamSession $session, Subject $subject, TimeSlot $slot): void
+    {
+        \App\Models\SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+        ]);
+    }
+
+    public function test_requirement_is_met_with_enough_rooms_and_teachers(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
+
+        $result = (new RequirementCalculator)->calculate($session);
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result->first()->isMet());
+        $this->assertSame(0, $result->first()->roomsShortfall());
+        $this->assertSame(0, $result->first()->teachersShortfall());
+    }
+
+    public function test_room_shortfall_counts_rooms_needed_from_the_full_room_pool(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+
+        $activeRoom = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom->id, 'is_active' => true]);
+
+        // Exists in the system but not activated for this session.
+        Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->count(5)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertFalse($requirement->isMet());
+        $this->assertTrue($requirement->hasUnseatedStudents);
+        $this->assertSame(2, $requirement->roomsNeeded); // 5 students split across two 3-capacity rooms
+        $this->assertSame(1, $requirement->roomsAvailable);
+        $this->assertSame(1, $requirement->roomsShortfall());
+    }
+
+    public function test_excluding_a_teacher_reduces_available_count(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 2);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        $teachers = Teacher::factory()->count(2)->create(['is_active' => true]);
+        SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teachers[0]->id,
+            'is_excluded' => true,
+        ]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertSame(1, $requirement->teachersAvailable);
+    }
+
+    public function test_teacher_unavailable_on_one_day_only_affects_that_day(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+
+        $monday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']); // Monday
+        $tuesday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '11:00']); // Tuesday
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $this->enrollStudents($session, $subjectA, 'BSAI 1A', 1);
+        $this->enrollStudents($session, $subjectB, 'BSAI 1A', 1);
+        $this->assignSubjectToSlot($session, $subjectA, $monday);
+        $this->assignSubjectToSlot($session, $subjectB, $tuesday);
+
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+        SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'is_excluded' => false,
+            'unavailable_days' => [1], // Monday
+        ]);
+
+        $requirements = (new RequirementCalculator)->calculate($session)->keyBy('timeSlotId');
+
+        $this->assertSame(0, $requirements[$monday->id]->teachersAvailable);
+        $this->assertSame(1, $requirements[$tuesday->id]->teachersAvailable);
+    }
+
+    public function test_adjacency_only_warnings_do_not_count_as_unseated(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'mixed', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 3, 'columns' => 2, 'capacity' => 6]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $this->enrollStudents($session, $subjectA, 'BSAI 1A', 3);
+        $this->enrollStudents($session, $subjectB, 'BSAI 1A', 3);
+        $this->assignSubjectToSlot($session, $subjectA, $slot);
+        $this->assignSubjectToSlot($session, $subjectB, $slot);
+
+        Teacher::factory()->count(5)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertFalse($requirement->hasUnseatedStudents);
+        $this->assertSame(6, $requirement->studentCount);
+    }
+}

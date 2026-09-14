@@ -67,7 +67,8 @@ class MixedSeatingStrategy implements SeatingStrategy
                     $chosenIndex = 0;
                     $warnings->push(new SeatingWarning(
                         $queue[0]['enrollment_id'],
-                        "Could not avoid seating this student next to another student of the same subject (room seat row {$seat['row']}, column {$seat['column']})."
+                        "Could not avoid seating this student next to another student of the same subject (room seat row {$seat['row']}, column {$seat['column']}).",
+                        type: 'adjacency',
                     ));
                 }
 

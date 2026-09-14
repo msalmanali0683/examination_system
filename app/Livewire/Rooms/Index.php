@@ -6,9 +6,14 @@ use App\Models\Room;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 class Index extends Component
 {
+    use WithPagination;
+
+    public int $perPage = 25;
+
     public bool $showForm = false;
 
     public ?int $editingId = null;
@@ -101,11 +106,16 @@ class Index extends Component
         $this->is_active = true;
     }
 
+    public function updatedPerPage(): void
+    {
+        $this->resetPage();
+    }
+
     #[Layout('layouts.app')]
     public function render()
     {
         return view('livewire.rooms.index', [
-            'rooms' => Room::orderBy('name')->get(),
+            'rooms' => Room::orderBy('name')->paginate($this->perPage),
         ]);
     }
 }

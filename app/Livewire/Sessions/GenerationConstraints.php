@@ -7,6 +7,7 @@ use App\Models\ExamSession;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
 use App\Services\Generation\ConflictGraphBuilder;
+use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\TimetableGenerator;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,8 @@ class GenerationConstraints extends Component
     public int $invigilators_per_room = 2;
 
     public bool $teacher_subject_exclusion = false;
+
+    public bool $showRequirements = false;
 
     public function mount(ExamSession $examSession): void
     {
@@ -112,12 +115,22 @@ class GenerationConstraints extends Component
             }
         });
 
+        // The requirement numbers depend on which subjects landed in which
+        // slot, so a stale check would be misleading after regenerating.
+        $this->showRequirements = false;
+
         session()->flash(
             $result->conflicts->isEmpty() ? 'status' : 'error',
             $result->conflicts->isEmpty()
                 ? 'Timetable generated with no clashes.'
                 : "Timetable generated with {$result->conflicts->count()} unavoidable clash(es) — see below."
         );
+    }
+
+    public function checkRequirements(): void
+    {
+        $this->authorize('generate_roster');
+        $this->showRequirements = true;
     }
 
     public function generateSeating(): void
@@ -128,6 +141,12 @@ class GenerationConstraints extends Component
 
         if (! $hasSlots) {
             session()->flash('error', 'Generate the timetable first — seating needs subjects assigned to slots.');
+
+            return;
+        }
+
+        if (! (new RequirementCalculator)->isFullyMet($this->examSession)) {
+            session()->flash('error', 'Not enough active rooms or available teachers for one or more slots — see the Capacity Check below before generating.');
 
             return;
         }
@@ -156,11 +175,20 @@ class GenerationConstraints extends Component
 
         $assignments = $this->examSession->subjectSlotAssignments()->get()->keyBy('subject_id');
 
+        // Computing this runs a full seating simulation across every slot,
+        // so it's only done when the admin asks for it (Check Capacity),
+        // not on every render — otherwise every unrelated click (pinning a
+        // subject, saving settings) would pay that cost too.
+        $requirements = $this->showRequirements
+            ? (new RequirementCalculator)->calculate($this->examSession)
+            : collect();
+
         return view('livewire.sessions.generation-constraints', [
             'subjects' => $subjects,
             'assignments' => $assignments,
             'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
+            'requirements' => $requirements,
         ]);
     }
 }

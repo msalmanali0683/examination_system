@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -18,10 +19,12 @@ class SessionTeacherConstraint extends Pivot
         'is_excluded',
         'min_duties',
         'max_duties',
+        'unavailable_days',
     ];
 
     protected $casts = [
         'is_excluded' => 'boolean',
+        'unavailable_days' => 'array',
     ];
 
     public function examSession(): BelongsTo
@@ -42,5 +45,10 @@ class SessionTeacherConstraint extends Pivot
     public function effectiveMaxDuties(): int
     {
         return $this->max_duties ?? config('exam.default_max_duties');
+    }
+
+    public function isAvailableOn(Carbon $date): bool
+    {
+        return ! in_array($date->dayOfWeekIso, $this->unavailable_days ?? [], true);
     }
 }

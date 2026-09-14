@@ -4,15 +4,16 @@ namespace App\Services\Generation;
 
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\Room;
 use App\Models\SeatAssignment;
 use App\Models\SubjectSlotAssignment;
 use App\Models\TimeSlot;
 use App\Services\Generation\DTOs\SeatingResult;
-use App\Services\Generation\DTOs\SeatingWarning;
 use App\Services\Generation\Strategies\CombineSectionsSeatingStrategy;
 use App\Services\Generation\Strategies\MixedSeatingStrategy;
 use App\Services\Generation\Strategies\SeatingStrategy;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class SeatAllocationService
@@ -25,35 +26,109 @@ class SeatAllocationService
      */
     public function generate(ExamSession $session): SeatingResult
     {
-        $strategy = $this->strategyFor($session->seating_strategy);
-
-        $subjectToSlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
-            ->whereNotNull('time_slot_id')
-            ->pluck('time_slot_id', 'subject_id');
-
-        $sessionRooms = $session->sessionRooms()->where('is_active', true)->with('room')->get();
-
         $warnings = collect();
 
-        foreach ($session->timeSlots as $slot) {
-            $subjectIds = $subjectToSlot->filter(fn ($slotId) => $slotId === $slot->id)->keys();
-
-            if ($subjectIds->isEmpty()) {
-                continue;
-            }
-
-            $warnings = $warnings->merge($this->generateForSlot($session, $slot, $subjectIds->all(), $sessionRooms, $strategy));
+        foreach ($this->allocatePerSlot($session, $this->activeSessionRoomPool($session)) as [$slot, $result]) {
+            $this->persist($session, $slot, $result);
+            $warnings = $warnings->merge($result->warnings);
         }
 
         return new SeatingResult([], $warnings);
     }
 
     /**
-     * @param  int[]  $subjectIds
-     * @param  \Illuminate\Support\Collection<int, \App\Models\SessionRoom>  $sessionRooms
-     * @return \Illuminate\Support\Collection<int, SeatingWarning>
+     * Computes what seating *would* look like for every slot without
+     * writing anything to the database — used by the capacity/requirement
+     * check so the admin can see whether enough rooms exist before
+     * committing to a real generation run.
+     *
+     * @return Collection<int, array{slot: TimeSlot, result: SeatingResult, roomsUsed: int}>
      */
-    private function generateForSlot(ExamSession $session, TimeSlot $slot, array $subjectIds, $sessionRooms, SeatingStrategy $strategy)
+    public function preview(ExamSession $session): Collection
+    {
+        return $this->allocatePerSlot($session, $this->activeSessionRoomPool($session))->map(fn ($pair) => [
+            'slot' => $pair[0],
+            'result' => $pair[1],
+            'roomsUsed' => collect($pair[1]->placements)->pluck('roomId')->unique()->count(),
+        ]);
+    }
+
+    /**
+     * Same as preview(), but allocates against every room defined in the
+     * system (active or not, in this session or not) rather than just the
+     * session's active rooms. Used to answer "how many rooms would this
+     * slot truly need" independent of what's currently activated — the
+     * basis for the capacity/requirement check's shortfall numbers.
+     *
+     * @return Collection<int, array{slot: TimeSlot, result: SeatingResult, roomsUsed: int}>
+     */
+    public function previewAgainstAllRooms(ExamSession $session): Collection
+    {
+        return $this->allocatePerSlot($session, $this->allRoomsPool())->map(fn ($pair) => [
+            'slot' => $pair[0],
+            'result' => $pair[1],
+            'roomsUsed' => collect($pair[1]->placements)->pluck('roomId')->unique()->count(),
+        ]);
+    }
+
+    /**
+     * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
+     */
+    private function activeSessionRoomPool(ExamSession $session): Collection
+    {
+        return $session->sessionRooms()->where('is_active', true)->with('room')->get()->map(fn ($sr) => [
+            'room_id' => $sr->room_id,
+            'rows' => $sr->room->rows,
+            'columns' => $sr->room->columns,
+            'capacity' => $sr->effectiveCapacity(),
+        ]);
+    }
+
+    /**
+     * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
+     */
+    private function allRoomsPool(): Collection
+    {
+        return Room::where('is_active', true)->get()->map(fn (Room $room) => [
+            'room_id' => $room->id,
+            'rows' => $room->rows,
+            'columns' => $room->columns,
+            'capacity' => $room->capacity,
+        ]);
+    }
+
+    /**
+     * @param  Collection<int, array{room_id: int, rows: int, columns: int, capacity: int}>  $roomPool
+     * @return Collection<int, array{0: TimeSlot, 1: SeatingResult}>
+     */
+    private function allocatePerSlot(ExamSession $session, Collection $roomPool): Collection
+    {
+        $strategy = $this->strategyFor($session->seating_strategy);
+
+        $subjectToSlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->pluck('time_slot_id', 'subject_id');
+
+        $pairs = collect();
+
+        foreach ($session->timeSlots as $slot) {
+            $subjectIds = $subjectToSlot->filter(fn ($slotId) => $slotId === $slot->id)->keys()->all();
+
+            if (empty($subjectIds)) {
+                continue;
+            }
+
+            $pairs->push([$slot, $this->allocateForSlot($session, $slot, $subjectIds, $roomPool, $strategy)]);
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * @param  int[]  $subjectIds
+     * @param  Collection<int, array{room_id: int, rows: int, columns: int, capacity: int}>  $roomPool
+     */
+    private function allocateForSlot(ExamSession $session, TimeSlot $slot, array $subjectIds, Collection $roomPool, SeatingStrategy $strategy): SeatingResult
     {
         $lockedAssignments = SeatAssignment::where('exam_session_id', $session->id)
             ->where('time_slot_id', $slot->id)
@@ -72,7 +147,7 @@ class SeatAllocationService
             ->get();
 
         if ($enrollments->isEmpty()) {
-            return collect();
+            return new SeatingResult([], collect());
         }
 
         $occupiedByRoom = $lockedAssignments->groupBy('room_id')->map(
@@ -83,15 +158,20 @@ class SeatAllocationService
             ])->all()
         );
 
-        $rooms = $sessionRooms->map(fn ($sr) => [
-            'room_id' => $sr->room_id,
-            'rows' => $sr->room->rows,
-            'columns' => $sr->room->columns,
-            'capacity' => $sr->effectiveCapacity(),
-            'occupied' => $occupiedByRoom->get($sr->room_id, []),
+        $rooms = $roomPool->map(fn ($r) => [
+            ...$r,
+            'occupied' => $occupiedByRoom->get($r['room_id'], []),
         ])->sortByDesc('capacity')->values()->all();
 
-        $result = $strategy->allocate($enrollments, $rooms);
+        return $strategy->allocate($enrollments, $rooms);
+    }
+
+    private function persist(ExamSession $session, TimeSlot $slot, SeatingResult $result): void
+    {
+        $lockedEnrollmentIds = SeatAssignment::where('exam_session_id', $session->id)
+            ->where('time_slot_id', $slot->id)
+            ->where('is_locked', true)
+            ->pluck('enrollment_id');
 
         DB::transaction(function () use ($session, $slot, $lockedEnrollmentIds, $result) {
             SeatAssignment::where('exam_session_id', $session->id)
@@ -111,8 +191,6 @@ class SeatAllocationService
                 ]);
             }
         });
-
-        return $result->warnings;
     }
 
     private function strategyFor(string $seatingStrategy): SeatingStrategy

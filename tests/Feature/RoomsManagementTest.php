@@ -70,4 +70,15 @@ class RoomsManagementTest extends TestCase
             ->get('/rooms')
             ->assertForbidden();
     }
+
+    public function test_per_page_selector_controls_how_many_rooms_are_shown(): void
+    {
+        Room::factory()->count(15)->create();
+        $staff = User::factory()->create(['role' => 'staff']);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->set('perPage', 10)
+            ->assertViewHas('rooms', fn ($rooms) => $rooms->count() === 10 && $rooms->total() === 15);
+    }
 }

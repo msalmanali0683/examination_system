@@ -117,6 +117,33 @@ class ExamSessionsTest extends TestCase
         ]);
     }
 
+    public function test_marking_a_teacher_unavailable_on_a_day_persists_and_reverting_removes_the_row(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create();
+
+        $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
+
+        // Mark Saturday (ISO 6) unavailable.
+        $component->call('toggleDayAvailable', $teacher->id, 6);
+
+        $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+            ->where('teacher_id', $teacher->id)
+            ->first();
+        $this->assertSame([6], $constraint->unavailable_days);
+        $this->assertFalse($constraint->isAvailableOn(\Carbon\Carbon::parse('2026-04-25'))); // a Saturday
+        $this->assertTrue($constraint->isAvailableOn(\Carbon\Carbon::parse('2026-04-20'))); // a Monday
+
+        // Toggling the same day back on should remove the row entirely
+        // (no longer differs from the session default).
+        $component->call('toggleDayAvailable', $teacher->id, 6);
+        $this->assertDatabaseMissing('session_teacher_constraints', [
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+        ]);
+    }
+
     public function test_staff_can_create_a_time_slot(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

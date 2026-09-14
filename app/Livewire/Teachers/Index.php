@@ -12,6 +12,8 @@ class Index extends Component
 {
     use WithPagination;
 
+    public int $perPage = 25;
+
     public bool $showForm = false;
 
     public ?int $editingId = null;
@@ -36,6 +38,11 @@ class Index extends Component
     }
 
     public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPerPage(): void
     {
         $this->resetPage();
     }
@@ -118,7 +125,7 @@ class Index extends Component
                     ->orWhere('email', 'like', "%{$this->search}%")
                 ))
                 ->orderBy('name')
-                ->paginate(15),
+                ->paginate($this->perPage),
         ]);
     }
 }

@@ -117,6 +117,68 @@
         <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
             <div class="flex items-center justify-between">
                 <div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Capacity Check</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        For each slot: students needing seats, rooms needed (from real room capacities) vs. active, and teachers needed (rooms &times; invigilators/room) vs. available (excluding excluded/unavailable teachers).
+                    </p>
+                </div>
+                <button type="button" wire:click="checkRequirements" wire:loading.attr="disabled" wire:target="checkRequirements" class="px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap">
+                    <span wire:loading.remove wire:target="checkRequirements">Check Capacity</span>
+                    <span wire:loading wire:target="checkRequirements">Checking&hellip;</span>
+                </button>
+            </div>
+
+            @if ($showRequirements)
+                @if ($requirements->isEmpty())
+                    <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">No subjects are assigned to a slot yet — generate the timetable first.</p>
+                @else
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                            <thead>
+                                <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                    <th class="py-2 pr-4">Slot</th>
+                                    <th class="py-2 pr-4">Students</th>
+                                    <th class="py-2 pr-4">Rooms Needed / Active</th>
+                                    <th class="py-2 pr-4">Teachers Needed / Available</th>
+                                    <th class="py-2 pr-4">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                @foreach ($requirements as $r)
+                                    <tr>
+                                        <td class="py-2 pr-4 text-gray-900 dark:text-gray-100">{{ $r->label }}</td>
+                                        <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $r->studentCount }}</td>
+                                        <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->roomsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->roomsShortfall() === 0])>
+                                            {{ $r->roomsNeeded }} / {{ $r->roomsAvailable }}
+                                            @if ($r->roomsShortfall() > 0)
+                                                ({{ $r->roomsShortfall() }} more needed)
+                                            @endif
+                                        </td>
+                                        <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->teachersShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->teachersShortfall() === 0])>
+                                            {{ $r->teachersNeeded }} / {{ $r->teachersAvailable }}
+                                            @if ($r->teachersShortfall() > 0)
+                                                ({{ $r->teachersShortfall() }} more needed)
+                                            @endif
+                                        </td>
+                                        <td class="py-2 pr-4">
+                                            @if ($r->isMet())
+                                                <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">Ready</span>
+                                            @else
+                                                <span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Short</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            @endif
+        </div>
+
+        <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+            <div class="flex items-center justify-between">
+                <div>
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Seating</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Seats every enrolled student into a room, using the strategy selected above. Run this after generating the timetable.</p>
                 </div>

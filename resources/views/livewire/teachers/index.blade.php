@@ -65,7 +65,11 @@
                 </form>
             @endif
 
-            <div class="mt-6 overflow-x-auto">
+            <div class="mt-6 flex justify-end">
+                <x-per-page-selector />
+            </div>
+
+            <div class="mt-2 overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead>
                         <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">

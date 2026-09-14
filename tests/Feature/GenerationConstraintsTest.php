@@ -167,4 +167,30 @@ class GenerationConstraintsTest extends TestCase
 
         $this->assertDatabaseCount('subject_slot_assignments', 0);
     }
+
+    public function test_generate_seating_is_blocked_when_capacity_requirement_is_not_met(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
+        // Only a tiny room, no active rooms in session at all — guarantees a shortfall.
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateSeating');
+
+        $this->assertDatabaseCount('seat_assignments', 0);
+    }
 }
