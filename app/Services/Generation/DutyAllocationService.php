@@ -172,6 +172,7 @@ class DutyAllocationService
     {
         $checkedSubjectIds = SubjectSlotAssignment::where('exam_session_id', $session->id)
             ->where('duty_matches_sections', true)
+            ->where('is_excluded', false)
             ->pluck('subject_id');
 
         if ($checkedSubjectIds->isEmpty()) {

@@ -178,6 +178,51 @@ class DutyAllocationServiceTest extends TestCase
         $this->assertSame(6, DutyAssignment::where('exam_session_id', $session->id)->where('teacher_id', $teacherB->id)->count());
     }
 
+    public function test_an_excluded_subjects_duty_matches_sections_flag_is_ignored(): void
+    {
+        $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
+
+        // Same shape as the "forces exact count" test above (teacher A
+        // teaches 2 sections of subjectX), except subjectX is also
+        // excluded from generation — the section-based override must not
+        // cap teacher A at exactly 2 duties for a subject that was never
+        // actually scheduled.
+        $subjectX = Subject::factory()->create();
+        $teacherA = Teacher::factory()->create(['is_active' => true]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'B']);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectX->id,
+            'duty_matches_sections' => true,
+            'is_excluded' => true,
+        ]);
+
+        $teacherB = Teacher::factory()->create(['is_active' => true]);
+
+        // 8 slots x 1 room x 1 invigilator = 8 duty-slots to split between
+        // the two default-range (2-6) teachers.
+        $subjectOther = Subject::factory()->create();
+        for ($i = 0; $i < 8; $i++) {
+            $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+            $room = Room::factory()->create();
+            $this->seatOneStudent($session, $subjectOther, $slot, $room);
+        }
+
+        (new DutyAllocationService)->generate($session);
+
+        $countA = DutyAssignment::where('exam_session_id', $session->id)->where('teacher_id', $teacherA->id)->count();
+        $countB = DutyAssignment::where('exam_session_id', $session->id)->where('teacher_id', $teacherB->id)->count();
+
+        // Without the fix teacher A would be capped at exactly 2 (the
+        // section-based override); with the excluded subject ignored, both
+        // teachers share the default 2-6 range and split the 8 slots
+        // roughly evenly instead.
+        $this->assertGreaterThan(2, $countA);
+        $this->assertSame(8, $countA + $countB);
+    }
+
     public function test_teacher_subject_exclusion_keeps_a_teacher_off_their_own_subjects_slot(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1, 'teacher_subject_exclusion' => true]);

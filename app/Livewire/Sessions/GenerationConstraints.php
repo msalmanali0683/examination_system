@@ -109,13 +109,46 @@ class GenerationConstraints extends Component
         );
     }
 
+    /**
+     * An excluded subject is left out of timetable/seating/duty generation
+     * entirely — no time slot, no seats, no invigilation. Excluding also
+     * clears any existing pin/slot for it immediately, rather than waiting
+     * for the next "Generate Timetable" run.
+     */
+    public function toggleSubjectExcluded(int $subjectId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $existing = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
+            ->where('subject_id', $subjectId)
+            ->first();
+
+        if ($existing?->is_excluded) {
+            $existing->update(['is_excluded' => false]);
+
+            return;
+        }
+
+        SubjectSlotAssignment::updateOrCreate(
+            ['exam_session_id' => $this->examSession->id, 'subject_id' => $subjectId],
+            ['is_excluded' => true, 'is_pinned' => false, 'time_slot_id' => null, 'conflict_note' => null]
+        );
+    }
+
     public function generateTimetable(): void
     {
         $this->authorize('generate_roster');
 
         $sessionId = $this->examSession->id;
 
-        $enrollments = Enrollment::where('exam_session_id', $sessionId)->get(['student_id', 'subject_id']);
+        $excludedIds = SubjectSlotAssignment::where('exam_session_id', $sessionId)
+            ->where('is_excluded', true)
+            ->pluck('subject_id')
+            ->all();
+
+        $enrollments = Enrollment::where('exam_session_id', $sessionId)
+            ->whereNotIn('subject_id', $excludedIds)
+            ->get(['student_id', 'subject_id']);
         $subjectIds = $enrollments->pluck('subject_id')->unique()->values()->all();
 
         if (empty($subjectIds)) {
@@ -137,7 +170,7 @@ class GenerationConstraints extends Component
         $graph = (new ConflictGraphBuilder)->build($enrollments);
         $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels);
 
-        DB::transaction(function () use ($result, $sessionId, $pinned) {
+        DB::transaction(function () use ($result, $sessionId, $pinned, $excludedIds) {
             foreach ($result->assignments as $subjectId => $slotId) {
                 if (array_key_exists($subjectId, $pinned)) {
                     continue;
@@ -153,6 +186,12 @@ class GenerationConstraints extends Component
                     ['exam_session_id' => $sessionId, 'subject_id' => $subjectId],
                     ['time_slot_id' => $slotId, 'is_pinned' => false, 'conflict_note' => $note ?: null]
                 );
+            }
+
+            if (! empty($excludedIds)) {
+                SubjectSlotAssignment::where('exam_session_id', $sessionId)
+                    ->whereIn('subject_id', $excludedIds)
+                    ->update(['time_slot_id' => null, 'is_pinned' => false, 'conflict_note' => null]);
             }
         });
 

@@ -92,6 +92,70 @@ class GenerationConstraintsTest extends TestCase
         ]);
     }
 
+    public function test_toggling_subject_excluded_persists_and_reverting_clears_it(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        // Already pinned to a slot before being excluded — exclusion should
+        // clear that immediately, not just on the next generate run.
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'is_pinned' => true,
+        ]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+
+        $component->call('toggleSubjectExcluded', $subject->id);
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'is_excluded' => true,
+            'is_pinned' => false,
+            'time_slot_id' => null,
+        ]);
+
+        $component->call('toggleSubjectExcluded', $subject->id);
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'is_excluded' => false,
+        ]);
+    }
+
+    public function test_excluded_subjects_are_left_out_of_timetable_generation(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
+
+        $excludedSubject = Subject::factory()->create();
+        $includedSubject = Subject::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $excludedSubject->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $includedSubject->id]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $component->call('toggleSubjectExcluded', $excludedSubject->id);
+        $component->call('generateTimetable');
+
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $excludedSubject->id,
+            'is_excluded' => true,
+            'time_slot_id' => null,
+        ]);
+        $this->assertDatabaseMissing('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $includedSubject->id,
+            'time_slot_id' => null,
+        ]);
+    }
+
     public function test_pinning_and_unpinning_a_subject(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

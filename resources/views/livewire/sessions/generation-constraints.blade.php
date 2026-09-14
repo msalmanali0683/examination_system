@@ -77,7 +77,8 @@
                             <th class="py-2 pr-4">Students</th>
                             <th class="py-2 pr-4">Assigned Slot</th>
                             <th class="py-2 pr-4">Pin</th>
-                            <th class="py-2 pr-4 sm:pr-6">Duty = Sections Taught</th>
+                            <th class="py-2 pr-4">Duty = Sections Taught</th>
+                            <th class="py-2 pr-4 sm:pr-6">Exclude</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -85,8 +86,9 @@
                             @php
                                 $assignment = $assignments->get($subject->id);
                                 $sections = $sectionBreakdown->get($subject->id, collect());
+                                $excluded = (bool) $assignment?->is_excluded;
                             @endphp
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
+                            <tr @class(['hover:bg-gray-50 dark:hover:bg-gray-900/30', 'opacity-50' => $excluded])>
                                 <td class="py-2.5 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">
                                     {{ $subject->code }} &mdash; {{ $subject->title }}
                                     @if ($sections->count() > 1)
@@ -97,7 +99,9 @@
                                 </td>
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->enrollments_count }}</td>
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">
-                                    @if ($assignment?->timeSlot)
+                                    @if ($excluded)
+                                        <x-badge color="red">Excluded</x-badge>
+                                    @elseif ($assignment?->timeSlot)
                                         {{ $assignment->timeSlot->date->format('d M') }} {{ substr($assignment->timeSlot->start_time, 0, 5) }}
                                         @if ($assignment->conflict_note)
                                             <span class="text-yellow-600 dark:text-yellow-400" title="{{ $assignment->conflict_note }}">&#9888;</span>
@@ -107,7 +111,7 @@
                                     @endif
                                 </td>
                                 <td class="py-2.5 pr-4">
-                                    <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                    <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" @disabled($excluded) class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm disabled:opacity-50">
                                         <option value="">Auto</option>
                                         @foreach ($timeSlots as $slot)
                                             <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id)>
@@ -116,8 +120,13 @@
                                         @endforeach
                                     </select>
                                 </td>
+                                <td class="py-2.5 pr-4">
+                                    <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) @disabled($excluded) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">
+                                </td>
                                 <td class="py-2.5 pr-4 sm:pr-6">
-                                    <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <input type="checkbox" wire:click="toggleSubjectExcluded({{ $subject->id }})" @checked($excluded)
+                                        @if (! $excluded) wire:confirm="Exclude {{ $subject->code }} from this session? It will be left out of the timetable, seating and duty generation entirely, and any existing slot/pin for it will be cleared." @endif
+                                        title="Leave this subject out of generation entirely." class="rounded border-red-300 text-red-600 focus:ring-red-500">
                                 </td>
                             </tr>
                         @endforeach
