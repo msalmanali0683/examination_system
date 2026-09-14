@@ -1,0 +1,111 @@
+<?php
+
+namespace App\Livewire\Rooms;
+
+use App\Models\Room;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Layout;
+use Livewire\Component;
+
+class Index extends Component
+{
+    public bool $showForm = false;
+
+    public ?int $editingId = null;
+
+    public string $name = '';
+
+    public ?int $rows = null;
+
+    public ?int $columns = null;
+
+    public ?int $capacity = null;
+
+    public string $room_type = 'regular';
+
+    public bool $is_active = true;
+
+    public function mount(): void
+    {
+        $this->authorize('manage_rooms');
+    }
+
+    public function addRoom(): void
+    {
+        $this->authorize('manage_rooms');
+        $this->resetForm();
+        $this->showForm = true;
+    }
+
+    public function editRoom(int $id): void
+    {
+        $this->authorize('manage_rooms');
+        $room = Room::findOrFail($id);
+
+        $this->editingId = $room->id;
+        $this->name = $room->name;
+        $this->rows = $room->rows;
+        $this->columns = $room->columns;
+        $this->capacity = $room->capacity;
+        $this->room_type = $room->room_type;
+        $this->is_active = $room->is_active;
+        $this->showForm = true;
+    }
+
+    public function save(): void
+    {
+        $this->authorize('manage_rooms');
+
+        $maxCapacity = (int) $this->rows * (int) $this->columns;
+
+        $validated = $this->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('rooms', 'name')->ignore($this->editingId)],
+            'rows' => ['required', 'integer', 'min:1'],
+            'columns' => ['required', 'integer', 'min:1'],
+            'capacity' => ['required', 'integer', 'min:1', "max:{$maxCapacity}"],
+            'room_type' => ['required', Rule::in(['regular', 'lab'])],
+        ]);
+        $validated['is_active'] = $this->is_active;
+
+        Room::updateOrCreate(['id' => $this->editingId], $validated);
+
+        $this->resetForm();
+        $this->showForm = false;
+        session()->flash('status', 'Room saved.');
+    }
+
+    public function toggleActive(int $id): void
+    {
+        $this->authorize('manage_rooms');
+        $room = Room::findOrFail($id);
+        $room->update(['is_active' => ! $room->is_active]);
+    }
+
+    public function deleteRoom(int $id): void
+    {
+        $this->authorize('manage_rooms');
+        Room::findOrFail($id)->delete();
+        session()->flash('status', 'Room deleted.');
+    }
+
+    public function cancel(): void
+    {
+        $this->resetForm();
+        $this->showForm = false;
+    }
+
+    private function resetForm(): void
+    {
+        $this->reset(['editingId', 'name', 'rows', 'columns', 'capacity', 'room_type', 'is_active']);
+        $this->room_type = 'regular';
+        $this->is_active = true;
+    }
+
+    #[Layout('layouts.app')]
+    public function render()
+    {
+        return view('livewire.rooms.index', [
+            'rooms' => Room::orderBy('name')->get(),
+        ]);
+    }
+}

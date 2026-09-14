@@ -34,6 +34,18 @@ new class extends Component
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
+                    @can('manage_rooms')
+                        <x-nav-link :href="route('rooms.index')" :active="request()->routeIs('rooms.*')" wire:navigate>
+                            {{ __('Rooms') }}
+                        </x-nav-link>
+                    @endcan
+
+                    @can('manage_teachers')
+                        <x-nav-link :href="route('teachers.index')" :active="request()->routeIs('teachers.*')" wire:navigate>
+                            {{ __('Teachers') }}
+                        </x-nav-link>
+                    @endcan
+
                     @can('manage_users')
                         <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')" wire:navigate>
                             {{ __('Users') }}
@@ -90,6 +102,18 @@ new class extends Component
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            @can('manage_rooms')
+                <x-responsive-nav-link :href="route('rooms.index')" :active="request()->routeIs('rooms.*')" wire:navigate>
+                    {{ __('Rooms') }}
+                </x-responsive-nav-link>
+            @endcan
+
+            @can('manage_teachers')
+                <x-responsive-nav-link :href="route('teachers.index')" :active="request()->routeIs('teachers.*')" wire:navigate>
+                    {{ __('Teachers') }}
+                </x-responsive-nav-link>
+            @endcan
 
             @can('manage_users')
                 <x-responsive-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')" wire:navigate>
