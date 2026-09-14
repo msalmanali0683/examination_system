@@ -3,7 +3,12 @@
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
             {{ $examSession->name }}
         </h2>
-        <a href="{{ route('sessions.index') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">&larr; All Sessions</a>
+        <div class="flex items-center gap-4">
+            <a href="{{ route('sessions.generate', $examSession) }}" wire:navigate class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500">
+                Generate Timetable
+            </a>
+            <a href="{{ route('sessions.index') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">&larr; All Sessions</a>
+        </div>
     </div>
 </x-slot>
 

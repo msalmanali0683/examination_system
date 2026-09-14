@@ -2,6 +2,7 @@
 
 use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\EnrollmentImport;
+use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\Index as SessionsIndex;
 use App\Livewire\Sessions\Show as SessionsShow;
 use App\Livewire\Teachers\Import as TeachersImport;
@@ -46,5 +47,9 @@ Route::get('sessions/{examSession}', SessionsShow::class)
 Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
     ->middleware(['auth'])
     ->name('sessions.enrollments.import');
+
+Route::get('sessions/{examSession}/generate', GenerationConstraints::class)
+    ->middleware(['auth'])
+    ->name('sessions.generate');
 
 require __DIR__.'/auth.php';

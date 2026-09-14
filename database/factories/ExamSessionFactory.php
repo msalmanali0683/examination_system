@@ -21,6 +21,10 @@ class ExamSessionFactory extends Factory
             'name' => 'Midterm '.fake()->unique()->word().' '.fake()->year(),
             'start_date' => now()->addWeek()->toDateString(),
             'end_date' => now()->addWeeks(2)->toDateString(),
+            'status' => 'draft',
+            'seating_strategy' => 'strict',
+            'invigilators_per_room' => 2,
+            'teacher_subject_exclusion' => false,
         ];
     }
 }
