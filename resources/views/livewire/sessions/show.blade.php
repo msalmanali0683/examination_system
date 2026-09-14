@@ -15,6 +15,18 @@
 <div class="py-12" x-data="{ tab: 'rooms' }">
     <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
+        @if (session('status'))
+            <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div class="p-4 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded-lg">
+                {{ session('error') }}
+            </div>
+        @endif
+
         <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
             <div class="flex items-center justify-between">
                 <div>
@@ -101,9 +113,18 @@
                             <div class="text-xs text-gray-500 dark:text-gray-400">Subjects</div>
                         </div>
                     </div>
-                    <a href="{{ route('sessions.enrollments.import', $examSession) }}" wire:navigate class="px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700">
-                        Import Enrollments
-                    </a>
+                    <div class="flex items-center gap-3">
+                        <a href="{{ route('sessions.enrollments.import', $examSession) }}" wire:navigate class="px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700">
+                            Import Enrollments
+                        </a>
+                        @can('manage_enrollments')
+                            @if ($enrollmentCount > 0 && ! $examSession->isFinalized())
+                                <button type="button" wire:click="resetEnrollments" wire:confirm="This deletes all {{ $enrollmentCount }} enrollment(s) (and any generated seating) for this session so you can re-import from scratch. This cannot be undone. Continue?" class="px-4 py-2 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 text-sm rounded-md hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    Reset Enrollments
+                                </button>
+                            @endif
+                        @endcan
+                    </div>
                 </div>
             </div>
         </div>

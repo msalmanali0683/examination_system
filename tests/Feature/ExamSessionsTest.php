@@ -4,11 +4,18 @@ namespace Tests\Feature;
 
 use App\Livewire\Sessions\Index;
 use App\Livewire\Sessions\RoomSelection;
+use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
 use App\Livewire\Sessions\TimeSlots;
+use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
+use App\Models\SeatAssignment;
+use App\Models\Student;
+use App\Models\Subject;
+use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
+use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -185,5 +192,77 @@ class ExamSessionsTest extends TestCase
         $this->actingAs($staff)
             ->get('/sessions')
             ->assertForbidden();
+    }
+
+    public function test_reset_enrollments_wipes_enrollments_and_dependent_data_and_reverts_status_to_draft(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+        ]);
+
+        SeatAssignment::create([
+            'exam_session_id' => $session->id,
+            'enrollment_id' => $enrollment->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+            'row_number' => 1,
+            'column_number' => 1,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(Show::class, ['examSession' => $session])
+            ->call('resetEnrollments');
+
+        $this->assertDatabaseCount('enrollments', 0);
+        $this->assertDatabaseCount('seat_assignments', 0);
+        $this->assertDatabaseCount('subject_slot_assignments', 0);
+        $this->assertSame('draft', $session->fresh()->status);
+
+        // Shared catalog data (subjects/students/rooms) is untouched.
+        $this->assertDatabaseHas('subjects', ['id' => $subject->id]);
+        $this->assertDatabaseHas('students', ['id' => $student->id]);
+    }
+
+    public function test_reset_enrollments_is_blocked_on_a_finalized_session(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id]);
+
+        Livewire::actingAs($staff)
+            ->test(Show::class, ['examSession' => $session])
+            ->call('resetEnrollments');
+
+        $this->assertDatabaseCount('enrollments', 1);
+    }
+
+    public function test_user_without_manage_enrollments_permission_cannot_reset(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $staff->permissionOverrides()->create(['permission' => 'manage_enrollments', 'granted' => false]);
+        $session = ExamSession::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id]);
+
+        Livewire::actingAs($staff)
+            ->test(Show::class, ['examSession' => $session])
+            ->call('resetEnrollments')
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('enrollments', 1);
     }
 }

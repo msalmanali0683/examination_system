@@ -3,6 +3,8 @@
 namespace App\Livewire\Sessions;
 
 use App\Models\ExamSession;
+use App\Models\SubjectSlotAssignment;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -45,6 +47,38 @@ class Show extends Component
 
         $this->examSession->update($validated);
         $this->editingDetails = false;
+    }
+
+    /**
+     * Wipes every enrollment for this session so it can be re-imported
+     * from scratch. Deleting an enrollment cascades to its seat
+     * assignment (FK on seat_assignments.enrollment_id), but subject
+     * slot assignments are keyed by subject, not enrollment, so those
+     * are cleared explicitly — otherwise a subject with no enrollments
+     * left would still show as scheduled. Anything already generated
+     * from this data is stale once the underlying enrollments are gone,
+     * so the session drops back to 'draft'.
+     */
+    public function resetEnrollments(): void
+    {
+        $this->authorize('manage_enrollments');
+
+        if ($this->examSession->isFinalized()) {
+            session()->flash('error', 'This session is finalized and cannot be modified.');
+
+            return;
+        }
+
+        DB::transaction(function () {
+            SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->delete();
+            $this->examSession->enrollments()->delete();
+        });
+
+        if ($this->examSession->status !== 'draft') {
+            $this->examSession->update(['status' => 'draft']);
+        }
+
+        session()->flash('status', 'All enrollments for this session were removed. You can import a fresh file now.');
     }
 
     #[Layout('layouts.app')]
