@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Exports;
+
+use App\Models\ExamSession;
+use App\Services\Reports\ReportDataBuilder;
+use Maatwebsite\Excel\Concerns\WithMultipleSheets;
+
+class SeatingChartExport implements WithMultipleSheets
+{
+    public function __construct(private readonly ExamSession $session) {}
+
+    public function sheets(): array
+    {
+        $charts = (new ReportDataBuilder)->seatingCharts($this->session);
+
+        $usedTitles = [];
+
+        return $charts->map(function ($chart) use (&$usedTitles) {
+            $title = $this->uniqueTitle($chart, $usedTitles);
+            $usedTitles[$title] = true;
+
+            return new SeatingChartSheetExport($chart, $title);
+        })->all();
+    }
+
+    private function uniqueTitle(object $chart, array $usedTitles): string
+    {
+        $base = substr($chart->room->name.' '.$chart->timeSlot->date->format('d-M').' '.substr($chart->timeSlot->start_time, 0, 5), 0, 28);
+        $base = str_replace([':'], '', $base);
+
+        $title = $base;
+        $suffix = 2;
+        while (isset($usedTitles[$title])) {
+            $title = substr($base, 0, 28).'-'.$suffix;
+            $suffix++;
+        }
+
+        return $title;
+    }
+}

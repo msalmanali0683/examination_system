@@ -17,29 +17,29 @@
     @endif
 
     @if ($teachers->isNotEmpty())
-        <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg flex items-center gap-4 flex-wrap">
+        <div class="mb-4 p-3.5 bg-gray-50 dark:bg-gray-900/50 rounded-xl flex items-center gap-4 flex-wrap ring-1 ring-gray-100 dark:ring-gray-800">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Set for every teacher:</span>
             <div class="flex items-center gap-1">
                 <label class="text-xs text-gray-500 dark:text-gray-400">Min</label>
-                <input type="number" min="0" wire:model="bulkMinDuties" placeholder="{{ config('exam.default_min_duties') }}" class="w-16 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <input type="number" min="0" wire:model="bulkMinDuties" placeholder="{{ config('exam.default_min_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
             </div>
             <div class="flex items-center gap-1">
                 <label class="text-xs text-gray-500 dark:text-gray-400">Max</label>
-                <input type="number" min="0" wire:model="bulkMaxDuties" placeholder="{{ config('exam.default_max_duties') }}" class="w-16 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <input type="number" min="0" wire:model="bulkMaxDuties" placeholder="{{ config('exam.default_max_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
             </div>
-            <button type="button" wire:click="applyBulkDuties" wire:confirm="Apply these min/max duties to every teacher in this session, overwriting their current values?" class="px-3 py-1.5 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700">
+            <x-btn wire:click="applyBulkDuties" wire:confirm="Apply these min/max duties to every teacher in this session, overwriting their current values?" variant="dark" size="sm">
                 Apply to All
-            </button>
+            </x-btn>
         </div>
 
-        <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg flex items-center gap-4 flex-wrap">
+        <div class="mb-4 p-3.5 bg-gray-50 dark:bg-gray-900/50 rounded-xl flex items-center gap-4 flex-wrap ring-1 ring-gray-100 dark:ring-gray-800">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Available for every teacher:</span>
             @foreach ($this->days() as $iso => $label)
                 <label class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
                     <input type="checkbox"
                         wire:click="toggleDayForAll({{ $iso }}, $event.target.checked)"
                         @checked($allAvailableByDay[$iso])
-                        class="rounded border-gray-300 h-3.5 w-3.5">
+                        class="rounded border-gray-300 h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500">
                     {{ $label }}
                 </label>
             @endforeach
@@ -47,7 +47,7 @@
     @endif
 
     @if ($teachers->isEmpty())
-        <p class="text-sm text-gray-500 dark:text-gray-400">No active teachers yet &mdash; add some from the <a href="{{ route('teachers.index') }}" wire:navigate class="text-indigo-600 hover:underline">Teachers</a> page.</p>
+        <x-empty-state icon="cap" title="No active teachers yet" description="Add teachers from the Teachers page first." />
     @else
         <div class="divide-y divide-gray-100 dark:divide-gray-700">
             @foreach ($teachers as $teacher)

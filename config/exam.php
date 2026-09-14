@@ -14,4 +14,15 @@ return [
     'default_min_duties' => 2,
     'default_max_duties' => 6,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Report Header Text
+    |--------------------------------------------------------------------------
+    |
+    | Printed on generated seating charts, datesheets and duty sheets.
+    |
+    */
+    'university_name' => env('EXAM_UNIVERSITY_NAME', 'The University of Lahore'),
+    'department_name' => env('EXAM_DEPARTMENT_NAME', 'Department of Software Engineering'),
+
 ];

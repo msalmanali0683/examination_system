@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\ReportDownloadController;
+use App\Livewire\Dashboard;
 use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
@@ -14,7 +16,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
 
-Route::view('dashboard', 'dashboard')
+Route::get('dashboard', Dashboard::class)
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
@@ -61,5 +63,14 @@ Route::get('sessions/{examSession}/seating', SeatingChart::class)
 Route::get('sessions/{examSession}/duties', DutyBoard::class)
     ->middleware(['auth'])
     ->name('sessions.duties');
+
+Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('sessions.reports.')->group(function () {
+    Route::get('seating-chart.xlsx', [ReportDownloadController::class, 'seatingChartExcel'])->name('seating-chart.xlsx');
+    Route::get('seating-chart.pdf', [ReportDownloadController::class, 'seatingChartPdf'])->name('seating-chart.pdf');
+    Route::get('datesheet.xlsx', [ReportDownloadController::class, 'datesheetExcel'])->name('datesheet.xlsx');
+    Route::get('datesheet.pdf', [ReportDownloadController::class, 'datesheetPdf'])->name('datesheet.pdf');
+    Route::get('duty-roster.xlsx', [ReportDownloadController::class, 'dutySheetExcel'])->name('duty-roster.xlsx');
+    Route::get('duty-roster.pdf', [ReportDownloadController::class, 'dutySheetPdf'])->name('duty-roster.pdf');
+});
 
 require __DIR__.'/auth.php';
