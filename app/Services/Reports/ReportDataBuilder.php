@@ -138,6 +138,69 @@ class ReportDataBuilder
             ->values();
     }
 
+    /**
+     * One group per subject with every seated student in it (roll no,
+     * name, section, room, seat, invigilator) — an attendance-style sheet
+     * organized by subject rather than by room.
+     */
+    public function subjectWiseSeatingRows(ExamSession $session): Collection
+    {
+        $duties = $this->dutyNamesByRoomSlot($session);
+
+        return SeatAssignment::where('exam_session_id', $session->id)
+            ->with(['enrollment.student', 'enrollment.subject', 'room', 'timeSlot'])
+            ->get()
+            ->map(fn (SeatAssignment $sa) => (object) [
+                'subjectId' => $sa->enrollment->subject_id,
+                'code' => $sa->enrollment->subject->code,
+                'title' => $sa->enrollment->subject->title,
+                'section' => $sa->enrollment->section,
+                'rollNo' => $sa->enrollment->student->roll_no,
+                'studentName' => $sa->enrollment->student->name,
+                'date' => $sa->timeSlot->date,
+                'day' => $sa->timeSlot->date->format('l'),
+                'startTime' => $sa->timeSlot->start_time,
+                'room' => $sa->room->name,
+                'seat' => "Row {$sa->row_number}, Col {$sa->column_number}",
+                'invigilator' => $duties->get("{$sa->time_slot_id}-{$sa->room_id}", collect())->implode(' & '),
+            ])
+            ->groupBy('subjectId')
+            ->map(fn ($rows) => (object) [
+                'code' => $rows->first()->code,
+                'title' => $rows->first()->title,
+                'rows' => $rows->sortBy(fn ($r) => "{$r->section}|{$r->rollNo}")->values(),
+            ])
+            ->sortBy('code')
+            ->values();
+    }
+
+    /**
+     * One group per section (e.g. "BSAI 2A") with that batch's own exam
+     * schedule in date/time order — a personal datesheet for one class.
+     */
+    public function batchScheduleRows(ExamSession $session): Collection
+    {
+        return $this->seatingCharts($session)
+            ->flatMap(fn ($chart) => $chart->subjectsSections->map(fn ($ss) => (object) [
+                'section' => $ss->section,
+                'code' => $ss->subject->code,
+                'title' => $ss->subject->title,
+                'date' => $chart->timeSlot->date,
+                'day' => $chart->timeSlot->date->format('l'),
+                'startTime' => $chart->timeSlot->start_time,
+                'endTime' => $chart->timeSlot->end_time,
+                'room' => $chart->room->name,
+                'invigilator' => $chart->teacherNames->implode(' & '),
+            ]))
+            ->groupBy('section')
+            ->sortKeys()
+            ->map(fn ($rows, $section) => (object) [
+                'section' => $section,
+                'rows' => $rows->sortBy(fn ($r) => $r->date->format('Y-m-d').$r->startTime)->values(),
+            ])
+            ->values();
+    }
+
     private function dutyNamesByRoomSlot(ExamSession $session): Collection
     {
         return DutyAssignment::where('exam_session_id', $session->id)

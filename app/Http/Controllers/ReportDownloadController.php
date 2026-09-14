@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\BatchScheduleExport;
 use App\Exports\DutySheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
+use App\Exports\SubjectWiseSeatingExport;
 use App\Models\ExamSession;
 use App\Services\Reports\ReportDataBuilder;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -68,6 +70,42 @@ class ReportDownloadController extends Controller
         return Pdf::loadView('reports.duty-sheet-pdf', ['teacherGroups' => $teacherGroups, 'session' => $examSession])
             ->setPaper('a4', 'portrait')
             ->download($this->filename($examSession, 'Duty-Roster', 'pdf'));
+    }
+
+    public function subjectWiseSeatingExcel(ExamSession $examSession): BinaryFileResponse
+    {
+        Gate::authorize('view_reports');
+
+        return Excel::download(new SubjectWiseSeatingExport($examSession), $this->filename($examSession, 'Subject-wise-Seating', 'xlsx'));
+    }
+
+    public function subjectWiseSeatingPdf(ExamSession $examSession): Response
+    {
+        Gate::authorize('view_reports');
+
+        $subjects = (new ReportDataBuilder)->subjectWiseSeatingRows($examSession);
+
+        return Pdf::loadView('reports.subject-wise-seating-pdf', ['subjects' => $subjects, 'session' => $examSession])
+            ->setPaper('a4', 'portrait')
+            ->download($this->filename($examSession, 'Subject-wise-Seating', 'pdf'));
+    }
+
+    public function batchScheduleExcel(ExamSession $examSession): BinaryFileResponse
+    {
+        Gate::authorize('view_reports');
+
+        return Excel::download(new BatchScheduleExport($examSession), $this->filename($examSession, 'Batch-Schedule', 'xlsx'));
+    }
+
+    public function batchSchedulePdf(ExamSession $examSession): Response
+    {
+        Gate::authorize('view_reports');
+
+        $sections = (new ReportDataBuilder)->batchScheduleRows($examSession);
+
+        return Pdf::loadView('reports.batch-schedule-pdf', ['sections' => $sections, 'session' => $examSession])
+            ->setPaper('a4', 'portrait')
+            ->download($this->filename($examSession, 'Batch-Schedule', 'pdf'));
     }
 
     private function filename(ExamSession $examSession, string $report, string $extension): string

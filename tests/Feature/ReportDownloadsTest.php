@@ -132,6 +132,50 @@ class ReportDownloadsTest extends TestCase
         $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
     }
 
+    public function test_subject_wise_seating_excel_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.subject-wise-seating.xlsx', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_subject_wise_seating_pdf_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.subject-wise-seating.pdf', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
+    public function test_batch_schedule_excel_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.batch-schedule.xlsx', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_batch_schedule_pdf_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.batch-schedule.pdf', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
     public function test_report_downloads_panel_shows_links_once_generated(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

@@ -71,6 +71,10 @@ Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('ses
     Route::get('datesheet.pdf', [ReportDownloadController::class, 'datesheetPdf'])->name('datesheet.pdf');
     Route::get('duty-roster.xlsx', [ReportDownloadController::class, 'dutySheetExcel'])->name('duty-roster.xlsx');
     Route::get('duty-roster.pdf', [ReportDownloadController::class, 'dutySheetPdf'])->name('duty-roster.pdf');
+    Route::get('subject-wise-seating.xlsx', [ReportDownloadController::class, 'subjectWiseSeatingExcel'])->name('subject-wise-seating.xlsx');
+    Route::get('subject-wise-seating.pdf', [ReportDownloadController::class, 'subjectWiseSeatingPdf'])->name('subject-wise-seating.pdf');
+    Route::get('batch-schedule.xlsx', [ReportDownloadController::class, 'batchScheduleExcel'])->name('batch-schedule.xlsx');
+    Route::get('batch-schedule.pdf', [ReportDownloadController::class, 'batchSchedulePdf'])->name('batch-schedule.pdf');
 });
 
 require __DIR__.'/auth.php';
