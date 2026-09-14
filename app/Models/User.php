@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -22,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
     ];
 
     /**
@@ -45,5 +47,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function permissionOverrides(): HasMany
+    {
+        return $this->hasMany(UserPermission::class);
+    }
+
+    public function isHead(): bool
+    {
+        return $this->role === 'head';
+    }
+
+    /**
+     * A permission is granted per-user if overridden, otherwise it falls
+     * back to the role's default from config/permissions.php.
+     */
+    public function hasPermission(string $permission): bool
+    {
+        $override = $this->permissionOverrides->firstWhere('permission', $permission);
+
+        if ($override !== null) {
+            return $override->granted;
+        }
+
+        return (bool) config("permissions.defaults.{$this->role}.{$permission}", false);
     }
 }

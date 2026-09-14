@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Exam Coordinator',
                 'password' => 'ExamAdmin#2026',
+                'role' => 'head',
             ]
         );
     }
