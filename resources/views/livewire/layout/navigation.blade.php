@@ -34,6 +34,12 @@ new class extends Component
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
+                    @can('manage_sessions')
+                        <x-nav-link :href="route('sessions.index')" :active="request()->routeIs('sessions.*')" wire:navigate>
+                            {{ __('Sessions') }}
+                        </x-nav-link>
+                    @endcan
+
                     @can('manage_rooms')
                         <x-nav-link :href="route('rooms.index')" :active="request()->routeIs('rooms.*')" wire:navigate>
                             {{ __('Rooms') }}
@@ -102,6 +108,12 @@ new class extends Component
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            @can('manage_sessions')
+                <x-responsive-nav-link :href="route('sessions.index')" :active="request()->routeIs('sessions.*')" wire:navigate>
+                    {{ __('Sessions') }}
+                </x-responsive-nav-link>
+            @endcan
 
             @can('manage_rooms')
                 <x-responsive-nav-link :href="route('rooms.index')" :active="request()->routeIs('rooms.*')" wire:navigate>
