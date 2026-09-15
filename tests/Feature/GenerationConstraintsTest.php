@@ -597,6 +597,42 @@ class GenerationConstraintsTest extends TestCase
         $this->assertDatabaseHas('subject_slot_assignments', ['subject_id' => $subjectB->id, 'time_slot_id' => null, 'conflict_note' => null]);
     }
 
+    public function test_show_clash_details_lists_the_actual_shared_students(): void
+    {
+        // The conflict_note text only ever names the other subject, never
+        // which students — clicking it must recompute and show the real
+        // list so the admin can see exactly who's affected.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
+
+        $subjectA = Subject::factory()->create(['code' => 'CS111', 'title' => 'Repeater Subject']);
+        $subjectB = Subject::factory()->create(['code' => 'MAT222', 'title' => 'Fresh Subject']);
+
+        $shared = Student::factory()->create(['roll_no' => '00000001', 'name' => 'Shared Student']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectB->id]);
+
+        // A third subject on the same day with no shared student — must
+        // not show up in the clash detail list at all.
+        $subjectC = Subject::factory()->create(['code' => 'ENG333']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectC->id]);
+
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slotA->id, 'is_pinned' => true, 'conflict_note' => 'x']);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'time_slot_id' => $slotB->id, 'is_pinned' => true]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectC->id, 'time_slot_id' => $slotA->id, 'is_pinned' => true]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $component->call('showClashDetails', $subjectA->id);
+
+        $details = $component->get('clashDetails');
+        $this->assertSame('CS111 — Repeater Subject', $details['subjectLabel']);
+        $this->assertCount(1, $details['pairs']);
+        $this->assertSame('MAT222 — Fresh Subject', $details['pairs'][0]['subjectLabel']);
+        $this->assertSame([['rollNo' => '00000001', 'name' => 'Shared Student']], $details['pairs'][0]['students']);
+    }
+
     public function test_manually_pinning_a_subject_flags_a_same_day_clash_with_another_subject(): void
     {
         // Regression: Capacity Check showed "Ready" while Pin Subjects to

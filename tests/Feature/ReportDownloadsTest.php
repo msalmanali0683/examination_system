@@ -176,6 +176,66 @@ class ReportDownloadsTest extends TestCase
         $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
     }
 
+    public function test_formatted_datesheet_excel_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.formatted-datesheet.xlsx', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_formatted_datesheet_lists_every_room_a_subject_used_side_by_side(): void
+    {
+        // Two rooms, one slot, one subject split across both — the wide
+        // template needs both rooms on the SAME row (Room 1.../Room 2...),
+        // not one row per room like the flat Master Datesheet.
+        $session = ExamSession::factory()->create();
+        $roomA = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-501']);
+        $roomB = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-502']);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+        $subject = Subject::factory()->create(['code' => 'CS02115|11', 'title' => 'Programming Fundamentals']);
+        $teacherA = Teacher::factory()->create(['is_active' => true, 'name' => 'Ms Ayesha']);
+        $teacherB = Teacher::factory()->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
+
+        foreach ([[$roomA, $teacherA], [$roomB, $teacherB]] as [$room, $teacher]) {
+            $student = Student::factory()->create();
+            $enrollment = Enrollment::factory()->create([
+                'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'BSAI 2A',
+            ]);
+            SeatAssignment::create([
+                'exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id,
+                'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1,
+            ]);
+            DutyAssignment::create([
+                'exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id,
+            ]);
+        }
+
+        $rows = (new \App\Services\Reports\ReportDataBuilder)->formattedDatesheetRows($session);
+
+        $this->assertCount(1, $rows);
+        $row = $rows->first();
+        $this->assertSame('CS02115|11', $row->subject->code);
+        $this->assertSame('2nd', $row->semester);
+        $this->assertSame(2, $row->studentCount);
+        $this->assertCount(2, $row->rooms);
+        $this->assertEqualsCanonicalizing(['ITC-501', 'ITC-502'], $row->rooms->pluck('room')->all());
+        $this->assertTrue($row->rooms->every(fn ($r) => $r->count === 1));
+        $this->assertEqualsCanonicalizing(['Ms Ayesha', 'Mr Zoraiz'], $row->rooms->pluck('invigilator')->all());
+
+        $html = (new \App\Exports\FormattedDatesheetExport($session))->view()->render();
+        $this->assertStringContainsString('ITC-501', $html);
+        $this->assertStringContainsString('ITC-502', $html);
+        $this->assertStringContainsString('Ms Ayesha', $html);
+        $this->assertStringContainsString('Mr Zoraiz', $html);
+        $this->assertStringContainsString('2nd', $html);
+        $this->assertStringContainsString(config('exam.datesheet_building_block'), $html);
+        $this->assertStringContainsString(config('exam.datesheet_event_package'), $html);
+    }
+
     public function test_reports_print_the_sessions_own_department_name_and_report_stamp(): void
     {
         $session = $this->seedSession([

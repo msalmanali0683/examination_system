@@ -77,6 +77,25 @@
 
         <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4">
             <div class="flex items-center gap-2 mb-1">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-900/40 text-sky-600 dark:text-sky-300">
+                    <x-icon name="calendar" class="h-4 w-4" />
+                </span>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Formatted Datesheet</h4>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Same data as the Master Datesheet, laid out one row per subject with every room it used side by side &mdash; matches the department's own datesheet template.</p>
+            @if ($hasSeating)
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('sessions.reports.formatted-datesheet.xlsx', $reportQuery) }}">
+                        <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
+                    </a>
+                </div>
+            @else
+                <p class="text-xs text-gray-400 italic">Generate seating first.</p>
+            @endif
+        </div>
+
+        <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4">
+            <div class="flex items-center gap-2 mb-1">
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/40 text-green-600 dark:text-green-300">
                     <x-icon name="clipboard" class="h-4 w-4" />
                 </span>

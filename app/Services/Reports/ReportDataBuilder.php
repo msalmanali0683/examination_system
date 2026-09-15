@@ -5,6 +5,7 @@ namespace App\Services\Reports;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SeatAssignment;
+use App\Services\Generation\SemesterExtractor;
 use Illuminate\Support\Collection;
 
 /**
@@ -219,6 +220,63 @@ class ReportDataBuilder
                 'section' => $section,
                 'rows' => $rows->sortBy(fn ($r) => $r->date->format('Y-m-d').$r->startTime)->values(),
             ])
+            ->values();
+    }
+
+    /**
+     * One row per subject-per-slot, wide-format: up to several
+     * {room, count, invigilator} triples on the same row instead of one
+     * row per room — matches the department's own "Formatted Datesheet"
+     * template (module code/desc, semester, student count, date/day/slot,
+     * then Room 1/Room 1 Count/Invigilator Room 1, Room 2/..., etc).
+     */
+    public function formattedDatesheetRows(ExamSession $session, ?string $date = null): Collection
+    {
+        $charts = $this->seatingCharts($session, $date);
+
+        $sectionsBySubject = $charts
+            ->flatMap(fn ($chart) => $chart->subjectsSections)
+            ->groupBy(fn ($ss) => $ss->subject->id)
+            ->map(fn ($rows) => $rows->pluck('section'));
+
+        $rows = collect();
+
+        foreach ($charts as $chart) {
+            $countBySubject = $chart->subjectsSections
+                ->groupBy(fn ($ss) => $ss->subject->id)
+                ->map(fn ($group) => (object) [
+                    'subject' => $group->first()->subject,
+                    'count' => $group->sum('count'),
+                ]);
+
+            foreach ($countBySubject as $subjectId => $info) {
+                $key = $subjectId.'|'.$chart->timeSlot->id;
+                $entry = $rows->get($key) ?? (object) [
+                    'subject' => $info->subject,
+                    'timeSlot' => $chart->timeSlot,
+                    'studentCount' => 0,
+                    'rooms' => collect(),
+                ];
+
+                $entry->studentCount += $info->count;
+                $entry->rooms->push((object) [
+                    'room' => $chart->room->name,
+                    'count' => $info->count,
+                    'invigilator' => $chart->teacherNames->implode(' & '),
+                ]);
+
+                $rows->put($key, $entry);
+            }
+        }
+
+        return $rows->values()
+            ->map(function ($entry) use ($sectionsBySubject) {
+                $entry->rooms = $entry->rooms->sortByDesc('count')->values();
+                $entry->semester = SemesterExtractor::label($sectionsBySubject->get($entry->subject->id, collect()));
+
+                return $entry;
+            })
+            ->sortBy(fn ($e) => $e->timeSlot->date->format('Y-m-d').$e->timeSlot->start_time.$e->subject->code)
             ->values();
     }
 

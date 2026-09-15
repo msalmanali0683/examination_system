@@ -25,4 +25,18 @@ return [
     'university_name' => env('EXAM_UNIVERSITY_NAME', 'The University of Lahore'),
     'department_name' => env('EXAM_DEPARTMENT_NAME', 'Department of Software Engineering'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Formatted Datesheet Template
+    |--------------------------------------------------------------------------
+    |
+    | Printed as-is on every row of the Formatted Datesheet export (the
+    | "Building/Block Name" and "Event Package (Abbrev./Description)"
+    | columns) — the app has no per-subject building or event-package data
+    | of its own, these are constant for the whole institution.
+    |
+    */
+    'datesheet_building_block' => env('EXAM_DATESHEET_BUILDING', 'ITC'),
+    'datesheet_event_package' => env('EXAM_DATESHEET_EVENT_PACKAGE', 'SE-LHR'),
+
 ];

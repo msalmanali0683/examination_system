@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\BatchScheduleExport;
 use App\Exports\DutySheetExport;
+use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
 use App\Exports\SubjectWiseSeatingExport;
@@ -58,6 +59,22 @@ class ReportDownloadController extends Controller
         return Pdf::loadView('reports.master-datesheet-pdf', ['rowsByDate' => $rowsByDate, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
             ->setPaper('a4', 'landscape')
             ->download($this->filename($examSession, 'Datesheet', 'pdf', $date));
+    }
+
+    /**
+     * Same underlying data as the Master Datesheet, laid out wide instead
+     * of flat — one row per subject per slot, with up to several
+     * {room, count, invigilator} triples on that row — matching the
+     * department's own "Formatted Datesheet" template. No PDF version:
+     * the room columns are as wide as the busiest slot needs, which
+     * doesn't paginate sensibly on a printed page.
+     */
+    public function formattedDatesheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return Excel::download(new FormattedDatesheetExport($examSession, $date, $this->showInvigilators($request)), $this->filename($examSession, 'Formatted-Datesheet', 'xlsx', $date));
     }
 
     public function dutySheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse

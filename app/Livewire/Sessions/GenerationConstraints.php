@@ -8,6 +8,7 @@ use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
+use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
@@ -16,6 +17,7 @@ use App\Services\Generation\ConflictGraphBuilder;
 use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
+use App\Services\Generation\SemesterExtractor;
 use App\Services\Generation\TimetableGenerator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +61,15 @@ class GenerationConstraints extends Component
      * overwrites a teacher already recorded on some of them.
      */
     public array $missingTeacherSelection = [];
+
+    /**
+     * The subject+day currently open in the clash-detail modal, as a
+     * plain array (subject label, day, and one entry per clashing
+     * subject with the actual list of shared students) — null when the
+     * modal is closed. Computed fresh on click rather than stored, so it
+     * always reflects the session's current enrollments/assignments.
+     */
+    public ?array $clashDetails = null;
 
     public function mount(ExamSession $examSession): void
     {
@@ -213,6 +224,82 @@ class GenerationConstraints extends Component
         SubjectSlotAssignment::where('exam_session_id', $sessionId)
             ->where('subject_id', $subjectId)
             ->update(['conflict_note' => "Shares students with {$names} on the same day — placed anyway."]);
+    }
+
+    /**
+     * Opens the clash-detail modal for a subject's ⚠ warning — recomputed
+     * fresh from current enrollments/assignments (same same-day logic as
+     * recordClashNoteForSameDay()) rather than trusting the stored
+     * conflict_note text, which only ever named the OTHER subject, never
+     * which students. Every clashing subject on the same day is listed,
+     * each with the actual students shared with the subject clicked.
+     */
+    public function showClashDetails(int $subjectId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $subject = Subject::find($subjectId);
+        $assignment = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
+            ->where('subject_id', $subjectId)
+            ->first();
+
+        if (! $subject || ! $assignment?->time_slot_id) {
+            return;
+        }
+
+        $slot = TimeSlot::find($assignment->time_slot_id);
+        $sessionId = $this->examSession->id;
+
+        $sameDaySlotIds = TimeSlot::where('exam_session_id', $sessionId)
+            ->whereDate('date', $slot->date)
+            ->pluck('id');
+
+        $otherSubjectIds = SubjectSlotAssignment::where('exam_session_id', $sessionId)
+            ->whereIn('time_slot_id', $sameDaySlotIds)
+            ->where('subject_id', '!=', $subjectId)
+            ->pluck('subject_id');
+
+        $otherSubjects = Subject::whereIn('id', $otherSubjectIds)->get()->keyBy('id');
+
+        $mySubjectIds = Enrollment::where('exam_session_id', $sessionId)
+            ->where('subject_id', $subjectId)
+            ->pluck('student_id', 'id');
+
+        $pairs = [];
+
+        foreach ($otherSubjectIds as $otherId) {
+            $sharedStudentIds = Enrollment::where('exam_session_id', $sessionId)
+                ->where('subject_id', $otherId)
+                ->whereIn('student_id', $mySubjectIds->values())
+                ->pluck('student_id');
+
+            if ($sharedStudentIds->isEmpty()) {
+                continue;
+            }
+
+            $students = Student::whereIn('id', $sharedStudentIds)
+                ->orderBy('roll_no')
+                ->get(['roll_no', 'name']);
+
+            $other = $otherSubjects->get($otherId);
+
+            $pairs[] = [
+                'subjectLabel' => "{$other->code} — {$other->title}",
+                'students' => $students->map(fn ($s) => ['rollNo' => $s->roll_no, 'name' => $s->name])->all(),
+            ];
+        }
+
+        if (empty($pairs)) {
+            return;
+        }
+
+        $this->clashDetails = [
+            'subjectLabel' => "{$subject->code} — {$subject->title}",
+            'day' => $slot->date->format('d M Y'),
+            'pairs' => $pairs,
+        ];
+
+        $this->dispatch('open-modal', 'clash-details');
     }
 
     /**
@@ -538,22 +625,11 @@ class GenerationConstraints extends Component
             ->groupBy('subject_id')
             ->map(fn ($rows) => $rows->sortBy('section')->pluck('c', 'section'));
 
-        // A section string is "<program> <semester><letter>" (e.g. "BSAI
-        // 2A") — the leading number is the semester/year group. Subjects
-        // in the same semester share the same cohort of students almost
-        // entirely, so grouping the table this way makes same-semester
-        // subjects visually adjacent — exactly the ones that must never
-        // land on the same day.
-        $semesterBySubject = $sectionBreakdown->map(fn ($sections) => $sections->keys()
-            ->map(function (string $section) {
-                preg_match('/(\d+)/', $section, $m);
-
-                return $m[1] ?? null;
-            })
-            ->filter()
-            ->unique()
-            ->sort()
-            ->values());
+        // Subjects in the same semester share the same cohort of students
+        // almost entirely, so grouping the table this way makes
+        // same-semester subjects visually adjacent — exactly the ones
+        // that must never land on the same day.
+        $semesterBySubject = $sectionBreakdown->map(fn ($sections) => SemesterExtractor::fromSections($sections->keys()));
 
         $subjects = $subjects->sortBy(fn (Subject $s) => (int) ($semesterBySubject->get($s->id, collect())->first() ?? 999))->values();
 

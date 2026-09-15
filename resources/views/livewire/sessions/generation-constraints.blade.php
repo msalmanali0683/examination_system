@@ -18,6 +18,39 @@
     </div>
 </x-modal>
 
+<x-modal name="clash-details" :show="$clashDetails !== null" focusable max-width="lg">
+    @if ($clashDetails)
+        <div class="p-6">
+            <div class="flex items-start gap-3">
+                <x-icon name="warning" class="h-6 w-6 text-yellow-600 shrink-0" />
+                <div>
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ $clashDetails['subjectLabel'] }}</h2>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Shares students with the following on {{ $clashDetails['day'] }}:</p>
+                </div>
+            </div>
+            <div class="mt-4 max-h-96 overflow-y-auto space-y-4">
+                @foreach ($clashDetails['pairs'] as $pair)
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $pair['subjectLabel'] }}</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ count($pair['students']) }} shared student{{ count($pair['students']) === 1 ? '' : 's' }}</p>
+                        <ul class="text-sm text-gray-700 dark:text-gray-300 divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
+                            @foreach ($pair['students'] as $student)
+                                <li class="px-3 py-1.5 flex justify-between gap-2">
+                                    <span>{{ $student['name'] }}</span>
+                                    <span class="text-gray-400 dark:text-gray-500">{{ $student['rollNo'] }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endforeach
+            </div>
+            <div class="mt-6 flex justify-end">
+                <x-btn variant="secondary" wire:click="$set('clashDetails', null)" x-on:click="$dispatch('close')">Close</x-btn>
+            </div>
+        </div>
+    @endif
+</x-modal>
+
 @if (session('status'))
     <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
         {{ session('status') }}
@@ -196,7 +229,7 @@
                                     @elseif ($assignment?->timeSlot)
                                         {{ $assignment->timeSlot->date->format('d M') }} {{ substr($assignment->timeSlot->start_time, 0, 5) }}
                                         @if ($assignment->conflict_note)
-                                            <span class="text-yellow-600 dark:text-yellow-400" title="{{ $assignment->conflict_note }}">&#9888;</span>
+                                            <button type="button" wire:click="showClashDetails({{ $subject->id }})" title="Click to see the students causing this clash" class="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 underline decoration-dotted">&#9888;</button>
                                         @endif
                                     @else
                                         <span class="text-gray-400">Not yet generated</span>
@@ -349,7 +382,7 @@
             @foreach ($conflicted as $assignment)
                 <li class="text-sm text-yellow-700 dark:text-yellow-400 flex items-start gap-2">
                     <x-icon name="warning" class="h-4 w-4 mt-0.5 shrink-0" />
-                    {{ $assignment->conflict_note }}
+                    <button type="button" wire:click="showClashDetails({{ $assignment->subject_id }})" class="text-left hover:underline decoration-dotted">{{ $assignment->conflict_note }}</button>
                 </li>
             @endforeach
         </ul>
