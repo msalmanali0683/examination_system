@@ -13,7 +13,22 @@ final class SlotRequirement
         public readonly int $teachersNeeded,
         public readonly int $teachersAvailable,
         public readonly bool $hasUnseatedStudents,
+        public readonly int $seatsAvailable = 0,
     ) {
+    }
+
+    /**
+     * Raw total capacity across active rooms, compared against the number
+     * of students needing seats — a plainer sanity number than the room
+     * count above it. Purely informational: isMet() below still goes by
+     * the real per-room simulation (roomsShortfall/hasUnseatedStudents),
+     * since enough *total* seats doesn't guarantee they're shaped right
+     * (see RequirementCalculator's own shortfall-consistency fix) — this
+     * number existing alongside a "Short" badge is not a contradiction.
+     */
+    public function seatsShortfall(): int
+    {
+        return max(0, $this->studentCount - $this->seatsAvailable);
     }
 
     public function roomsShortfall(): int

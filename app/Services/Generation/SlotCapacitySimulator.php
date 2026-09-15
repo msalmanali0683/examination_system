@@ -70,11 +70,12 @@ class SlotCapacitySimulator
         $conflictGraph = (new ConflictGraphBuilder)->build($enrollments);
         $roomTemplate = $this->activeRoomTemplate($session);
         $roomsAvailable = count($roomTemplate);
+        $seatsAvailable = array_sum(array_column($roomTemplate, 'capacity'));
         $teachersAvailable = $this->teachersAvailable($session);
 
         $bins = $this->packIntoBins($subjectIds, $conflictGraph, $enrollmentsBySubject, $roomTemplate, $minSubjectsPerSlot, $maxSubjectsPerSlot);
 
-        return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $roomTemplate, $roomsAvailable, $teachersAvailable, $session) {
+        return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $roomTemplate, $roomsAvailable, $seatsAvailable, $teachersAvailable, $session) {
             $result = $this->allocate($enrollmentsBySubject, $subjectIdsInSlot, $roomTemplate);
             $unseated = $result->warnings->where('type', 'unseated');
             $studentCount = collect($result->placements)->count() + $unseated->count();
@@ -97,6 +98,7 @@ class SlotCapacitySimulator
                 teachersNeeded: $roomsNeeded * $session->invigilators_per_room,
                 teachersAvailable: $teachersAvailable,
                 hasUnseatedStudents: $unseated->isNotEmpty(),
+                seatsAvailable: $seatsAvailable,
             );
         });
     }

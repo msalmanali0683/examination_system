@@ -176,6 +176,70 @@ class TimetableGeneratorTest extends TestCase
         $this->assertSame(['day1' => 2, 'day2' => 2, 'day3' => 2], $dayCounts->sortKeys()->all());
     }
 
+    public function test_roomsfit_readjusts_a_subject_away_from_a_slot_that_cannot_seat_it_alongside_others(): void
+    {
+        // Slot 100 (day1) already holds subject 1. Room capacity only
+        // allows one subject per slot. Subject 2 is clash-free with 1 (so
+        // pure clash-avoidance would happily share slot 100 with it) but
+        // the capacity check must redirect it to slot 200 (day2) instead.
+        $roomsFit = fn (array $subjectIds) => count($subjectIds) <= 1;
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 100],
+            timeSlotIds: [100, 200],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 200 => 'day2'],
+            roomsFit: $roomsFit,
+        );
+
+        $this->assertSame(200, $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_a_subject_alone_in_its_own_slot_is_never_treated_as_a_problem(): void
+    {
+        // Two subjects, two slots, capacity only allows one subject per
+        // slot — each subject ends up alone in its own slot. That's a
+        // perfectly fine outcome and must not be reported as a conflict.
+        $roomsFit = fn (array $subjectIds) => count($subjectIds) <= 1;
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 200],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            roomsFit: $roomsFit,
+        );
+
+        $this->assertNotSame($result->assignments[1], $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_roomsfit_still_places_a_subject_when_nothing_fits_anywhere_and_reports_it(): void
+    {
+        // Capacity never fits, even for a single subject alone (e.g. it
+        // genuinely needs more seats than any active room setup provides).
+        // It must still be placed somewhere rather than dropped, with the
+        // shortfall reported instead of silently ignored.
+        $roomsFit = fn (array $subjectIds) => false;
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1],
+            pinned: [],
+            timeSlotIds: [100],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1]),
+            roomsFit: $roomsFit,
+        );
+
+        $this->assertSame(100, $result->assignments[1]);
+        $this->assertTrue($result->conflicts->isNotEmpty());
+        $this->assertStringContainsString('room capacity', $result->conflicts->first()->message);
+    }
+
     public function test_a_day_already_used_by_a_pinned_subject_still_counts_toward_load_balancing(): void
     {
         // Subject 1 is pinned to day1 (slot 100). Subject 2 is clash-free

@@ -18,14 +18,24 @@ class TimetableGenerator
      * obstacles and are never moved. Hardest-to-place subjects (most total
      * shared-student weight) are processed first.
      *
-     * Among multiple clash-free days, the least-loaded one (fewest subjects
-     * placed there so far) is preferred — and likewise the least-loaded
-     * slot within the chosen day — so subjects spread out across the whole
-     * available window instead of piling into the first few days that
-     * happen to be clash-free, leaving later days empty. When a subject
-     * truly cannot avoid every clash, it's placed on whichever day has the
-     * least total conflict (ties broken the same way), and the specific
-     * clash is reported rather than silently dropped or thrown as an error.
+     * Among multiple clash-free (day, slot) options, the least-loaded day is
+     * preferred, then the least-loaded slot within it — so subjects spread
+     * out across the whole available window instead of piling into the
+     * first few days that happen to be clash-free, leaving later days
+     * empty. When a subject truly cannot avoid every clash, it's placed on
+     * whichever day has the least total conflict (ties broken the same
+     * way), and the specific clash is reported rather than silently dropped
+     * or thrown as an error.
+     *
+     * $roomsFit, when given, is consulted before all of the above: for a
+     * candidate slot, it's called with the subject IDs that would occupy it
+     * (everything already there plus this one) and must return whether the
+     * session's active rooms can actually seat all of them together. A slot
+     * that fails this is only ever chosen when literally nothing else does
+     * — same "least bad, but report it" fallback as an unavoidable clash —
+     * so a subject ending up alone in a slot is never treated as a problem
+     * on its own; it's exactly what should happen when nothing else fits
+     * alongside it.
      *
      * @param  int[]  $subjectIds  every subject needing a slot this session
      * @param  array<int, int>  $pinned  subject_id => time_slot_id, fixed and never moved
@@ -36,6 +46,9 @@ class TimetableGenerator
      *                                        from this map default to being their own day, so callers that
      *                                        don't care about day-grouping (or existing tests) get plain
      *                                        slot-level behavior unchanged.
+     * @param  ?callable(int[]): bool  $roomsFit  optional: given the subject IDs that would share a slot,
+     *                                            returns whether the active rooms can seat them all. Omit to
+     *                                            skip room-capacity awareness entirely (prior behavior).
      */
     public function generate(
         array $subjectIds,
@@ -44,6 +57,7 @@ class TimetableGenerator
         array $conflictGraph,
         array $subjectLabels,
         array $slotDays = [],
+        ?callable $roomsFit = null,
     ): TimetableResult {
         $dayOf = fn (int $slotId): string => $slotDays[$slotId] ?? 'slot-'.$slotId;
 
@@ -75,53 +89,50 @@ class TimetableGenerator
         }
 
         // Each day's slots, in original (earliest-first) order — computed
-        // once so every subject's placement search reuses it.
+        // once so every subject's placement search reuses it. Iterating
+        // this (an associative array) walks days in first-appearance
+        // order, which is earliest-first since $timeSlotIds already is.
         $daySlots = [];
         foreach ($timeSlotIds as $slotId) {
             $daySlots[$dayOf($slotId)][] = $slotId;
         }
-        $days = array_keys($daySlots);
 
         usort($unpinned, fn ($a, $b) => $this->totalWeight($conflictGraph, $b) <=> $this->totalWeight($conflictGraph, $a));
 
         foreach ($unpinned as $subjectId) {
-            $bestDay = null;
-            $bestDayWeight = null;
-            $bestDayLoad = null;
+            $best = null;
 
-            foreach ($days as $day) {
-                $occupants = $dayOccupants[$day] ?? [];
-                $weight = $this->clashWeight($conflictGraph, $subjectId, $occupants);
-                $load = count($occupants);
+            foreach ($daySlots as $day => $slotIds) {
+                $dayOccupantIds = $dayOccupants[$day] ?? [];
+                $weight = $this->clashWeight($conflictGraph, $subjectId, $dayOccupantIds);
+                $dayLoad = count($dayOccupantIds);
 
-                if ($bestDayWeight === null
-                    || $weight < $bestDayWeight
-                    || ($weight === $bestDayWeight && $load < $bestDayLoad)) {
-                    $bestDay = $day;
-                    $bestDayWeight = $weight;
-                    $bestDayLoad = $load;
+                foreach ($slotIds as $slotId) {
+                    $slotOccupantIds = $slotOccupants[$slotId] ?? [];
+
+                    $candidate = [
+                        'day' => $day,
+                        'slot' => $slotId,
+                        'weight' => $weight,
+                        'fits' => $roomsFit === null || $roomsFit([...$slotOccupantIds, $subjectId]),
+                        'dayLoad' => $dayLoad,
+                        'slotLoad' => count($slotOccupantIds),
+                    ];
+
+                    if ($best === null || $this->isBetterCandidate($candidate, $best)) {
+                        $best = $candidate;
+                    }
                 }
             }
 
-            // Within the chosen day, prefer whichever slot has the fewest
-            // subjects so far, spreading across that day's own periods too.
-            $bestSlot = null;
-            $bestSlotLoad = null;
-
-            foreach ($daySlots[$bestDay] as $slotId) {
-                $load = count($slotOccupants[$slotId] ?? []);
-
-                if ($bestSlotLoad === null || $load < $bestSlotLoad) {
-                    $bestSlot = $slotId;
-                    $bestSlotLoad = $load;
-                }
-            }
+            $bestDay = $best['day'];
+            $bestSlot = $best['slot'];
 
             $placed[$subjectId] = $bestSlot;
             $slotOccupants[$bestSlot][] = $subjectId;
             $dayOccupants[$bestDay][] = $subjectId;
 
-            if ($bestDayWeight > 0) {
+            if ($best['weight'] > 0) {
                 foreach ($dayOccupants[$bestDay] as $occupantId) {
                     $shared = $conflictGraph[$subjectId][$occupantId] ?? 0;
 
@@ -142,9 +153,47 @@ class TimetableGenerator
                     ));
                 }
             }
+
+            if ($roomsFit !== null && ! $best['fits']) {
+                $subjectLabel = $subjectLabels[$subjectId] ?? "#{$subjectId}";
+
+                $conflicts->push(new ConflictReportRow(
+                    subjectId: $subjectId,
+                    subjectLabel: $subjectLabel,
+                    conflictingSubjectId: 0,
+                    conflictingSubjectLabel: '',
+                    sharedStudentCount: 0,
+                    message: "{$subjectLabel}: no slot has enough active room capacity left for it, even alone — it was placed anyway. Activate more rooms, or add another slot.",
+                ));
+            }
         }
 
         return new TimetableResult($placed, $conflicts);
+    }
+
+    /**
+     * @param  array{day: string, slot: int, weight: int, fits: bool, dayLoad: int, slotLoad: int}  $a
+     * @param  array{day: string, slot: int, weight: int, fits: bool, dayLoad: int, slotLoad: int}  $b
+     */
+    private function isBetterCandidate(array $a, array $b): bool
+    {
+        if ($a['fits'] !== $b['fits']) {
+            return $a['fits'];
+        }
+
+        if ($a['weight'] !== $b['weight']) {
+            return $a['weight'] < $b['weight'];
+        }
+
+        if ($a['dayLoad'] !== $b['dayLoad']) {
+            return $a['dayLoad'] < $b['dayLoad'];
+        }
+
+        if ($a['slotLoad'] !== $b['slotLoad']) {
+            return $a['slotLoad'] < $b['slotLoad'];
+        }
+
+        return false;
     }
 
     /**

@@ -62,6 +62,29 @@ class RequirementCalculatorTest extends TestCase
         $this->assertTrue($result->first()->isMet());
         $this->assertSame(0, $result->first()->roomsShortfall());
         $this->assertSame(0, $result->first()->teachersShortfall());
+        $this->assertSame(10, $result->first()->seatsAvailable);
+        $this->assertSame(0, $result->first()->seatsShortfall());
+    }
+
+    public function test_seats_available_sums_capacity_across_every_active_room(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $roomA = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        $roomB = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomA->id, 'is_active' => true]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomB->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 6);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->count(2)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertSame(8, $requirement->seatsAvailable);
+        $this->assertSame(0, $requirement->seatsShortfall());
     }
 
     public function test_room_shortfall_counts_rooms_needed_from_the_full_room_pool(): void

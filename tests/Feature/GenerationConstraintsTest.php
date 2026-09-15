@@ -7,6 +7,7 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
+use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
@@ -38,6 +39,19 @@ class GenerationConstraintsTest extends TestCase
         $this->assertSame(3, $session->fresh()->mixed_subjects_per_room);
         $this->assertSame(3, $session->fresh()->invigilators_per_room);
         $this->assertTrue($session->fresh()->teacher_subject_exclusion);
+    }
+
+    public function test_staff_can_save_respect_room_capacity(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['respect_room_capacity' => false]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('respect_room_capacity', true)
+            ->call('saveSettings');
+
+        $this->assertTrue($session->fresh()->respect_room_capacity);
     }
 
     public function test_staff_can_save_one_of_the_new_overflow_seating_strategies(): void
@@ -301,6 +315,67 @@ class GenerationConstraintsTest extends TestCase
             $assignments[$subjectA->id]->timeSlot->date->format('Y-m-d'),
             $assignments[$subjectB->id]->timeSlot->date->format('Y-m-d'),
         );
+    }
+
+    public function test_generate_reports_a_shortfall_when_respect_room_capacity_is_enabled_and_a_slot_cannot_seat_everyone(): void
+    {
+        // Only one small room and only one time slot — two clash-free
+        // subjects both need a room of their own (Strict), which the
+        // single active room can't provide for both at once. With no
+        // other slot to move to, the second must still be placed (never
+        // dropped), but the shortfall should be reported since it was
+        // asked to respect real room capacity.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['respect_room_capacity' => true]);
+        $room = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        foreach ([$subjectA, $subjectB] as $subject) {
+            for ($i = 0; $i < 3; $i++) {
+                $student = Student::factory()->create();
+                Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+            }
+        }
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $this->assertDatabaseCount('subject_slot_assignments', 2);
+        $notes = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('conflict_note')->filter();
+        $this->assertTrue($notes->contains(fn ($note) => str_contains($note, 'room capacity')));
+    }
+
+    public function test_generate_ignores_room_capacity_when_the_setting_is_off(): void
+    {
+        // Same tight-room setup as above, but respect_room_capacity is
+        // left at its default (off) — subjects can still share the slot
+        // even though it exceeds room capacity, matching prior behavior,
+        // and no capacity shortfall gets reported.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['respect_room_capacity' => false]);
+        $room = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        foreach ([$subjectA, $subjectB] as $subject) {
+            for ($i = 0; $i < 3; $i++) {
+                $student = Student::factory()->create();
+                Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+            }
+        }
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $notes = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('conflict_note')->filter();
+        $this->assertFalse($notes->contains(fn ($note) => str_contains($note, 'room capacity')));
     }
 
     public function test_pinning_and_unpinning_a_subject(): void

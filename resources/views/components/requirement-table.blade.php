@@ -8,7 +8,7 @@
             <thead>
                 <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                     <th class="py-2 pl-4 sm:pl-6 pr-4">Slot</th>
-                    <th class="py-2 pr-4">Students</th>
+                    <th class="py-2 pr-4">Seats Needed / Available</th>
                     <th class="py-2 pr-4">Rooms Needed / Active</th>
                     <th class="py-2 pr-4">Teachers Needed / Available</th>
                     <th class="py-2 pr-4 sm:pr-6">Status</th>
@@ -18,7 +18,12 @@
                 @foreach ($requirements as $r)
                     <tr>
                         <td class="py-2 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">{{ $r->label }}</td>
-                        <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $r->studentCount }}</td>
+                        <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->seatsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->seatsShortfall() === 0])>
+                            {{ $r->studentCount }} / {{ $r->seatsAvailable }}
+                            @if ($r->seatsShortfall() > 0)
+                                ({{ $r->seatsShortfall() }} short)
+                            @endif
+                        </td>
                         <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->roomsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->roomsShortfall() === 0])>
                             {{ $r->roomsNeeded }} / {{ $r->roomsAvailable }}
                             @if ($r->roomsShortfall() > 0)

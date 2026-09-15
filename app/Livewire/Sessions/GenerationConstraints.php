@@ -16,6 +16,7 @@ use App\Services\Generation\ConflictGraphBuilder;
 use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
+use App\Services\Generation\Strategies\StrictSeatingStrategy;
 use App\Services\Generation\TimetableGenerator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,18 @@ class GenerationConstraints extends Component
 
     public bool $teacher_subject_exclusion = false;
 
+    /**
+     * When on, Generate Timetable keeps every slot within the session's
+     * actual active room capacity — a subject is only placed alongside
+     * others already in a slot if the active rooms can seat all of them
+     * together, readjusting it to a different slot/day otherwise. A
+     * subject ending up alone in a slot is completely fine; it's only a
+     * problem when nothing anywhere has room for it (reported, not
+     * silently dropped). Off by default: without it, slots are chosen
+     * purely by clash-avoidance and spread, same as before.
+     */
+    public bool $respect_room_capacity = false;
+
     public bool $showRequirements = false;
 
     /**
@@ -56,6 +69,7 @@ class GenerationConstraints extends Component
         $this->mixed_subjects_per_room = $examSession->mixed_subjects_per_room;
         $this->invigilators_per_room = $examSession->invigilators_per_room;
         $this->teacher_subject_exclusion = $examSession->teacher_subject_exclusion;
+        $this->respect_room_capacity = $examSession->respect_room_capacity;
     }
 
     public function saveSettings(): void
@@ -71,6 +85,7 @@ class GenerationConstraints extends Component
             'mixed_subjects_per_room' => ['required_if:seating_strategy,mixed', 'integer', 'min:2', 'max:10'],
             'invigilators_per_room' => ['required', 'integer', 'min:1', 'max:10'],
             'teacher_subject_exclusion' => ['boolean'],
+            'respect_room_capacity' => ['boolean'],
         ]);
 
         // Not relevant outside Mixed mode — keep it a sane default rather
@@ -237,7 +252,8 @@ class GenerationConstraints extends Component
         $labels = $subjects->mapWithKeys(fn (Subject $s) => [$s->id => "{$s->code} - {$s->title}"])->all();
 
         $graph = (new ConflictGraphBuilder)->build($enrollments);
-        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays);
+        $roomsFit = $this->examSession->respect_room_capacity ? $this->roomsFitChecker($sessionId, $excludedIds) : null;
+        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays, $roomsFit);
 
         DB::transaction(function () use ($result, $sessionId, $pinned, $excludedIds) {
             foreach ($result->assignments as $subjectId => $slotId) {
@@ -277,6 +293,44 @@ class GenerationConstraints extends Component
         } else {
             $this->flashError("Timetable generated with {$result->conflicts->count()} unavoidable clash(es) — see below.");
         }
+    }
+
+    /**
+     * Builds the closure TimetableGenerator uses to decide whether the
+     * active rooms can seat a candidate group of subjects together in one
+     * slot — same Strict, one-room-per-subject-section simulation the rest
+     * of generation uses, so "fits" here means the same thing it will
+     * during real seating later.
+     *
+     * @param  int[]  $excludedIds
+     */
+    private function roomsFitChecker(int $sessionId, array $excludedIds): callable
+    {
+        $enrollmentsBySubject = Enrollment::where('exam_session_id', $sessionId)
+            ->whereNotIn('subject_id', $excludedIds)
+            ->select('id', 'subject_id', 'section')
+            ->get()
+            ->groupBy('subject_id');
+
+        $roomTemplate = $this->examSession->sessionRooms()->where('is_active', true)->with('room')->get()
+            ->map(fn ($sr) => [
+                'room_id' => $sr->room_id,
+                'rows' => $sr->room->rows,
+                'columns' => $sr->room->columns,
+                'capacity' => $sr->effectiveCapacity(),
+                'occupied' => [],
+            ])
+            ->sortByDesc('capacity')
+            ->values()
+            ->all();
+
+        $strategy = new StrictSeatingStrategy;
+
+        return function (array $subjectIdsInSlot) use ($enrollmentsBySubject, $roomTemplate, $strategy): bool {
+            $subset = collect($subjectIdsInSlot)->flatMap(fn ($id) => $enrollmentsBySubject->get($id) ?? collect());
+
+            return $strategy->allocate($subset, $roomTemplate)->warnings->where('type', 'unseated')->isEmpty();
+        };
     }
 
     public function checkRequirements(): void

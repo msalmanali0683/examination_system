@@ -37,6 +37,7 @@ class ExamSession extends Model
         'mixed_subjects_per_room',
         'invigilators_per_room',
         'teacher_subject_exclusion',
+        'respect_room_capacity',
         'locked_at',
     ];
 
@@ -44,6 +45,7 @@ class ExamSession extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'teacher_subject_exclusion' => 'boolean',
+        'respect_room_capacity' => 'boolean',
         'locked_at' => 'datetime',
     ];
 

@@ -34,7 +34,9 @@ class RequirementCalculator
         $activePreview = $this->seatAllocationService->preview($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
         $allRoomsPreview = $this->seatAllocationService->previewAgainstAllRooms($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
 
-        $roomsAvailable = $session->sessionRooms()->where('is_active', true)->count();
+        $activeSessionRooms = $session->sessionRooms()->where('is_active', true)->with('room')->get();
+        $roomsAvailable = $activeSessionRooms->count();
+        $seatsAvailable = $activeSessionRooms->sum(fn ($sr) => $sr->effectiveCapacity());
 
         // Every active teacher is available by default; a constraint row
         // only exists where the admin explicitly excluded them or marked
@@ -44,7 +46,7 @@ class RequirementCalculator
         $excludedCount = $constraints->where('is_excluded', true)->count();
         $constrainedNotExcluded = $constraints->where('is_excluded', false);
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $session) {
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $session) {
             $slot = $active['slot'];
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
@@ -76,6 +78,7 @@ class RequirementCalculator
                 teachersNeeded: $roomsNeeded * $session->invigilators_per_room,
                 teachersAvailable: max(0, $teachersAvailable),
                 hasUnseatedStudents: $unseated->isNotEmpty(),
+                seatsAvailable: $seatsAvailable,
             );
         })->values();
     }

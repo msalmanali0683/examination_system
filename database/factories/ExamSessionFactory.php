@@ -26,6 +26,7 @@ class ExamSessionFactory extends Factory
             'mixed_subjects_per_room' => 2,
             'invigilators_per_room' => 2,
             'teacher_subject_exclusion' => false,
+            'respect_room_capacity' => false,
         ];
     }
 }

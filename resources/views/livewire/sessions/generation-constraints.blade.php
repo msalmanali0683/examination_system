@@ -70,6 +70,12 @@
                 Avoid assigning a teacher to invigilate their own subject
             </label>
         </div>
+        <div class="flex items-end">
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-2">
+                <input type="checkbox" wire:model="respect_room_capacity" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                Keep each slot within active room capacity when generating the timetable
+            </label>
+        </div>
         <div class="sm:col-span-3">
             <x-btn type="submit" variant="dark" icon="check">Save Settings</x-btn>
         </div>
