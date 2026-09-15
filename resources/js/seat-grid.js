@@ -12,6 +12,8 @@ import Sortable from 'sortablejs';
 function livewireComponentFor(el) {
     const root = el.closest('[wire\\:id]');
 
+    // Livewire.find() already returns the $wire proxy, not the raw
+    // component — call methods on it directly, never `.find(...).$wire`.
     return root ? window.Livewire.find(root.getAttribute('wire:id')) : null;
 }
 
@@ -44,7 +46,7 @@ export function initSeatGrid(gridEl, slotId) {
                     return;
                 }
 
-                component.$wire.moveSeat(
+                component.moveSeat(
                     parseInt(card.dataset.enrollmentId, 10),
                     parseInt(targetCell.dataset.roomId, 10),
                     parseInt(targetCell.dataset.row, 10),

@@ -82,7 +82,7 @@
                                                     'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 cursor-default' => $seat->is_locked,
                                                 ])
                                                 data-enrollment-id="{{ $seat->enrollment_id }}"
-                                                title="{{ $seat->enrollment->student->name }} &mdash; {{ $seat->enrollment->subject->code }}"
+                                                title="{{ $seat->enrollment->student->name }} ({{ $seat->enrollment->student->roll_no }}) &mdash; {{ $seat->enrollment->subject->title }} [{{ $seat->enrollment->subject->code }}] &mdash; Section {{ $seat->enrollment->section }}"
                                             >
                                                 <div class="flex items-center justify-between gap-1">
                                                     <span class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ $seat->enrollment->student->roll_no }}</span>
