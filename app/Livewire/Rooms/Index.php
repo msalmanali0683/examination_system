@@ -3,6 +3,7 @@
 namespace App\Livewire\Rooms;
 
 use App\Models\Room;
+use App\Models\SeatAssignment;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -72,11 +73,32 @@ class Index extends Component
         ]);
         $validated['is_active'] = $this->is_active;
 
+        if ($this->editingId && $this->shrinksBelowExistingSeats($this->editingId, $validated['rows'], $validated['columns'])) {
+            $this->addError('rows', 'This room already has seat assignments outside that grid in a session that isn\'t finalized yet — regenerate or move those seats first, then resize the room.');
+
+            return;
+        }
+
         Room::updateOrCreate(['id' => $this->editingId], $validated);
 
         $this->resetForm();
         $this->showForm = false;
         session()->flash('status', 'Room saved.');
+    }
+
+    /**
+     * A smaller grid would silently strand any seat already placed outside
+     * it — invisible in the seating chart grid but still counted, which is
+     * exactly what happened to session 1's ITC-5xx rooms. Finalized
+     * sessions are historical and excluded since they can't be
+     * regenerated anyway.
+     */
+    private function shrinksBelowExistingSeats(int $roomId, int $rows, int $columns): bool
+    {
+        return SeatAssignment::where('room_id', $roomId)
+            ->where(fn ($q) => $q->where('row_number', '>', $rows)->orWhere('column_number', '>', $columns))
+            ->whereHas('examSession', fn ($q) => $q->where('status', '!=', 'finalized'))
+            ->exists();
     }
 
     public function toggleActive(int $id): void
