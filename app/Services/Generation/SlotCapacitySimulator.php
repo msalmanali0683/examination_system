@@ -50,13 +50,25 @@ class SlotCapacitySimulator
                 $unseated = $preview['result']->warnings->where('type', 'unseated');
                 $studentCount = collect($preview['result']->placements)->count() + $unseated->count();
 
+                // roomsUsed only counts rooms that actually received a
+                // student, so when the whole system's room pool runs out
+                // mid-placement it's capped at "however many rooms exist" —
+                // it can't express "more than that would be needed", even
+                // though that's exactly what's true here. Never let that
+                // cap make the display claim "no shortfall" while students
+                // were actually left unseated.
+                $roomsNeeded = $preview['roomsUsed'];
+                if ($unseated->isNotEmpty() && $roomsNeeded <= $roomsAvailable) {
+                    $roomsNeeded = $roomsAvailable + 1;
+                }
+
                 return new SlotRequirement(
                     timeSlotId: $index + 1,
                     label: 'Simulated Slot '.($index + 1).' ('.$subjectIds->count().' '.str('subject')->plural($subjectIds->count()).')',
                     studentCount: $studentCount,
-                    roomsNeeded: $preview['roomsUsed'],
+                    roomsNeeded: $roomsNeeded,
                     roomsAvailable: $roomsAvailable,
-                    teachersNeeded: $preview['roomsUsed'] * $session->invigilators_per_room,
+                    teachersNeeded: $roomsNeeded * $session->invigilators_per_room,
                     teachersAvailable: $teachersAvailable,
                     hasUnseatedStudents: $unseated->isNotEmpty(),
                 );

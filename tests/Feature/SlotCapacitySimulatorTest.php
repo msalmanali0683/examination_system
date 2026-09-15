@@ -145,6 +145,33 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->assertSame(1, $result->first()->teachersAvailable);
     }
 
+    public function test_shortfall_is_flagged_even_when_roomsused_is_capped_by_an_exhausted_room_pool(): void
+    {
+        // Only 2 rooms exist in the whole system (capacity 5 each = 10
+        // total), both active in the session, and one subject has more
+        // students than the entire system can seat. roomsUsed can never
+        // exceed 2 (there's nowhere else to place anyone), which must not
+        // be allowed to read as "0 shortfall" against roomsAvailable=2.
+        $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
+        Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 15);
+
+        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+
+        $requirement = $result->first();
+        $this->assertTrue($requirement->hasUnseatedStudents);
+        $this->assertSame(2, $requirement->roomsAvailable);
+        $this->assertGreaterThan($requirement->roomsAvailable, $requirement->roomsNeeded);
+        $this->assertGreaterThan(0, $requirement->roomsShortfall());
+        $this->assertFalse($requirement->isMet());
+    }
+
     public function test_no_enrollments_yet_returns_an_empty_collection(): void
     {
         $session = ExamSession::factory()->create();
