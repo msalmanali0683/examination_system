@@ -413,6 +413,41 @@ class GenerationConstraintsTest extends TestCase
         $this->assertFalse($notes->contains(fn ($note) => str_contains($note, 'room capacity')));
     }
 
+    public function test_pin_dropdown_previews_a_same_day_clash_before_it_is_picked(): void
+    {
+        // The admin should see which slots would clash *before* picking
+        // one, not only after committing to it — the dropdown option for
+        // a day that already has a student-sharing subject must be
+        // marked, while a clash-free day's option must not be.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $clashDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        $freeDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
+
+        $subjectA = Subject::factory()->create(['code' => 'CS999']);
+        $subjectB = Subject::factory()->create(['code' => 'MAT888']);
+        $sharedStudent = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $clashDay->id,
+            'is_pinned' => true,
+        ]);
+
+        $html = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session])->html();
+
+        // Only subject B is at risk (it shares a student with A, which is
+        // already pinned to the clash day) — the marker must appear
+        // exactly once, attached to B's "20 Apr" option, not A's own (A
+        // doesn't clash with itself) and not either subject's "21 Apr"
+        // (clash-free) option.
+        $this->assertSame(1, substr_count($html, 'clash (same day)'));
+        $this->assertMatchesRegularExpression('/20 Apr 09:00[^<]*clash \(same day\)/', $html);
+    }
+
     public function test_pinning_and_unpinning_a_subject(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

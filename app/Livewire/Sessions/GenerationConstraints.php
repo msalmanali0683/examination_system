@@ -571,6 +571,36 @@ class GenerationConstraints extends Component
             ->groupBy(fn (Subject $s) => $assignments->get($s->id)->time_slot_id)
             ->map(fn ($rows) => $rows->sum('enrollments_count'));
 
+        $timeSlots = $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get();
+        $timeSlotsById = $timeSlots->keyBy('id');
+
+        // Same-day clash preview for the Pin dropdown: for every subject
+        // and every day this session has slots on, work out whether
+        // placing that subject there would share a student with
+        // something already assigned that day — mirrors
+        // recordClashNoteForSameDay()'s own logic, so what the dropdown
+        // previews before a pick matches what actually gets flagged
+        // after it, instead of the admin finding out only afterwards.
+        $conflictGraph = (new ConflictGraphBuilder)->build(
+            Enrollment::where('exam_session_id', $sessionId)->get(['student_id', 'subject_id'])
+        );
+
+        $subjectIdsByDay = $assignments
+            ->filter(fn ($a) => $a->time_slot_id !== null && ! $a->is_excluded)
+            ->groupBy(fn ($a) => $timeSlotsById->get($a->time_slot_id)?->date->format('Y-m-d'))
+            ->map(fn ($rows) => $rows->pluck('subject_id')->all());
+
+        $distinctDays = $timeSlots->pluck('date')->map(fn ($d) => $d->format('Y-m-d'))->unique();
+
+        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph) {
+            $days = $distinctDays->filter(fn (string $day) => collect($subjectIdsByDay->get($day, []))
+                ->reject(fn ($id) => $id === $subject->id)
+                ->contains(fn ($id) => ($conflictGraph[$subject->id][$id] ?? 0) > 0)
+            )->values();
+
+            return [$subject->id => $days];
+        });
+
         $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
             ->whereNull('enrollments.teacher_id')
             ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
@@ -595,9 +625,10 @@ class GenerationConstraints extends Component
             'semesterBySubject' => $semesterBySubject,
             'seatsAvailableTotal' => $seatsAvailableTotal,
             'seatsUsedPerSlot' => $seatsUsedPerSlot,
+            'clashingDaysBySubject' => $clashingDaysBySubject,
             'missingTeacherSections' => $missingTeacherSections,
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
-            'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),
+            'timeSlots' => $timeSlots,
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
             'requirements' => $requirements,
             'dutyFairness' => $this->dutyFairness($sessionId),

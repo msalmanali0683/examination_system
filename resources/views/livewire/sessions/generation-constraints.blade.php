@@ -210,9 +210,10 @@
                                                     $alreadyThere = $assignment?->time_slot_id === $slot->id;
                                                     $used = $seatsUsedPerSlot->get($slot->id, 0);
                                                     $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
+                                                    $wouldClash = $clashingDaysBySubject->get($subject->id, collect())->contains($slot->date->format('Y-m-d'));
                                                 @endphp
-                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal])>
-                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats
+                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClash])>
+                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $wouldClash ? ' &mdash; &#9888; clash (same day)' : '' !!}
                                                 </option>
                                             @endforeach
                                         </select>
