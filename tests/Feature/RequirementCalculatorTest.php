@@ -256,6 +256,12 @@ class RequirementCalculatorTest extends TestCase
         $this->assertFalse($requirement->hasUnseatedStudents);
         $this->assertTrue($requirement->hasUnresolvedClash);
         $this->assertFalse($requirement->isMet());
+        // The admin needs to know *what* the clash is, not just that one
+        // exists, so the conflict message travels with the requirement.
+        $this->assertSame(
+            ['Clashes with CS101 (12 shared students) — no clash-free day remained; placed anyway.'],
+            $requirement->clashDetails
+        );
     }
 
     public function test_a_strategy_override_simulates_a_different_strategy_without_touching_the_sessions_saved_one(): void

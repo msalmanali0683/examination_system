@@ -53,13 +53,14 @@ class RequirementCalculator
         // it anyway (see TimetableGenerator's capacity-shortfall/clash
         // conflicts). Capacity Check must surface that too, or it can show
         // "Ready" for a slot that Pin Subjects to Slots is warning about.
-        $slotsWithUnresolvedClash = SubjectSlotAssignment::where('exam_session_id', $session->id)
+        $clashDetailsBySlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
             ->whereNotNull('time_slot_id')
             ->whereNotNull('conflict_note')
-            ->pluck('time_slot_id')
-            ->unique();
+            ->get(['time_slot_id', 'conflict_note'])
+            ->groupBy('time_slot_id')
+            ->map(fn ($rows) => $rows->pluck('conflict_note')->unique()->values()->all());
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $slotsWithUnresolvedClash, $session) {
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $session) {
             $slot = $active['slot'];
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
@@ -81,6 +82,7 @@ class RequirementCalculator
 
             $unavailableThisDay = $constrainedNotExcluded->filter(fn ($c) => ! $c->isAvailableOn($slot->date))->count();
             $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay;
+            $clashDetails = $clashDetailsBySlot->get($slot->id, []);
 
             return new SlotRequirement(
                 timeSlotId: $slot->id,
@@ -92,7 +94,8 @@ class RequirementCalculator
                 teachersAvailable: max(0, $teachersAvailable),
                 hasUnseatedStudents: $unseated->isNotEmpty(),
                 seatsAvailable: $seatsAvailable,
-                hasUnresolvedClash: $slotsWithUnresolvedClash->contains($slot->id),
+                hasUnresolvedClash: ! empty($clashDetails),
+                clashDetails: $clashDetails,
             );
         })->values();
     }

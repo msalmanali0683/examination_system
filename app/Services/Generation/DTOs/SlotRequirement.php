@@ -15,6 +15,8 @@ final class SlotRequirement
         public readonly bool $hasUnseatedStudents,
         public readonly int $seatsAvailable = 0,
         public readonly bool $hasUnresolvedClash = false,
+        /** @var string[] */
+        public readonly array $clashDetails = [],
     ) {
     }
 
