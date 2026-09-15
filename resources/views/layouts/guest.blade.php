@@ -22,13 +22,15 @@
                 </span>
                 <span class="text-white">
                     <span class="block font-semibold leading-tight">Exam Duties &amp; Seat Plan</span>
-                    <span class="block text-xs text-slate-400">Software Engineering</span>
+                    <span class="block text-xs text-slate-400">Faculty of Information Technology</span>
                 </span>
             </div>
 
             <div class="w-full sm:max-w-md mt-6 px-6 py-6 bg-white dark:bg-gray-800 shadow-xl overflow-hidden rounded-xl ring-1 ring-black/5">
                 {{ $slot }}
             </div>
+
+            <p class="mt-6 mb-6 text-xs text-slate-500">Developed by Asia Maqsood</p>
         </div>
     </body>
 </html>

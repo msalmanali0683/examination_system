@@ -27,7 +27,7 @@ new class extends Component
             </span>
             <span class="min-w-0">
                 <span class="block text-sm font-semibold text-white truncate">Exam Duties &amp; Seat Plan</span>
-                <span class="block text-xs text-slate-400 truncate">Software Engineering</span>
+                <span class="block text-xs text-slate-400 truncate">Faculty of Information Technology</span>
             </span>
         </a>
         <button @click="sidebarOpen = false" class="ml-auto lg:hidden p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white">
