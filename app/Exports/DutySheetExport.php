@@ -16,6 +16,7 @@ class DutySheetExport implements FromView, WithTitle
     {
         return view('reports.duty-sheet', [
             'teacherGroups' => (new ReportDataBuilder)->dutyRowsByTeacher($this->session),
+            'session' => $this->session,
         ]);
     }
 

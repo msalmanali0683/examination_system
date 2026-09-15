@@ -21,6 +21,12 @@ class Show extends Component
 
     public string $name = '';
 
+    public string $department_name = '';
+
+    public string $report_status = 'tentative';
+
+    public string $report_version = '';
+
     public ?string $start_date = null;
 
     public ?string $end_date = null;
@@ -35,6 +41,9 @@ class Show extends Component
     {
         $this->authorize('manage_sessions');
         $this->name = $this->examSession->name;
+        $this->department_name = (string) $this->examSession->department_name;
+        $this->report_status = $this->examSession->report_status;
+        $this->report_version = (string) $this->examSession->report_version;
         $this->start_date = $this->examSession->start_date->toDateString();
         $this->end_date = $this->examSession->end_date->toDateString();
         $this->editingDetails = true;
@@ -50,9 +59,14 @@ class Show extends Component
 
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
+            'department_name' => ['nullable', 'string', 'max:255'],
+            'report_status' => ['required', 'in:tentative,final'],
+            'report_version' => ['nullable', 'string', 'max:50'],
             'start_date' => ['required', 'date'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
         ]);
+        $validated['department_name'] = $validated['department_name'] ?: null;
+        $validated['report_version'] = $validated['report_version'] ?: null;
 
         $this->examSession->update($validated);
         $this->editingDetails = false;

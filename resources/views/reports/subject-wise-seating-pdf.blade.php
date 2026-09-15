@@ -10,8 +10,8 @@
 </style>
 </head>
 <body>
-    <h1>{{ config('exam.university_name') }} &mdash; {{ config('exam.department_name') }}</h1>
+    <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Subject-wise Seating List: {{ $session->name }}</h2>
-    @include('reports.subject-wise-seating', ['subjects' => $subjects])
+    @include('reports.subject-wise-seating', ['subjects' => $subjects, 'session' => $session])
 </body>
 </html>

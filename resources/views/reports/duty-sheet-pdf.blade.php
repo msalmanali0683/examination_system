@@ -10,8 +10,8 @@
 </style>
 </head>
 <body>
-    <h1>{{ config('exam.university_name') }} &mdash; {{ config('exam.department_name') }}</h1>
+    <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Invigilation Duty Roster: {{ $session->name }}</h2>
-    @include('reports.duty-sheet', ['teacherGroups' => $teacherGroups])
+    @include('reports.duty-sheet', ['teacherGroups' => $teacherGroups, 'session' => $session])
 </body>
 </html>

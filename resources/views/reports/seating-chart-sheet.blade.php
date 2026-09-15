@@ -7,8 +7,13 @@
     $half = (int) ceil($span / 2);
 @endphp
 <table style="border-collapse:collapse;width:100%;font-family:Arial,Helvetica,sans-serif;font-size:12px;">
+    <tr>
+        <td colspan="{{ $span }}" style="text-align:center;font-weight:bold;padding:3px;background:{{ $session->isReportFinal() ? '#C6EFCE' : '#FFEB9C' }};color:{{ $session->isReportFinal() ? '#006100' : '#9C6500' }};border:1px solid #94A3B8;">
+            {{ $session->reportStampLabel() }}
+        </td>
+    </tr>
     <tr><td colspan="{{ $span }}" style="text-align:center;font-weight:bold;font-size:15px;border:none;padding:2px;">{{ config('exam.university_name') }}</td></tr>
-    <tr><td colspan="{{ $span }}" style="text-align:center;font-weight:bold;border:none;padding:2px;">{{ config('exam.department_name') }}</td></tr>
+    <tr><td colspan="{{ $span }}" style="text-align:center;font-weight:bold;border:none;padding:2px;">{{ $session->effectiveDepartmentName() }}</td></tr>
     <tr><td colspan="{{ $span }}" style="text-align:center;font-weight:bold;border:none;padding:6px 2px 4px;">Sitting Plan for {{ $subjectLine }}</td></tr>
     <tr>
         <td colspan="{{ $half }}" style="border:none;padding:2px;"><strong>Section:</strong> {{ $sectionLine }}</td>

@@ -16,6 +16,7 @@ class SubjectWiseSeatingExport implements FromView, WithTitle
     {
         return view('reports.subject-wise-seating', [
             'subjects' => (new ReportDataBuilder)->subjectWiseSeatingRows($this->session),
+            'session' => $this->session,
         ]);
     }
 

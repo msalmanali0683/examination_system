@@ -16,6 +16,7 @@ class MasterDatesheetExport implements FromView, WithTitle
     {
         return view('reports.master-datesheet', [
             'rowsByDate' => (new ReportDataBuilder)->datesheetRowsByDate($this->session),
+            'session' => $this->session,
         ]);
     }
 

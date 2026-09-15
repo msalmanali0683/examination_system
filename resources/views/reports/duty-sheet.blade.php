@@ -1,4 +1,9 @@
 <table style="border-collapse:collapse;width:100%;font-family:Arial,Helvetica,sans-serif;font-size:11px;">
+    <tr>
+        <td colspan="5" style="text-align:center;font-weight:bold;padding:4px;background:{{ $session->isReportFinal() ? '#C6EFCE' : '#FFEB9C' }};color:{{ $session->isReportFinal() ? '#006100' : '#9C6500' }};border:1px solid #94A3B8;">
+            {{ $session->reportStampLabel() }}
+        </td>
+    </tr>
     @foreach ($teacherGroups as $group)
         <tr>
             <td colspan="5" style="font-weight:bold;background:#DDEBF7;border:1px solid #94A3B8;padding:4px;">

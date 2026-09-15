@@ -10,8 +10,8 @@
 </style>
 </head>
 <body>
-    <h1>{{ config('exam.university_name') }} &mdash; {{ config('exam.department_name') }}</h1>
+    <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Batch / Section Schedule: {{ $session->name }}</h2>
-    @include('reports.batch-schedule', ['sections' => $sections])
+    @include('reports.batch-schedule', ['sections' => $sections, 'session' => $session])
 </body>
 </html>

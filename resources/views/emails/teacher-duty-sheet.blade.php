@@ -1,6 +1,8 @@
 <x-mail::message>
 # Invigilation Duty — {{ $examSession->name }}
 
+**{{ $examSession->reportStampLabel() }}**
+
 Dear {{ $teacher->name }},
 
 You have been assigned **{{ $dutyCount }}** invigilation {{ Str::plural('duty', $dutyCount) }} for **{{ $examSession->name }}**. Your full schedule — dates, times, rooms and subjects — is attached as a PDF.
@@ -8,5 +10,5 @@ You have been assigned **{{ $dutyCount }}** invigilation {{ Str::plural('duty', 
 Please review it and contact the exam coordinator if you notice a conflict.
 
 Thanks,<br>
-{{ config('exam.department_name') }}
+{{ $examSession->effectiveDepartmentName() }}
 </x-mail::message>

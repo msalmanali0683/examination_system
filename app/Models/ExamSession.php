@@ -13,6 +13,9 @@ class ExamSession extends Model
 
     protected $fillable = [
         'name',
+        'department_name',
+        'report_status',
+        'report_version',
         'start_date',
         'end_date',
         'status',
@@ -89,5 +92,39 @@ class ExamSession extends Model
     public function isFinalized(): bool
     {
         return $this->status === 'finalized';
+    }
+
+    /**
+     * The department name printed on this session's reports — falls back
+     * to the app-wide default when the session hasn't set its own.
+     */
+    public function effectiveDepartmentName(): string
+    {
+        return $this->department_name ?: config('exam.department_name');
+    }
+
+    /**
+     * The stamp printed on every report for this session, e.g.
+     * "TENTATIVE — SUBJECT TO CHANGE", "TENTATIVE — v2 — SUBJECT TO
+     * CHANGE", or "FINAL — v3".
+     */
+    public function reportStampLabel(): string
+    {
+        $label = strtoupper($this->report_status ?: 'tentative');
+
+        if ($this->report_version) {
+            $label .= ' — '.$this->report_version;
+        }
+
+        if (($this->report_status ?: 'tentative') === 'tentative') {
+            $label .= ' — SUBJECT TO CHANGE';
+        }
+
+        return $label;
+    }
+
+    public function isReportFinal(): bool
+    {
+        return $this->report_status === 'final';
     }
 }

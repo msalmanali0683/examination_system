@@ -40,6 +40,8 @@
                 <span class="text-sm text-gray-500 dark:text-gray-400">
                     {{ $examSession->start_date->format('d M Y') }} &ndash; {{ $examSession->end_date->format('d M Y') }}
                 </span>
+                <span class="text-sm text-gray-400 dark:text-gray-500">&middot; {{ $examSession->effectiveDepartmentName() }}</span>
+                <x-badge :color="$examSession->isReportFinal() ? 'green' : 'yellow'">{{ $examSession->reportStampLabel() }}</x-badge>
             </div>
             @if (! $editingDetails && ! $examSession->isFinalized())
                 <button type="button" wire:click="editDetails" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
@@ -52,6 +54,26 @@
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session Name</label>
                     <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
+                </div>
+                <div class="sm:col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Department Name</label>
+                    <input type="text" wire:model="department_name" placeholder="{{ config('exam.department_name') }}" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <p class="mt-1 text-xs text-gray-400">Printed on every report and export for this session. Leave blank to use the default above.</p>
+                    @error('department_name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Report Status</label>
+                    <select wire:model="report_status" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                        <option value="tentative">Tentative</option>
+                        <option value="final">Final</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-400">Stamped on every printed/exported report.</p>
+                    @error('report_status') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Version Label <span class="text-xs text-gray-400 font-normal">(optional)</span></label>
+                    <input type="text" wire:model="report_version" placeholder="e.g. v2, Revised 20 Apr" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    @error('report_version') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>

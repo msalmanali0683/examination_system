@@ -10,8 +10,8 @@
 </style>
 </head>
 <body>
-    <h1>{{ config('exam.university_name') }} &mdash; {{ config('exam.department_name') }}</h1>
+    <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Exam Datesheet: {{ $session->name }}</h2>
-    @include('reports.master-datesheet', ['rowsByDate' => $rowsByDate])
+    @include('reports.master-datesheet', ['rowsByDate' => $rowsByDate, 'session' => $session])
 </body>
 </html>

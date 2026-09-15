@@ -12,7 +12,7 @@
 <body>
     @foreach ($charts as $chart)
         <div class="chart">
-            @include('reports.seating-chart-sheet', ['chart' => $chart])
+            @include('reports.seating-chart-sheet', ['chart' => $chart, 'session' => $session])
         </div>
     @endforeach
 </body>

@@ -40,6 +40,44 @@ class ExamSessionsTest extends TestCase
         $this->assertDatabaseHas('exam_sessions', ['name' => 'Midterm Spring 2026']);
     }
 
+    public function test_editing_session_details_saves_department_name_and_report_stamp(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(Show::class, ['examSession' => $session])
+            ->call('editDetails')
+            ->set('department_name', 'Department of Computer Science')
+            ->set('report_status', 'final')
+            ->set('report_version', 'v2')
+            ->call('saveDetails');
+
+        $session->refresh();
+        $this->assertSame('Department of Computer Science', $session->department_name);
+        $this->assertSame('final', $session->report_status);
+        $this->assertSame('v2', $session->report_version);
+        $this->assertSame('FINAL — v2', $session->reportStampLabel());
+    }
+
+    public function test_department_name_and_report_stamp_fall_back_to_defaults_when_left_blank(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(Show::class, ['examSession' => $session])
+            ->call('editDetails')
+            ->set('department_name', '')
+            ->call('saveDetails');
+
+        $session->refresh();
+        $this->assertNull($session->department_name);
+        $this->assertSame(config('exam.department_name'), $session->effectiveDepartmentName());
+        $this->assertSame('tentative', $session->report_status);
+        $this->assertSame('TENTATIVE — SUBJECT TO CHANGE', $session->reportStampLabel());
+    }
+
     public function test_end_date_cannot_be_before_start_date(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

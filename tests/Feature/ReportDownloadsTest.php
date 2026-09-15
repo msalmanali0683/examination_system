@@ -19,9 +19,9 @@ class ReportDownloadsTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function seedSession(): ExamSession
+    private function seedSession(array $attributes = []): ExamSession
     {
-        $session = ExamSession::factory()->create();
+        $session = ExamSession::factory()->create($attributes);
         $room = Room::factory()->create(['rows' => 2, 'columns' => 2, 'capacity' => 4]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
@@ -174,6 +174,37 @@ class ReportDownloadsTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
+    public function test_reports_print_the_sessions_own_department_name_and_report_stamp(): void
+    {
+        $session = $this->seedSession([
+            'department_name' => 'Department of Computer Science',
+            'report_status' => 'final',
+            'report_version' => 'v2',
+        ]);
+
+        $datesheetHtml = (new \App\Exports\MasterDatesheetExport($session))->view()->render();
+        $this->assertStringContainsString('Department of Computer Science', $datesheetHtml);
+        $this->assertStringContainsString('FINAL — v2', $datesheetHtml);
+
+        $seatingHtml = (new \App\Exports\SeatingChartExport($session))->sheets()[0]->view()->render();
+        $this->assertStringContainsString('Department of Computer Science', $seatingHtml);
+        $this->assertStringContainsString('FINAL — v2', $seatingHtml);
+    }
+
+    public function test_reports_fall_back_to_the_default_department_and_tentative_stamp(): void
+    {
+        $session = $this->seedSession();
+
+        $html = (new \App\Exports\MasterDatesheetExport($session))->view()->render();
+        $this->assertStringContainsString(config('exam.department_name'), $html);
+        $this->assertStringContainsString('TENTATIVE — SUBJECT TO CHANGE', $html);
+
+        // The duty roster carries no per-row department column, but it
+        // still stamps the tentative/final status at the top of the sheet.
+        $dutyHtml = (new \App\Exports\DutySheetExport($session))->view()->render();
+        $this->assertStringContainsString('TENTATIVE — SUBJECT TO CHANGE', $dutyHtml);
     }
 
     public function test_report_downloads_panel_shows_links_once_generated(): void

@@ -16,6 +16,7 @@ class BatchScheduleExport implements FromView, WithTitle
     {
         return view('reports.batch-schedule', [
             'sections' => (new ReportDataBuilder)->batchScheduleRows($this->session),
+            'session' => $this->session,
         ]);
     }
 

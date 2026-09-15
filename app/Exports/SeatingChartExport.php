@@ -20,7 +20,7 @@ class SeatingChartExport implements WithMultipleSheets
             $title = $this->uniqueTitle($chart, $usedTitles);
             $usedTitles[$title] = true;
 
-            return new SeatingChartSheetExport($chart, $title);
+            return new SeatingChartSheetExport($chart, $title, $this->session);
         })->all();
     }
 

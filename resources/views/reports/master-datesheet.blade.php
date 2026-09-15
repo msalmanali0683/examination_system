@@ -4,6 +4,11 @@
 @endphp
 <table style="border-collapse:collapse;width:100%;font-family:Arial,Helvetica,sans-serif;font-size:11px;">
     <tr>
+        <td colspan="10" style="text-align:center;font-weight:bold;padding:4px;background:{{ $session->isReportFinal() ? '#C6EFCE' : '#FFEB9C' }};color:{{ $session->isReportFinal() ? '#006100' : '#9C6500' }};border:1px solid #94A3B8;">
+            {{ $session->reportStampLabel() }}
+        </td>
+    </tr>
+    <tr>
         <td style="font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Department</td>
         <td style="font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Course Code</td>
         <td style="font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Course Name</td>
@@ -23,7 +28,7 @@
         </tr>
         @foreach ($rows as $row)
             <tr style="background-color: {{ $colorFor($row->code) }};">
-                <td style="border:1px solid #94A3B8;padding:3px;">{{ config('exam.department_name') }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ $session->effectiveDepartmentName() }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->code }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->title }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->section }}</td>
