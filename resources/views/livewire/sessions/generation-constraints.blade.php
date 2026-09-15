@@ -25,10 +25,18 @@
         <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Seating Strategy</label>
             <select wire:model.live="seating_strategy" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
-                <option value="strict">Strict (one room per subject+section)</option>
-                <option value="combine_sections">Combine sections of the same subject</option>
-                <option value="mixed">Mix different subjects (whole columns alternate)</option>
+                <optgroup label="Basic">
+                    <option value="strict">Strict (one room per subject+section)</option>
+                    <option value="combine_sections">Combine sections of the same subject</option>
+                    <option value="mixed">Mix different subjects (whole columns alternate)</option>
+                </optgroup>
+                <optgroup label="Fill leftover seats instead of wasting them">
+                    <option value="strict_overflow_section">Strict, then fill leftover seats with another section</option>
+                    <option value="strict_overflow_subject">Strict, then fill leftover seats with a different subject</option>
+                    <option value="combine_sections_overflow_subject">Combine sections, then fill leftover seats with a different subject</option>
+                </optgroup>
             </select>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">The "fill leftover seats" options avoid needing an extra room for a small group by seating it alongside another group in the same room, once the primary group is placed.</p>
         </div>
         @if ($seating_strategy === 'mixed')
             <div>
@@ -154,46 +162,7 @@
     </div>
 
     @if ($showRequirements)
-        @if ($requirements->isEmpty())
-            <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">No subjects are assigned to a slot yet — generate the timetable first.</p>
-        @else
-            <div class="mt-4 overflow-x-auto -mx-4 sm:-mx-6">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-                    <thead>
-                        <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                            <th class="py-2 pl-4 sm:pl-6 pr-4">Slot</th>
-                            <th class="py-2 pr-4">Students</th>
-                            <th class="py-2 pr-4">Rooms Needed / Active</th>
-                            <th class="py-2 pr-4">Teachers Needed / Available</th>
-                            <th class="py-2 pr-4 sm:pr-6">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                        @foreach ($requirements as $r)
-                            <tr>
-                                <td class="py-2 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">{{ $r->label }}</td>
-                                <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $r->studentCount }}</td>
-                                <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->roomsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->roomsShortfall() === 0])>
-                                    {{ $r->roomsNeeded }} / {{ $r->roomsAvailable }}
-                                    @if ($r->roomsShortfall() > 0)
-                                        ({{ $r->roomsShortfall() }} more needed)
-                                    @endif
-                                </td>
-                                <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->teachersShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->teachersShortfall() === 0])>
-                                    {{ $r->teachersNeeded }} / {{ $r->teachersAvailable }}
-                                    @if ($r->teachersShortfall() > 0)
-                                        ({{ $r->teachersShortfall() }} more needed)
-                                    @endif
-                                </td>
-                                <td class="py-2 pr-4 sm:pr-6">
-                                    <x-badge :color="$r->isMet() ? 'green' : 'red'">{{ $r->isMet() ? 'Ready' : 'Short' }}</x-badge>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
+        <x-requirement-table :requirements="$requirements" />
     @endif
 </x-card>
 

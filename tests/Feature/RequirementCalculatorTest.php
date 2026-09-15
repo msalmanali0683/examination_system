@@ -164,4 +164,38 @@ class RequirementCalculatorTest extends TestCase
         $this->assertFalse($requirement->hasUnseatedStudents);
         $this->assertSame(6, $requirement->studentCount);
     }
+
+    public function test_a_strategy_override_simulates_a_different_strategy_without_touching_the_sessions_saved_one(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+
+        // Four small rooms Strict would pick one-per-subject, plus one
+        // room with 4 columns that only Mixed (4 subjects/room) can use
+        // efficiently as a single room for all four subjects at once.
+        for ($i = 0; $i < 4; $i++) {
+            Room::factory()->create(['rows' => 2, 'columns' => 1, 'capacity' => 2]);
+        }
+        Room::factory()->create(['rows' => 2, 'columns' => 4, 'capacity' => 8]);
+
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        foreach (range(1, 4) as $i) {
+            $subject = Subject::factory()->create();
+            $this->enrollStudents($session, $subject, 'BSAI 1A', 2);
+            $this->assignSubjectToSlot($session, $subject, $slot);
+        }
+
+        $realRequirement = (new RequirementCalculator)->calculate($session)->first();
+        $this->assertSame(4, $realRequirement->roomsNeeded);
+
+        $whatIfRequirement = (new RequirementCalculator)->calculate(
+            $session,
+            new \App\Services\Generation\Strategies\MixedSeatingStrategy(4)
+        )->first();
+        $this->assertSame(1, $whatIfRequirement->roomsNeeded);
+
+        // The override must never persist — the session's own setting is
+        // untouched by having run a what-if calculation against it.
+        $this->assertSame('strict', $session->fresh()->seating_strategy);
+    }
 }

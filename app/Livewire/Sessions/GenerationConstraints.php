@@ -57,7 +57,7 @@ class GenerationConstraints extends Component
         }
 
         $validated = $this->validate([
-            'seating_strategy' => ['required', Rule::in(['strict', 'combine_sections', 'mixed'])],
+            'seating_strategy' => ['required', Rule::in(array_keys(ExamSession::SEATING_STRATEGIES))],
             'mixed_subjects_per_room' => ['required_if:seating_strategy,mixed', 'integer', 'min:2', 'max:10'],
             'invigilators_per_room' => ['required', 'integer', 'min:1', 'max:10'],
             'teacher_subject_exclusion' => ['boolean'],

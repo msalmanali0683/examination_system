@@ -10,6 +10,7 @@ use App\Models\SubjectSlotAssignment;
 use App\Models\TimeSlot;
 use App\Services\Generation\DTOs\SeatingResult;
 use App\Services\Generation\Strategies\CombineSectionsSeatingStrategy;
+use App\Services\Generation\Strategies\GroupedWithOverflowStrategy;
 use App\Services\Generation\Strategies\MixedSeatingStrategy;
 use App\Services\Generation\Strategies\SeatingStrategy;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
@@ -42,11 +43,15 @@ class SeatAllocationService
      * check so the admin can see whether enough rooms exist before
      * committing to a real generation run.
      *
+     * $strategyOverride simulates a different strategy than the one saved
+     * on the session (e.g. "what if I combined N subjects per room?") —
+     * used by the what-if Capacity Check, without touching the session.
+     *
      * @return Collection<int, array{slot: TimeSlot, result: SeatingResult, roomsUsed: int}>
      */
-    public function preview(ExamSession $session): Collection
+    public function preview(ExamSession $session, ?SeatingStrategy $strategyOverride = null): Collection
     {
-        return $this->allocatePerSlot($session, $this->activeSessionRoomPool($session))->map(fn ($pair) => [
+        return $this->allocatePerSlot($session, $this->activeSessionRoomPool($session), $strategyOverride)->map(fn ($pair) => [
             'slot' => $pair[0],
             'result' => $pair[1],
             'roomsUsed' => collect($pair[1]->placements)->pluck('roomId')->unique()->count(),
@@ -62,9 +67,9 @@ class SeatAllocationService
      *
      * @return Collection<int, array{slot: TimeSlot, result: SeatingResult, roomsUsed: int}>
      */
-    public function previewAgainstAllRooms(ExamSession $session): Collection
+    public function previewAgainstAllRooms(ExamSession $session, ?SeatingStrategy $strategyOverride = null): Collection
     {
-        return $this->allocatePerSlot($session, $this->allRoomsPool())->map(fn ($pair) => [
+        return $this->allocatePerSlot($session, $this->allRoomsPool(), $strategyOverride)->map(fn ($pair) => [
             'slot' => $pair[0],
             'result' => $pair[1],
             'roomsUsed' => collect($pair[1]->placements)->pluck('roomId')->unique()->count(),
@@ -101,9 +106,9 @@ class SeatAllocationService
      * @param  Collection<int, array{room_id: int, rows: int, columns: int, capacity: int}>  $roomPool
      * @return Collection<int, array{0: TimeSlot, 1: SeatingResult}>
      */
-    private function allocatePerSlot(ExamSession $session, Collection $roomPool): Collection
+    private function allocatePerSlot(ExamSession $session, Collection $roomPool, ?SeatingStrategy $strategyOverride = null): Collection
     {
-        $strategy = $this->strategyFor($session->seating_strategy, $session->mixed_subjects_per_room);
+        $strategy = $strategyOverride ?? $this->strategyFor($session->seating_strategy, $session->mixed_subjects_per_room);
 
         $subjectToSlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
             ->whereNotNull('time_slot_id')
@@ -197,6 +202,9 @@ class SeatAllocationService
     {
         return match ($seatingStrategy) {
             'combine_sections' => new CombineSectionsSeatingStrategy,
+            'combine_sections_overflow_subject' => new GroupedWithOverflowStrategy(groupBy: 'subject', overflowSource: 'other_subject'),
+            'strict_overflow_section' => new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject'),
+            'strict_overflow_subject' => new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'other_subject'),
             'mixed' => new MixedSeatingStrategy($mixedSubjectsPerRoom),
             default => new StrictSeatingStrategy,
         };

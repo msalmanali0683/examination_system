@@ -11,6 +11,20 @@ class ExamSession extends Model
 {
     use HasFactory;
 
+    /**
+     * Every valid `seating_strategy` value, with a human label — the
+     * single source of truth for the strategy picker's <select> options
+     * and the validation rule, so the two can never drift apart.
+     */
+    public const SEATING_STRATEGIES = [
+        'strict' => 'Strict — one room per subject + section',
+        'combine_sections' => 'Combine sections of the same subject',
+        'strict_overflow_section' => 'Strict, fill leftover seats with another section of the same subject',
+        'strict_overflow_subject' => 'Strict, fill leftover seats with a different subject',
+        'combine_sections_overflow_subject' => 'Combine sections, fill leftover seats with a different subject',
+        'mixed' => 'Mix different subjects (whole columns alternate)',
+    ];
+
     protected $fillable = [
         'name',
         'department_name',

@@ -160,4 +160,33 @@ class SeatAllocationServiceTest extends TestCase
         $this->assertDatabaseMissing('seat_assignments', ['room_id' => $inactiveRoom->id]);
         $this->assertDatabaseHas('seat_assignments', ['room_id' => $activeRoom->id]);
     }
+
+    public function test_strict_overflow_subject_strategy_fills_leftover_seats_with_a_different_subject(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict_overflow_subject']);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $primarySubject = Subject::factory()->create();
+        $otherSubject = Subject::factory()->create();
+        $this->enrollStudents($session, $primarySubject, 'BSAI 1A', 6);
+        $this->enrollStudents($session, $otherSubject, 'BSCS 1A', 4);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $primarySubject->id, 'time_slot_id' => $slot->id]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $otherSubject->id, 'time_slot_id' => $slot->id]);
+
+        $result = (new SeatAllocationService)->generate($session->fresh());
+
+        $this->assertTrue($result->warnings->isEmpty());
+        // Both subjects' students land in the one room instead of one of
+        // them needing a second room for a leftover handful of seats.
+        $seats = SeatAssignment::where('exam_session_id', $session->id)->get();
+        $this->assertCount(10, $seats);
+        $this->assertTrue($seats->every(fn ($s) => $s->room_id === $room->id));
+        $this->assertSame(
+            $seats->pluck('row_number')->zip($seats->pluck('column_number'))->map(fn ($pair) => $pair->implode(':'))->unique()->count(),
+            $seats->count(),
+            'no two students should ever share a seat'
+        );
+    }
 }

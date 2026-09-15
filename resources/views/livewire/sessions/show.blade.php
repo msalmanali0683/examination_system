@@ -118,6 +118,11 @@
             <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="clipboard" class="h-4 w-4" /> Activity
             </button>
+            @can('generate_roster')
+                <button type="button" @click="tab = 'capacity'" :class="tab === 'capacity' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="chart-bar" class="h-4 w-4" /> Check Capacity
+                </button>
+            @endcan
         </div>
 
         <div class="p-4 sm:p-6">
@@ -183,6 +188,11 @@
                     </div>
                 @endif
             </div>
+            @can('generate_roster')
+                <div x-show="tab === 'capacity'">
+                    <livewire:sessions.capacity-check :exam-session="$examSession" :key="'capacity-'.$examSession->id" />
+                </div>
+            @endcan
         </div>
     </x-card>
 </div>

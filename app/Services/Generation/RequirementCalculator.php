@@ -6,6 +6,7 @@ use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
 use App\Services\Generation\DTOs\SlotRequirement;
+use App\Services\Generation\Strategies\SeatingStrategy;
 use Illuminate\Support\Collection;
 
 /**
@@ -21,12 +22,17 @@ class RequirementCalculator
     }
 
     /**
+     * $strategyOverride simulates a different seating strategy than the
+     * one saved on the session — e.g. "what if I combined N subjects per
+     * room?" — for the what-if Capacity Check, without changing the
+     * session's real settings.
+     *
      * @return Collection<int, SlotRequirement>
      */
-    public function calculate(ExamSession $session): Collection
+    public function calculate(ExamSession $session, ?SeatingStrategy $strategyOverride = null): Collection
     {
-        $activePreview = $this->seatAllocationService->preview($session)->keyBy(fn ($p) => $p['slot']->id);
-        $allRoomsPreview = $this->seatAllocationService->previewAgainstAllRooms($session)->keyBy(fn ($p) => $p['slot']->id);
+        $activePreview = $this->seatAllocationService->preview($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
+        $allRoomsPreview = $this->seatAllocationService->previewAgainstAllRooms($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
 
         $roomsAvailable = $session->sessionRooms()->where('is_active', true)->count();
 
