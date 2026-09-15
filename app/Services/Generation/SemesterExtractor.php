@@ -63,4 +63,40 @@ class SemesterExtractor
     {
         return self::fromSections($sections)->map(fn (int $s) => self::ordinal($s))->implode('/');
     }
+
+    /**
+     * The single semester most of a subject's enrolled students are
+     * actually in, weighted by student count per section rather than a
+     * plain distinct-semester set. fromSections()/label() answer "which
+     * semesters does this subject touch at all" (used for display, where
+     * a subject with a couple of repeaters legitimately spans two); this
+     * answers "which semester does this subject really belong to" — used
+     * for clash-avoidance, so a subject with a handful of repeaters from
+     * another semester doesn't get misclassified as also belonging to
+     * that other semester, which would otherwise force an unrelated pair
+     * of subjects to avoid sharing a day for no real reason. Null when no
+     * section yielded a parseable semester at all.
+     *
+     * @param  iterable<string, int>  $countBySection  section string => student count in it
+     */
+    public static function dominant(iterable $countBySection): ?int
+    {
+        $totals = [];
+
+        foreach ($countBySection as $section => $count) {
+            $semester = self::fromSection($section);
+
+            if ($semester !== null) {
+                $totals[$semester] = ($totals[$semester] ?? 0) + $count;
+            }
+        }
+
+        if (empty($totals)) {
+            return null;
+        }
+
+        arsort($totals);
+
+        return array_key_first($totals);
+    }
 }

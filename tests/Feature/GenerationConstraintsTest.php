@@ -317,6 +317,47 @@ class GenerationConstraintsTest extends TestCase
         );
     }
 
+    public function test_generate_does_not_misclassify_a_subject_as_same_semester_just_because_of_a_repeater(): void
+    {
+        // Regression: subject A is overwhelmingly semester 2 (29 students)
+        // with a single semester-4 repeater also sitting it. Subject B is
+        // purely semester 4. Before dominant-semester classification,
+        // subject A's semester set was {2, 4} — so it looked "same
+        // semester" as subject B and got forced onto a different day for
+        // no real reason, even though they share no student at all.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        // Only one day, two slots — the old bug would have made this
+        // unsolvable (both subjects "same semester" with only one day
+        // available), forcing an unavoidable-clash fallback despite
+        // sharing zero students.
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '11:00']);
+
+        $subjectA = Subject::factory()->create(['code' => 'CS-A']);
+        $subjectB = Subject::factory()->create(['code' => 'CS-B']);
+
+        // Subject A: mostly semester 2, one repeater from semester 4.
+        for ($i = 0; $i < 5; $i++) {
+            Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
+        }
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 4A']);
+
+        // Subject B: purely semester 4, no student in common with A.
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 4A']);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $notes = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereIn('subject_id', [$subjectA->id, $subjectB->id])
+            ->pluck('conflict_note')
+            ->filter();
+
+        $this->assertTrue($notes->isEmpty());
+    }
+
     public function test_generate_reports_a_shortfall_when_respect_room_capacity_is_enabled_and_a_slot_cannot_seat_everyone(): void
     {
         // Only one small room and only one time slot — two clash-free

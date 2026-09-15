@@ -258,15 +258,32 @@ class GenerationConstraints extends Component
      * @param  int[]  $subjectIds
      * @return array<int, int[]> subject_id => semester number(s)
      */
+    /**
+     * @return array<int, int[]> subject_id => [dominant semester], or []
+     *                           when unparseable. Each subject gets its
+     *                           single dominant semester (see
+     *                           SemesterExtractor::dominant()), wrapped in
+     *                           an array — the shape TimetableGenerator's
+     *                           $semesterBySubject expects — not the full
+     *                           set of every semester it touches, so a
+     *                           subject with a couple of repeaters from
+     *                           another semester isn't misclassified as
+     *                           belonging to that semester too.
+     */
     private function semestersForSubjects(int $sessionId, array $subjectIds): array
     {
         return Enrollment::where('exam_session_id', $sessionId)
             ->whereIn('subject_id', $subjectIds)
             ->select('subject_id', 'section')
-            ->distinct()
+            ->selectRaw('count(*) as c')
+            ->groupBy('subject_id', 'section')
             ->get()
             ->groupBy('subject_id')
-            ->map(fn ($rows) => SemesterExtractor::fromSections($rows->pluck('section'))->all())
+            ->map(function ($rows) {
+                $dominant = SemesterExtractor::dominant($rows->pluck('c', 'section'));
+
+                return $dominant === null ? [] : [$dominant];
+            })
             ->all();
     }
 
@@ -681,6 +698,15 @@ class GenerationConstraints extends Component
         // that must never land on the same day.
         $semesterBySubject = $sectionBreakdown->map(fn ($sections) => SemesterExtractor::fromSections($sections->keys()));
 
+        // The single semester most of a subject's students are actually
+        // in — unlike $semesterBySubject above (every semester it touches
+        // at all, shown on the badge), this is what clash-checking below
+        // uses, so a subject with a couple of repeaters from another
+        // semester isn't misclassified as belonging to that semester too.
+        $dominantSemesterBySubject = $sectionBreakdown->map(
+            fn ($sections) => ($d = SemesterExtractor::dominant($sections)) === null ? collect() : collect([$d])
+        );
+
         $subjects = $subjects->sortBy(fn (Subject $s) => (int) ($semesterBySubject->get($s->id, collect())->first() ?? 999))->values();
 
         // Every active room is available in every slot (rooms aren't
@@ -730,14 +756,14 @@ class GenerationConstraints extends Component
         // that's fine now (a repeater sitting two papers on one day) — see
         // $clashingSlotsBySubject below for the one thing that still
         // matters for them: the exact same slot.
-        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph, $semesterBySubject) {
-            $mySemesters = $semesterBySubject->get($subject->id, collect());
+        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject) {
+            $mySemesters = $dominantSemesterBySubject->get($subject->id, collect());
 
-            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $conflictGraph, $semesterBySubject, $mySemesters) {
+            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject, $mySemesters) {
                 $othersThatDay = collect($subjectIdsByDay->get($day, []))->reject(fn ($id) => $id === $subject->id);
 
-                return $othersThatDay->contains(function ($id) use ($conflictGraph, $subject, $semesterBySubject, $mySemesters) {
-                    $otherSemesters = $semesterBySubject->get($id, collect());
+                return $othersThatDay->contains(function ($id) use ($conflictGraph, $subject, $dominantSemesterBySubject, $mySemesters) {
+                    $otherSemesters = $dominantSemesterBySubject->get($id, collect());
 
                     if ($mySemesters->isNotEmpty() && $otherSemesters->isNotEmpty()) {
                         return $otherSemesters->intersect($mySemesters)->isNotEmpty();
