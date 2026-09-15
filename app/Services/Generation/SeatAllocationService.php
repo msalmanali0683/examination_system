@@ -20,19 +20,46 @@ use Illuminate\Support\Facades\DB;
 class SeatAllocationService
 {
     /**
-     * Regenerates seating for every time slot in the session, one slot at a
-     * time. Already-locked seats (manual drag-drop overrides from the
-     * review step) are left untouched and treated as occupied obstacles for
-     * everyone else; only unlocked seats are recomputed.
+     * Regenerates seating for every time slot in the session. Already-
+     * locked seats (manual drag-drop overrides from the review step) are
+     * left untouched and treated as occupied obstacles for everyone else;
+     * only unlocked seats are recomputed.
+     *
+     * Every slot is allocated first (read-only, no writes), then every
+     * unlocked seat assignment for the *whole session* is cleared and the
+     * fresh set inserted in one transaction — not per slot. A subject can
+     * land on a different slot than last time (e.g. after regenerating
+     * the timetable), and seat_assignments.enrollment_id is unique across
+     * the entire session; clearing only the current slot's old rows would
+     * leave a stale row from the subject's previous slot in place and
+     * collide with the new insert.
      */
     public function generate(ExamSession $session): SeatingResult
     {
+        $pairs = $this->allocatePerSlot($session, $this->activeSessionRoomPool($session));
         $warnings = collect();
 
-        foreach ($this->allocatePerSlot($session, $this->activeSessionRoomPool($session)) as [$slot, $result]) {
-            $this->persist($session, $slot, $result);
-            $warnings = $warnings->merge($result->warnings);
-        }
+        DB::transaction(function () use ($session, $pairs, &$warnings) {
+            SeatAssignment::where('exam_session_id', $session->id)
+                ->where('is_locked', false)
+                ->delete();
+
+            foreach ($pairs as [$slot, $result]) {
+                foreach ($result->placements as $placement) {
+                    SeatAssignment::create([
+                        'exam_session_id' => $session->id,
+                        'enrollment_id' => $placement->enrollmentId,
+                        'time_slot_id' => $slot->id,
+                        'room_id' => $placement->roomId,
+                        'row_number' => $placement->row,
+                        'column_number' => $placement->column,
+                        'is_locked' => false,
+                    ]);
+                }
+
+                $warnings = $warnings->merge($result->warnings);
+            }
+        });
 
         return new SeatingResult([], $warnings);
     }
@@ -169,33 +196,6 @@ class SeatAllocationService
         ])->sortByDesc('capacity')->values()->all();
 
         return $strategy->allocate($enrollments, $rooms);
-    }
-
-    private function persist(ExamSession $session, TimeSlot $slot, SeatingResult $result): void
-    {
-        $lockedEnrollmentIds = SeatAssignment::where('exam_session_id', $session->id)
-            ->where('time_slot_id', $slot->id)
-            ->where('is_locked', true)
-            ->pluck('enrollment_id');
-
-        DB::transaction(function () use ($session, $slot, $lockedEnrollmentIds, $result) {
-            SeatAssignment::where('exam_session_id', $session->id)
-                ->where('time_slot_id', $slot->id)
-                ->whereNotIn('enrollment_id', $lockedEnrollmentIds)
-                ->delete();
-
-            foreach ($result->placements as $placement) {
-                SeatAssignment::create([
-                    'exam_session_id' => $session->id,
-                    'enrollment_id' => $placement->enrollmentId,
-                    'time_slot_id' => $slot->id,
-                    'room_id' => $placement->roomId,
-                    'row_number' => $placement->row,
-                    'column_number' => $placement->column,
-                    'is_locked' => false,
-                ]);
-            }
-        });
     }
 
     /**

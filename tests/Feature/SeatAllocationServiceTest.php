@@ -125,6 +125,39 @@ class SeatAllocationServiceTest extends TestCase
         $this->assertSame(1, $occupantsOfLockedSeat);
     }
 
+    public function test_regenerating_after_a_subject_moves_to_a_different_slot_does_not_crash(): void
+    {
+        // Regression: seat_assignments.enrollment_id is unique across the
+        // whole session, but the old persist() only cleared the *current*
+        // slot's rows. If a subject moves to a different slot between two
+        // "Generate Seating" runs (e.g. because the timetable was
+        // regenerated), the stale row from its old slot collided with the
+        // new insert and crashed with a duplicate-key error.
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
+        $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 3);
+        $assignment = SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slotA->id]);
+
+        $service = new SeatAllocationService;
+        $service->generate($session->fresh());
+        $this->assertDatabaseHas('seat_assignments', ['exam_session_id' => $session->id, 'time_slot_id' => $slotA->id]);
+
+        // The subject's timetable slot changes, as it would after a real
+        // "Generate Timetable" rerun moved it — then seating is generated
+        // again without ever clearing slot A's now-stale row directly.
+        $assignment->update(['time_slot_id' => $slotB->id]);
+        $service->generate($session->fresh());
+
+        $seats = SeatAssignment::where('exam_session_id', $session->id)->get();
+        $this->assertCount(3, $seats);
+        $this->assertTrue($seats->every(fn ($s) => $s->time_slot_id === $slotB->id));
+    }
+
     public function test_insufficient_capacity_produces_warnings(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
