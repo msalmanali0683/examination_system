@@ -13,10 +13,14 @@ use Illuminate\Support\Collection;
  * blocks matching "Row # N" in templates/*\/Sitting Plan*.xlsx), a flat
  * datesheet grouped by date (templates/Midterm Datesheet Spring 2026
  * (Students).xlsx), and a duty roster grouped by teacher.
+ *
+ * Every method takes an optional $date (Y-m-d) to restrict a report to a
+ * single exam day — used by the "generate for one date" filter on the
+ * Reports tab. Leaving it null reports on the whole session as before.
  */
 class ReportDataBuilder
 {
-    private ?Collection $chartsCache = null;
+    private array $chartsCacheByDate = [];
 
     /**
      * One entry per room-per-slot in use, each with its seat grid keyed
@@ -25,17 +29,24 @@ class ReportDataBuilder
      * RoomFiller::seatOrder()), the distinct subject/section(s) seated
      * there, and the invigilators on duty for that room+slot.
      */
-    public function seatingCharts(ExamSession $session): Collection
+    public function seatingCharts(ExamSession $session, ?string $date = null): Collection
     {
-        if ($this->chartsCache !== null) {
-            return $this->chartsCache;
+        $cacheKey = $date ?? '_all';
+
+        if (isset($this->chartsCacheByDate[$cacheKey])) {
+            return $this->chartsCacheByDate[$cacheKey];
         }
 
-        $duties = $this->dutyNamesByRoomSlot($session);
+        $duties = $this->dutyNamesByRoomSlot($session, $date);
 
-        return $this->chartsCache = SeatAssignment::where('exam_session_id', $session->id)
-            ->with(['enrollment.student', 'enrollment.subject', 'room', 'timeSlot'])
-            ->get()
+        $query = SeatAssignment::where('exam_session_id', $session->id)
+            ->with(['enrollment.student', 'enrollment.subject', 'room', 'timeSlot']);
+
+        if ($date) {
+            $query->whereHas('timeSlot', fn ($q) => $q->whereDate('date', $date));
+        }
+
+        return $this->chartsCacheByDate[$cacheKey] = $query->get()
             ->groupBy(fn (SeatAssignment $sa) => $sa->time_slot_id.'-'.$sa->room_id)
             ->map(function (Collection $group) use ($duties) {
                 $first = $group->first();
@@ -82,9 +93,9 @@ class ReportDataBuilder
      * Flat rows matching templates/Midterm Datesheet Spring 2026
      * (Students).xlsx: one row per subject+section+room, grouped by date.
      */
-    public function datesheetRowsByDate(ExamSession $session): Collection
+    public function datesheetRowsByDate(ExamSession $session, ?string $date = null): Collection
     {
-        $rows = $this->seatingCharts($session)->flatMap(function ($chart) {
+        $rows = $this->seatingCharts($session, $date)->flatMap(function ($chart) {
             return $chart->subjectsSections->map(fn ($ss) => (object) [
                 'code' => $ss->subject->code,
                 'title' => $ss->subject->title,
@@ -107,18 +118,23 @@ class ReportDataBuilder
     /**
      * One group per teacher with their duties in date/time order.
      */
-    public function dutyRowsByTeacher(ExamSession $session): Collection
+    public function dutyRowsByTeacher(ExamSession $session, ?string $date = null): Collection
     {
-        $subjectsByRoomSlot = $this->seatingCharts($session)
+        $subjectsByRoomSlot = $this->seatingCharts($session, $date)
             ->mapWithKeys(fn ($chart) => [
                 $chart->timeSlot->id.'-'.$chart->room->id => $chart->subjectsSections
                     ->map(fn ($ss) => $ss->subject->code.' ('.$ss->section.')')
                     ->implode(', '),
             ]);
 
-        return DutyAssignment::where('exam_session_id', $session->id)
-            ->with(['teacher', 'timeSlot', 'room'])
-            ->get()
+        $query = DutyAssignment::where('exam_session_id', $session->id)
+            ->with(['teacher', 'timeSlot', 'room']);
+
+        if ($date) {
+            $query->whereHas('timeSlot', fn ($q) => $q->whereDate('date', $date));
+        }
+
+        return $query->get()
             ->sortBy(fn (DutyAssignment $duty) => $duty->timeSlot->date->format('Y-m-d').$duty->timeSlot->start_time)
             ->groupBy(fn (DutyAssignment $duty) => $duty->teacher_id)
             ->map(function (Collection $duties) use ($subjectsByRoomSlot) {
@@ -143,13 +159,18 @@ class ReportDataBuilder
      * name, section, room, seat, invigilator) — an attendance-style sheet
      * organized by subject rather than by room.
      */
-    public function subjectWiseSeatingRows(ExamSession $session): Collection
+    public function subjectWiseSeatingRows(ExamSession $session, ?string $date = null): Collection
     {
-        $duties = $this->dutyNamesByRoomSlot($session);
+        $duties = $this->dutyNamesByRoomSlot($session, $date);
 
-        return SeatAssignment::where('exam_session_id', $session->id)
-            ->with(['enrollment.student', 'enrollment.subject', 'room', 'timeSlot'])
-            ->get()
+        $query = SeatAssignment::where('exam_session_id', $session->id)
+            ->with(['enrollment.student', 'enrollment.subject', 'room', 'timeSlot']);
+
+        if ($date) {
+            $query->whereHas('timeSlot', fn ($q) => $q->whereDate('date', $date));
+        }
+
+        return $query->get()
             ->map(fn (SeatAssignment $sa) => (object) [
                 'subjectId' => $sa->enrollment->subject_id,
                 'code' => $sa->enrollment->subject->code,
@@ -178,9 +199,9 @@ class ReportDataBuilder
      * One group per section (e.g. "BSAI 2A") with that batch's own exam
      * schedule in date/time order — a personal datesheet for one class.
      */
-    public function batchScheduleRows(ExamSession $session): Collection
+    public function batchScheduleRows(ExamSession $session, ?string $date = null): Collection
     {
-        return $this->seatingCharts($session)
+        return $this->seatingCharts($session, $date)
             ->flatMap(fn ($chart) => $chart->subjectsSections->map(fn ($ss) => (object) [
                 'section' => $ss->section,
                 'code' => $ss->subject->code,
@@ -201,11 +222,15 @@ class ReportDataBuilder
             ->values();
     }
 
-    private function dutyNamesByRoomSlot(ExamSession $session): Collection
+    private function dutyNamesByRoomSlot(ExamSession $session, ?string $date = null): Collection
     {
-        return DutyAssignment::where('exam_session_id', $session->id)
-            ->with('teacher')
-            ->get()
+        $query = DutyAssignment::where('exam_session_id', $session->id)->with('teacher');
+
+        if ($date) {
+            $query->whereHas('timeSlot', fn ($q) => $q->whereDate('date', $date));
+        }
+
+        return $query->get()
             ->groupBy(fn (DutyAssignment $duty) => $duty->time_slot_id.'-'.$duty->room_id)
             ->map(fn (Collection $duties) => $duties->pluck('teacher.name')->filter()->values());
     }

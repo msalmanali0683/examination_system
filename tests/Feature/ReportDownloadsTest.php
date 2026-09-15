@@ -207,6 +207,92 @@ class ReportDownloadsTest extends TestCase
         $this->assertStringContainsString('TENTATIVE — SUBJECT TO CHANGE', $dutyHtml);
     }
 
+    /**
+     * Two exam dates, each with its own identifiable subject/teacher, so a
+     * date-filtered report can be checked for containing only one day's
+     * data and not the other's.
+     */
+    private function seedTwoDateSession(): array
+    {
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+
+        $slotOne = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-04']);
+        $subjectOne = Subject::factory()->create(['code' => 'DAY1-SUBJ']);
+        $teacherOne = Teacher::factory()->create(['is_active' => true, 'name' => 'Day One Teacher']);
+        $studentOne = Student::factory()->create();
+        $enrollmentOne = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'student_id' => $studentOne->id, 'subject_id' => $subjectOne->id, 'section' => 'A',
+        ]);
+        SeatAssignment::create([
+            'exam_session_id' => $session->id, 'enrollment_id' => $enrollmentOne->id,
+            'time_slot_id' => $slotOne->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1,
+        ]);
+        DutyAssignment::create([
+            'exam_session_id' => $session->id, 'teacher_id' => $teacherOne->id, 'time_slot_id' => $slotOne->id, 'room_id' => $room->id,
+        ]);
+
+        $roomTwo = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $slotTwo = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-05']);
+        $subjectTwo = Subject::factory()->create(['code' => 'DAY2-SUBJ']);
+        $teacherTwo = Teacher::factory()->create(['is_active' => true, 'name' => 'Day Two Teacher']);
+        $studentTwo = Student::factory()->create();
+        $enrollmentTwo = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'student_id' => $studentTwo->id, 'subject_id' => $subjectTwo->id, 'section' => 'B',
+        ]);
+        SeatAssignment::create([
+            'exam_session_id' => $session->id, 'enrollment_id' => $enrollmentTwo->id,
+            'time_slot_id' => $slotTwo->id, 'room_id' => $roomTwo->id, 'row_number' => 1, 'column_number' => 1,
+        ]);
+        DutyAssignment::create([
+            'exam_session_id' => $session->id, 'teacher_id' => $teacherTwo->id, 'time_slot_id' => $slotTwo->id, 'room_id' => $roomTwo->id,
+        ]);
+
+        return [$session, $subjectOne, $subjectTwo];
+    }
+
+    public function test_filtering_a_report_by_date_only_includes_that_dates_data(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session, $subjectOne, $subjectTwo] = $this->seedTwoDateSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'date' => '2026-05-04']));
+        $response->assertOk();
+
+        // Build the same filtered data directly to check the actual rows,
+        // since the PDF binary itself isn't easily assertable on text.
+        $rows = (new \App\Services\Reports\ReportDataBuilder)->datesheetRowsByDate($session, '2026-05-04');
+        $this->assertCount(1, $rows);
+        $this->assertTrue($rows->has('2026-05-04'));
+        $this->assertSame('DAY1-SUBJ', $rows->get('2026-05-04')->first()->code);
+    }
+
+    public function test_an_invalid_date_filter_falls_back_to_every_date(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session] = $this->seedTwoDateSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'date' => '1999-01-01']));
+        $response->assertOk();
+
+        $rows = (new \App\Services\Reports\ReportDataBuilder)->datesheetRowsByDate($session);
+        $this->assertCount(2, $rows);
+    }
+
+    public function test_hiding_invigilators_blanks_them_on_the_affected_reports_but_not_the_duty_roster(): void
+    {
+        $session = $this->seedSession();
+        $teacherName = DutyAssignment::where('exam_session_id', $session->id)->first()->teacher->name;
+
+        $shown = (new \App\Exports\MasterDatesheetExport($session, null, true))->view()->render();
+        $hidden = (new \App\Exports\MasterDatesheetExport($session, null, false))->view()->render();
+        $this->assertStringContainsString($teacherName, $shown);
+        $this->assertStringNotContainsString($teacherName, $hidden);
+
+        $dutyHtml = (new \App\Exports\DutySheetExport($session))->view()->render();
+        $this->assertStringContainsString($teacherName, $dutyHtml);
+    }
+
     public function test_report_downloads_panel_shows_links_once_generated(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

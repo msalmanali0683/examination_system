@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SeatAssignment;
+use App\Models\TimeSlot;
 use App\Services\Reports\ReportDataBuilder;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Mail;
@@ -15,6 +16,20 @@ use Livewire\Component;
 class ReportDownloads extends Component
 {
     public ExamSession $examSession;
+
+    /**
+     * Empty string means "every date" — otherwise a Y-m-d value that gets
+     * appended as a ?date= query filter on every download link below.
+     */
+    public string $filterDate = '';
+
+    /**
+     * Whether the Seating Chart, Datesheet, Batch Schedule and
+     * Subject-wise Seating reports print invigilator names — off by
+     * request when a copy needs to be shared before duties are settled.
+     * The Duty Roster itself is unaffected; it exists to show invigilators.
+     */
+    public bool $showInvigilators = true;
 
     public function emailAllDutySheets(): void
     {
@@ -62,11 +77,45 @@ class ReportDownloads extends Component
         );
     }
 
+    /**
+     * The query string appended to every download link: the selected date
+     * (if any) and the invigilator-visibility flag, only when it's off
+     * (keeps links clean in the common case where it's left on).
+     */
+    public function reportQuery(): array
+    {
+        $query = [];
+
+        if ($this->filterDate !== '') {
+            $query['date'] = $this->filterDate;
+        }
+
+        if (! $this->showInvigilators) {
+            $query['show_invigilators'] = '0';
+        }
+
+        return $query;
+    }
+
+    /**
+     * Same as reportQuery(), minus the invigilator flag — the Duty Roster
+     * always shows invigilators, so that option never applies to it.
+     */
+    public function dutyReportQuery(): array
+    {
+        return $this->filterDate !== '' ? ['date' => $this->filterDate] : [];
+    }
+
     public function render()
     {
         return view('livewire.sessions.report-downloads', [
             'hasSeating' => SeatAssignment::where('exam_session_id', $this->examSession->id)->exists(),
             'hasDuties' => DutyAssignment::where('exam_session_id', $this->examSession->id)->exists(),
+            'availableDates' => TimeSlot::where('exam_session_id', $this->examSession->id)
+                ->select('date')
+                ->distinct()
+                ->orderBy('date')
+                ->pluck('date'),
         ]);
     }
 }

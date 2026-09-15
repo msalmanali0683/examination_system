@@ -11,6 +11,25 @@
         </div>
     @endif
 
+    @php $reportQuery = array_merge(['examSession' => $examSession], $this->reportQuery()); @endphp
+
+    <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4 flex items-center gap-6 flex-wrap">
+        <div class="flex items-center gap-2">
+            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Date</label>
+            <select wire:model.live="filterDate" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <option value="">All dates</option>
+                @foreach ($availableDates as $date)
+                    <option value="{{ $date->toDateString() }}">{{ $date->format('d M Y (D)') }}</option>
+                @endforeach
+            </select>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input type="checkbox" wire:model.live="showInvigilators" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            Print invigilator names
+        </label>
+        <p class="text-xs text-gray-400">Applies to Seating Chart, Datesheet, Subject-wise Seating and Batch Schedule below. The Duty Roster always shows invigilators.</p>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4">
             <div class="flex items-center gap-2 mb-1">
@@ -22,10 +41,10 @@
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">One sitting plan per room, per slot &mdash; roll numbers filled column by column, matching the department's usual layout.</p>
             @if ($hasSeating)
                 <div class="flex items-center gap-2">
-                    <a href="{{ route('sessions.reports.seating-chart.xlsx', $examSession) }}">
+                    <a href="{{ route('sessions.reports.seating-chart.xlsx', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
-                    <a href="{{ route('sessions.reports.seating-chart.pdf', $examSession) }}">
+                    <a href="{{ route('sessions.reports.seating-chart.pdf', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
@@ -44,10 +63,10 @@
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Every subject, section, date, time, room and invigilator for the whole session in one table, grouped by day.</p>
             @if ($hasSeating)
                 <div class="flex items-center gap-2">
-                    <a href="{{ route('sessions.reports.datesheet.xlsx', $examSession) }}">
+                    <a href="{{ route('sessions.reports.datesheet.xlsx', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
-                    <a href="{{ route('sessions.reports.datesheet.pdf', $examSession) }}">
+                    <a href="{{ route('sessions.reports.datesheet.pdf', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
@@ -66,10 +85,10 @@
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Every teacher's invigilation duties &mdash; date, time, room and subject &mdash; grouped by teacher.</p>
             @if ($hasDuties)
                 <div class="flex items-center gap-2 flex-wrap">
-                    <a href="{{ route('sessions.reports.duty-roster.xlsx', $examSession) }}">
+                    <a href="{{ route('sessions.reports.duty-roster.xlsx', array_merge(['examSession' => $examSession], $this->dutyReportQuery())) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
-                    <a href="{{ route('sessions.reports.duty-roster.pdf', $examSession) }}">
+                    <a href="{{ route('sessions.reports.duty-roster.pdf', array_merge(['examSession' => $examSession], $this->dutyReportQuery())) }}">
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                     <x-btn wire:click="emailAllDutySheets" wire:confirm="Email each teacher their personal duty sheet as a PDF? This sends one email per teacher with duties this session." variant="secondary" size="sm" icon="mail">
@@ -92,10 +111,10 @@
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Every seated student grouped by subject &mdash; roll no, name, section, room, seat and invigilator. Useful as an attendance sheet.</p>
             @if ($hasSeating)
                 <div class="flex items-center gap-2">
-                    <a href="{{ route('sessions.reports.subject-wise-seating.xlsx', $examSession) }}">
+                    <a href="{{ route('sessions.reports.subject-wise-seating.xlsx', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
-                    <a href="{{ route('sessions.reports.subject-wise-seating.pdf', $examSession) }}">
+                    <a href="{{ route('sessions.reports.subject-wise-seating.pdf', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
@@ -114,10 +133,10 @@
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">One class's full exam schedule at a time (e.g. BSAI 2A) &mdash; subject, date, time, room and invigilator, in order.</p>
             @if ($hasSeating)
                 <div class="flex items-center gap-2">
-                    <a href="{{ route('sessions.reports.batch-schedule.xlsx', $examSession) }}">
+                    <a href="{{ route('sessions.reports.batch-schedule.xlsx', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
-                    <a href="{{ route('sessions.reports.batch-schedule.pdf', $examSession) }}">
+                    <a href="{{ route('sessions.reports.batch-schedule.pdf', $reportQuery) }}">
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>

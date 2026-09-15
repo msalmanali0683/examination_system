@@ -12,6 +12,6 @@
 <body>
     <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Batch / Section Schedule: {{ $session->name }}</h2>
-    @include('reports.batch-schedule', ['sections' => $sections, 'session' => $session])
+    @include('reports.batch-schedule', ['sections' => $sections, 'session' => $session, 'showInvigilators' => $showInvigilators ?? true])
 </body>
 </html>

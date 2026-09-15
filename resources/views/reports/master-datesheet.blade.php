@@ -37,7 +37,7 @@
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ substr($row->startTime, 0, 5) }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ substr($row->endTime, 0, 5) }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->room }}</td>
-                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->invigilator }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ ($showInvigilators ?? true) ? $row->invigilator : '' }}</td>
             </tr>
         @endforeach
     @endforeach

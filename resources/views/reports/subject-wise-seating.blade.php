@@ -27,7 +27,7 @@
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->date->format('d-m-Y') }}, {{ substr($row->startTime, 0, 5) }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->room }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->seat }}</td>
-                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->invigilator }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ ($showInvigilators ?? true) ? $row->invigilator : '' }}</td>
             </tr>
         @endforeach
         <tr><td colspan="7" style="border:none;padding-top:10px;"></td></tr>

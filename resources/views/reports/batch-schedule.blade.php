@@ -16,7 +16,7 @@
             <td style="font-weight:bold;border:1px solid #94A3B8;padding:3px;">Date</td>
             <td style="font-weight:bold;border:1px solid #94A3B8;padding:3px;">Day</td>
             <td style="font-weight:bold;border:1px solid #94A3B8;padding:3px;">Time</td>
-            <td style="font-weight:bold;border:1px solid #94A3B8;padding:3px;">Room / Invigilator</td>
+            <td style="font-weight:bold;border:1px solid #94A3B8;padding:3px;">{{ ($showInvigilators ?? true) ? 'Room / Invigilator' : 'Room' }}</td>
         </tr>
         @foreach ($group->rows as $row)
             <tr>
@@ -25,7 +25,7 @@
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->date->format('d-m-Y') }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->day }}</td>
                 <td style="border:1px solid #94A3B8;padding:3px;">{{ substr($row->startTime, 0, 5) }} &ndash; {{ substr($row->endTime, 0, 5) }}</td>
-                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->room }} &mdash; {{ $row->invigilator }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ ($showInvigilators ?? true) ? $row->room.' — '.$row->invigilator : $row->room }}</td>
             </tr>
         @endforeach
         <tr><td colspan="6" style="border:none;padding-top:10px;"></td></tr>

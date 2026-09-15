@@ -10,12 +10,12 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 
 class DutySheetExport implements FromView, WithTitle
 {
-    public function __construct(private readonly ExamSession $session) {}
+    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null) {}
 
     public function view(): View
     {
         return view('reports.duty-sheet', [
-            'teacherGroups' => (new ReportDataBuilder)->dutyRowsByTeacher($this->session),
+            'teacherGroups' => (new ReportDataBuilder)->dutyRowsByTeacher($this->session, $this->date),
             'session' => $this->session,
         ]);
     }

@@ -8,11 +8,11 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 class SeatingChartExport implements WithMultipleSheets
 {
-    public function __construct(private readonly ExamSession $session) {}
+    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null, private readonly bool $showInvigilators = true) {}
 
     public function sheets(): array
     {
-        $charts = (new ReportDataBuilder)->seatingCharts($this->session);
+        $charts = (new ReportDataBuilder)->seatingCharts($this->session, $this->date);
 
         $usedTitles = [];
 
@@ -20,7 +20,7 @@ class SeatingChartExport implements WithMultipleSheets
             $title = $this->uniqueTitle($chart, $usedTitles);
             $usedTitles[$title] = true;
 
-            return new SeatingChartSheetExport($chart, $title, $this->session);
+            return new SeatingChartSheetExport($chart, $title, $this->session, $this->showInvigilators);
         })->all();
     }
 

@@ -9,11 +9,11 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 
 class SeatingChartSheetExport implements FromView, WithTitle
 {
-    public function __construct(private readonly object $chart, private readonly string $title, private readonly ExamSession $session) {}
+    public function __construct(private readonly object $chart, private readonly string $title, private readonly ExamSession $session, private readonly bool $showInvigilators = true) {}
 
     public function view(): View
     {
-        return view('reports.seating-chart-sheet', ['chart' => $this->chart, 'session' => $this->session]);
+        return view('reports.seating-chart-sheet', ['chart' => $this->chart, 'session' => $this->session, 'showInvigilators' => $this->showInvigilators]);
     }
 
     public function title(): string
