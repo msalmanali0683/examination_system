@@ -51,6 +51,19 @@ class RequirementCalculator
 
             $roomsNeeded = $allRoomsPreview->get($slot->id)['roomsUsed'] ?? $active['roomsUsed'];
 
+            // previewAgainstAllRooms() picks whichever rooms in the whole
+            // system fit this slot most efficiently, which aren't
+            // necessarily the same rooms actually active for this session —
+            // so its count can understate the real need (e.g. it counts
+            // the two biggest rooms system-wide, while the session's own
+            // two active rooms are smaller and still leave students
+            // unseated). Never let the displayed numbers claim "0
+            // shortfall" while the real, active-room simulation says
+            // otherwise.
+            if ($unseated->isNotEmpty() && $roomsNeeded <= $roomsAvailable) {
+                $roomsNeeded = $roomsAvailable + 1;
+            }
+
             $unavailableThisDay = $constrainedNotExcluded->filter(fn ($c) => ! $c->isAvailableOn($slot->date))->count();
             $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay;
 
