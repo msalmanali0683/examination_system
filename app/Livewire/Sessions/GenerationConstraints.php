@@ -576,8 +576,13 @@ class GenerationConstraints extends Component
 
         // Same-day clash preview for the Pin dropdown: for every subject
         // and every day this session has slots on, work out whether
-        // placing that subject there would share a student with
-        // something already assigned that day — mirrors
+        // placing that subject there would clash with something already
+        // assigned that day — either an explicit shared student, or
+        // another subject of the same semester (same cohort in practice,
+        // even on the rare row where no single enrollment happens to
+        // overlap). This only flags the day — every day stays pickable,
+        // since two papers on the same day is sometimes unavoidable and
+        // the admin may still need to choose it; it mirrors
         // recordClashNoteForSameDay()'s own logic, so what the dropdown
         // previews before a pick matches what actually gets flagged
         // after it, instead of the admin finding out only afterwards.
@@ -592,36 +597,14 @@ class GenerationConstraints extends Component
 
         $distinctDays = $timeSlots->pluck('date')->map(fn ($d) => $d->format('Y-m-d'))->unique();
 
-        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph) {
-            $days = $distinctDays->filter(fn (string $day) => collect($subjectIdsByDay->get($day, []))
-                ->reject(fn ($id) => $id === $subject->id)
-                ->contains(fn ($id) => ($conflictGraph[$subject->id][$id] ?? 0) > 0)
-            )->values();
-
-            return [$subject->id => $days];
-        });
-
-        // A harder rule on top of the clash preview above: same-semester
-        // subjects share almost their entire cohort, so once any of a
-        // semester's subjects sits on a day, no other subject of that
-        // same semester should even be offered that day — not just
-        // warned about it. A subject with no parseable semester (see
-        // $semesterBySubject above) isn't restricted by this, since
-        // there's no cohort to compare against; the plain student-shared
-        // clash check above still guards it.
-        $semesterBlockedDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $semesterBySubject) {
+        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph, $semesterBySubject) {
             $mySemesters = $semesterBySubject->get($subject->id, collect());
 
-            if ($mySemesters->isEmpty()) {
-                return [$subject->id => collect()];
-            }
+            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $conflictGraph, $semesterBySubject, $mySemesters) {
+                $othersThatDay = collect($subjectIdsByDay->get($day, []))->reject(fn ($id) => $id === $subject->id);
 
-            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $semesterBySubject, $mySemesters) {
-                $otherSemestersThatDay = collect($subjectIdsByDay->get($day, []))
-                    ->reject(fn ($id) => $id === $subject->id)
-                    ->flatMap(fn ($id) => $semesterBySubject->get($id, collect()));
-
-                return $otherSemestersThatDay->intersect($mySemesters)->isNotEmpty();
+                return $othersThatDay->contains(fn ($id) => ($conflictGraph[$subject->id][$id] ?? 0) > 0)
+                    || $othersThatDay->flatMap(fn ($id) => $semesterBySubject->get($id, collect()))->intersect($mySemesters)->isNotEmpty();
             })->values();
 
             return [$subject->id => $days];
@@ -652,7 +635,6 @@ class GenerationConstraints extends Component
             'seatsAvailableTotal' => $seatsAvailableTotal,
             'seatsUsedPerSlot' => $seatsUsedPerSlot,
             'clashingDaysBySubject' => $clashingDaysBySubject,
-            'semesterBlockedDaysBySubject' => $semesterBlockedDaysBySubject,
             'missingTeacherSections' => $missingTeacherSections,
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,

@@ -131,7 +131,7 @@
         <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Pin Subjects to Slots</h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Optional. Everything else is placed automatically, clash-free where possible.</p>
-            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">A day already used by another subject of the same semester is left out of that dropdown entirely; a day that only shares a few students shows a &#9888; clash warning instead.</p>
+            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">A day another subject already shares students with, or that already has another subject from the same semester, shows a &#9888; clash warning &mdash; every day stays pickable, since two papers on one day is sometimes unavoidable.</p>
         </div>
         <div class="flex items-center gap-2">
             <x-btn wire:click="removeAllSlots" wire:loading.attr="disabled" wire:confirm="Remove every subject's assigned slot? Pins and slot assignments will be cleared for the whole session." variant="secondary" icon="trash">
@@ -210,18 +210,13 @@
                                                 @php
                                                     $alreadyThere = $assignment?->time_slot_id === $slot->id;
                                                     $day = $slot->date->format('Y-m-d');
-                                                    $semesterBlocked = ! $alreadyThere && $semesterBlockedDaysBySubject->get($subject->id, collect())->contains($day);
+                                                    $used = $seatsUsedPerSlot->get($slot->id, 0);
+                                                    $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
+                                                    $wouldClash = $clashingDaysBySubject->get($subject->id, collect())->contains($day);
                                                 @endphp
-                                                @unless ($semesterBlocked)
-                                                    @php
-                                                        $used = $seatsUsedPerSlot->get($slot->id, 0);
-                                                        $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
-                                                        $wouldClash = $clashingDaysBySubject->get($subject->id, collect())->contains($day);
-                                                    @endphp
-                                                    <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClash])>
-                                                        {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $wouldClash ? ' &mdash; &#9888; clash (same day)' : '' !!}
-                                                    </option>
-                                                @endunless
+                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClash])>
+                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $wouldClash ? ' &mdash; &#9888; clash (same day)' : '' !!}
+                                                </option>
                                             @endforeach
                                         </select>
                                         @if ($assignment?->time_slot_id && ! $excluded)

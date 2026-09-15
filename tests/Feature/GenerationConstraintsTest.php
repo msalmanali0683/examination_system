@@ -486,12 +486,14 @@ class GenerationConstraintsTest extends TestCase
         return $options;
     }
 
-    public function test_pin_dropdown_hides_a_day_another_same_semester_subject_already_occupies(): void
+    public function test_pin_dropdown_flags_a_day_another_same_semester_subject_already_occupies(): void
     {
-        // A harder rule than the clash marker above: two subjects of the
-        // same semester share almost their whole cohort, so once one of
-        // them sits on a day, that day must not even be offered as an
-        // option to another subject of that semester — not just flagged.
+        // Same-semester subjects share almost their whole cohort even on
+        // the rare row where no single enrollment happens to overlap
+        // explicitly, so a day another subject of the same semester
+        // already occupies is flagged too — but every day stays pickable
+        // (two papers on the same day is sometimes unavoidable), so this
+        // only marks the option, it never removes it.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $occupiedDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
@@ -500,7 +502,7 @@ class GenerationConstraintsTest extends TestCase
         $subjectA = Subject::factory()->create(['code' => 'CS111']);
         $subjectB = Subject::factory()->create(['code' => 'MAT111']);
         // Both semester 2 (BSAI 2A / BSAI 2B) — no shared student required,
-        // the semester itself is enough to block the day.
+        // the semester itself is enough to flag the day.
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2B']);
 
@@ -515,10 +517,10 @@ class GenerationConstraintsTest extends TestCase
 
         $optionsForB = $this->pinDropdownOptionTexts($html, $subjectB->id);
 
-        // Subject B's dropdown must not offer 20 Apr at all, but must
-        // still offer the clash-free 21 Apr.
-        $this->assertArrayNotHasKey('20 Apr 09:00', $optionsForB);
-        $this->assertArrayHasKey('21 Apr 09:00', $optionsForB);
+        // Subject B's dropdown still offers 20 Apr, marked as a clash, and
+        // still offers the clash-free 21 Apr unmarked.
+        $this->assertStringContainsString('clash (same day)', $optionsForB['20 Apr 09:00'] ?? '');
+        $this->assertStringNotContainsString('clash (same day)', $optionsForB['21 Apr 09:00'] ?? '');
     }
 
     public function test_pinning_and_unpinning_a_subject(): void
