@@ -154,7 +154,12 @@ class SeatingChart extends Component
                 ->with(['room', 'enrollment.student', 'enrollment.subject'])
                 ->get();
 
-            $rooms = $seats->groupBy('room_id')->map(function ($roomSeats) {
+            $capacities = $this->examSession->rooms()
+                ->wherePivot('is_active', true)
+                ->get()
+                ->mapWithKeys(fn ($r) => [$r->id => $r->pivot->capacity_override ?? $r->capacity]);
+
+            $rooms = $seats->groupBy('room_id')->map(function ($roomSeats) use ($capacities) {
                 $room = $roomSeats->first()->room;
                 $seatsByPosition = $roomSeats->keyBy(fn ($s) => $s->row_number.':'.$s->column_number);
 
@@ -170,6 +175,7 @@ class SeatingChart extends Component
                     'room' => $room,
                     'grid' => $grid,
                     'seatedCount' => $roomSeats->count(),
+                    'capacity' => $capacities->get($room->id, $room->capacity),
                 ];
             })->sortBy(fn ($r) => $r['room']->name)->values();
         }

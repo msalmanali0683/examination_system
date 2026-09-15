@@ -52,7 +52,7 @@
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700/60 overflow-hidden" wire:key="room-{{ $room->id }}">
                     <div class="bg-gray-50 dark:bg-gray-900/50 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
                         <span class="flex items-center gap-1.5"><x-icon name="door" class="h-4 w-4 text-gray-400" /> {{ $room->name }}</span>
-                        <span class="text-xs text-gray-400">{{ $entry['seatedCount'] }} / {{ $room->capacity }} seated</span>
+                        <span class="text-xs text-gray-400">{{ $entry['seatedCount'] }} / {{ $entry['capacity'] }} seated</span>
                     </div>
                     <div class="p-3 overflow-x-auto">
                         <div

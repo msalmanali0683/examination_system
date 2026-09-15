@@ -150,6 +150,22 @@ class SeatingChartTest extends TestCase
         $this->assertFalse($seat->fresh()->is_locked);
     }
 
+    public function test_the_displayed_capacity_uses_the_sessions_override_not_the_rooms_raw_capacity(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->create(['rows' => 10, 'columns' => 5, 'capacity' => 50]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true, 'capacity_override' => 40]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $this->seat($session, $slot, $room, 1, 1);
+
+        Livewire::actingAs($staff)
+            ->test(SeatingChart::class, ['examSession' => $session])
+            ->call('selectSlot', $slot->id)
+            ->assertSee('1 / 40 seated')
+            ->assertDontSee('1 / 50 seated');
+    }
+
     public function test_user_without_edit_assignments_permission_cannot_move_a_seat(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

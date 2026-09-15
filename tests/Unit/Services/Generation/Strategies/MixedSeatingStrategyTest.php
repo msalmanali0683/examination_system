@@ -23,9 +23,9 @@ class MixedSeatingStrategyTest extends TestCase
         return $result;
     }
 
-    private function room(int $roomId, int $rows, int $columns, array $occupied = []): array
+    private function room(int $roomId, int $rows, int $columns, array $occupied = [], ?int $capacity = null): array
     {
-        return ['room_id' => $roomId, 'rows' => $rows, 'columns' => $columns, 'capacity' => $rows * $columns, 'occupied' => $occupied];
+        return ['room_id' => $roomId, 'rows' => $rows, 'columns' => $columns, 'capacity' => $capacity ?? $rows * $columns, 'occupied' => $occupied];
     }
 
     /**
@@ -184,6 +184,50 @@ class MixedSeatingStrategyTest extends TestCase
         $this->assertCount(1, $result->placements);
         $this->assertSame(2, $result->placements[0]->row);
         $this->assertSame(1, $result->placements[0]->column);
+    }
+
+    public function test_a_capacity_override_below_the_physical_grid_drops_trailing_columns(): void
+    {
+        // 10 rows x 5 columns physically (50 seats) but the session caps this
+        // room at 40 for distancing. That must leave whole column 5 empty
+        // rather than seating 50 students, matching production incident
+        // where mixed rooms ignored capacity_override entirely.
+        $nextId = 1;
+        $a = $this->enrollments(30, 100, $nextId);
+        $b = $this->enrollments(20, 200, $nextId);
+        $enrollments = collect([...$a, ...$b]);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate(
+            $enrollments,
+            [$this->room(1, 10, 5, capacity: 40)]
+        );
+
+        $this->assertCount(40, $result->placements);
+        $this->assertCount(10, $result->warnings);
+
+        $usedColumns = collect($result->placements)->pluck('column')->unique()->sort()->values()->all();
+        $this->assertSame([1, 2, 3, 4], $usedColumns);
+
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$a, ...$b]);
+        $this->assertSame([1, 3], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 100));
+        $this->assertSame([2, 4], $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200));
+    }
+
+    public function test_a_room_whose_capacity_is_smaller_than_one_columns_worth_of_rows_is_skipped(): void
+    {
+        $nextId = 1;
+        $a = $this->enrollments(2, 100, $nextId);
+        $enrollments = collect($a);
+
+        // capacity 5 with 10 rows per column doesn't fit even one whole
+        // column, so the room contributes nothing.
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate(
+            $enrollments,
+            [$this->room(1, 10, 5, capacity: 5)]
+        );
+
+        $this->assertCount(0, $result->placements);
+        $this->assertCount(2, $result->warnings);
     }
 
     public function test_group_size_is_never_treated_as_less_than_two(): void

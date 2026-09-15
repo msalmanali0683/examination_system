@@ -51,7 +51,20 @@ class MixedSeatingStrategy implements SeatingStrategy
                 break;
             }
 
-            $columnGroups = $this->columnGroupsFor($room['columns'], $this->groupSize);
+            // A room's capacity can be overridden below its physical
+            // rows*columns (e.g. distancing). Since each column is fully
+            // dedicated to one subject, capacity is enforced in whole-column
+            // increments — dropping trailing columns — rather than letting
+            // any column-group spill past the room's configured limit.
+            $usableColumns = $room['rows'] > 0
+                ? min($room['columns'], intdiv($room['capacity'], $room['rows']))
+                : 0;
+
+            if ($usableColumns < 1) {
+                continue;
+            }
+
+            $columnGroups = $this->columnGroupsFor($usableColumns, $this->groupSize);
             $capacities = array_map(fn (array $cols) => count($cols) * $room['rows'], $columnGroups);
             arsort($capacities); // largest column-group slot first, keys preserved
 
