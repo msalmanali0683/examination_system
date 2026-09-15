@@ -242,11 +242,10 @@
                                             @foreach ($timeSlots as $slot)
                                                 @php
                                                     $alreadyThere = $assignment?->time_slot_id === $slot->id;
-                                                    $day = $slot->date->format('Y-m-d');
                                                     $used = $seatsUsedPerSlot->get($slot->id, 0);
                                                     $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
                                                     $wouldClashExactSlot = $clashingSlotsBySubject->get($subject->id, collect())->contains($slot->id);
-                                                    $wouldClashSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($day);
+                                                    $wouldClashSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($slot->id);
                                                     $wouldClash = $wouldClashExactSlot || $wouldClashSameDay;
                                                     $clashLabel = $wouldClashExactSlot ? ' &mdash; &#9888; clash (same slot)' : ($wouldClashSameDay ? ' &mdash; &#9888; clash (same day)' : '');
                                                 @endphp

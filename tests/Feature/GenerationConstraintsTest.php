@@ -533,10 +533,14 @@ class GenerationConstraintsTest extends TestCase
         // explicitly, so a day another subject of the same semester
         // already occupies is flagged too — but every day stays pickable
         // (two papers on the same day is sometimes unavoidable), so this
-        // only marks the option, it never removes it.
+        // only marks the option, it never removes it. The day's own last
+        // slot (max separation from subject A's first) is the one
+        // exception — see the max-separation test below.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $occupiedDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
         $freeDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
 
         $subjectA = Subject::factory()->create(['code' => 'CS111']);
@@ -557,10 +561,40 @@ class GenerationConstraintsTest extends TestCase
 
         $optionsForB = $this->pinDropdownOptionTexts($html, $subjectB->id);
 
-        // Subject B's dropdown still offers 20 Apr, marked as a clash, and
-        // still offers the clash-free 21 Apr unmarked.
-        $this->assertStringContainsString('clash (same day)', $optionsForB['20 Apr 09:00'] ?? '');
-        $this->assertStringNotContainsString('clash (same day)', $optionsForB['21 Apr 09:00'] ?? '');
+        // Subject B's dropdown still offers 20 Apr 11:30 (adjacent to
+        // subject A's 09:00, not the day's max separation), marked as a
+        // clash, and still offers the clash-free 21 Apr unmarked.
+        $this->assertStringContainsString('clash (same day)', $optionsForB['20 Apr 11:30'] ?? '');
+        $this->assertStringNotContainsString('clash', $optionsForB['21 Apr 09:00'] ?? '');
+    }
+
+    public function test_pin_dropdown_does_not_flag_the_days_max_separation_slot(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $occupiedDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
+
+        $subjectA = Subject::factory()->create(['code' => 'CS111']);
+        $subjectB = Subject::factory()->create(['code' => 'MAT111']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2B']);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $occupiedDay->id,
+            'is_pinned' => true,
+        ]);
+
+        $html = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session])->html();
+
+        $optionsForB = $this->pinDropdownOptionTexts($html, $subjectB->id);
+
+        // 14:00 is the day's last slot — max separation from A's 09:00 —
+        // not flagged as a clash.
+        $this->assertStringNotContainsString('clash', $optionsForB['20 Apr 14:00'] ?? '');
     }
 
     public function test_pinning_and_unpinning_a_subject(): void
@@ -679,11 +713,15 @@ class GenerationConstraintsTest extends TestCase
         // Slots showed no warning either, because a manual pin never ran
         // the clash check the real timetable generator runs — only a full
         // "Generate Timetable" rerun surfaced the clash. Pinning must
-        // check same-day clashes immediately.
+        // check same-day clashes immediately. Three slots that day so the
+        // two subjects land adjacent (not the day's first-and-last), which
+        // still counts as a clash — see the max-separation test below for
+        // the one case that doesn't.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
-        $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
+        $midday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
 
         $subjectA = Subject::factory()->create();
         $subjectB = Subject::factory()->create();
@@ -700,12 +738,45 @@ class GenerationConstraintsTest extends TestCase
 
         $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
 
-        // Different slot, but the SAME day as subject A — must be flagged.
-        $component->call('updatePin', $subjectB->id, (string) $afternoon->id);
+        // Adjacent slot (11:30), same day as subject A's 09:00 — not the
+        // day's max separation (which would be 09:00/14:00) — must be flagged.
+        $component->call('updatePin', $subjectB->id, (string) $midday->id);
 
         $noteB = SubjectSlotAssignment::where('exam_session_id', $session->id)->where('subject_id', $subjectB->id)->value('conflict_note');
         $this->assertNotNull($noteB);
         $this->assertStringContainsString($subjectA->code, $noteB);
+    }
+
+    public function test_manually_pinning_a_same_semester_subject_at_the_days_max_separation_is_not_a_clash(): void
+    {
+        // Same setup as above, but subject B goes into the day's LAST
+        // slot instead of the adjacent one — 09:00 and 14:00 is the
+        // maximum possible separation for a 3-slot day, which is the
+        // accepted way to handle a semester with more subjects than days.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
+        $lastSlot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $sharedStudent = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $morning->id,
+            'is_pinned' => true,
+        ]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $component->call('updatePin', $subjectB->id, (string) $lastSlot->id);
+
+        $noteB = SubjectSlotAssignment::where('exam_session_id', $session->id)->where('subject_id', $subjectB->id)->value('conflict_note');
+        $this->assertNull($noteB);
     }
 
     public function test_manually_pinning_a_subject_to_a_clash_free_day_leaves_no_note(): void

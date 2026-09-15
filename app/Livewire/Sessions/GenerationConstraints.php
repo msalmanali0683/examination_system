@@ -179,12 +179,15 @@ class GenerationConstraints extends Component
      * immediately instead of leaving the admin to find out only after the
      * next full "Generate Timetable" run. Mirrors the generator's own
      * rule: a same-semester subject sharing this day is flagged (that's
-     * the whole cohort, never share a day); a different-semester subject
-     * (a repeater) sharing this day is fine — only the exact same slot is
-     * flagged for those. Only the subject just pinned is annotated
-     * (matches how the generator itself only notes a conflict on whichever
-     * subject it placed last), so this never overwrites an unrelated note
-     * already sitting on another subject.
+     * the whole cohort, never share a day) — UNLESS the two land at that
+     * day's maximum possible separation (e.g. its first and last slot),
+     * which is the accepted way to handle a semester with more subjects
+     * than days and isn't treated as a clash. A different-semester
+     * subject (a repeater) sharing this day is fine regardless — only the
+     * exact same slot is flagged for those. Only the subject just pinned
+     * is annotated (matches how the generator itself only notes a
+     * conflict on whichever subject it placed last), so this never
+     * overwrites an unrelated note already sitting on another subject.
      */
     private function recordClashNoteForSameDay(int $subjectId, int $slotId): void
     {
@@ -198,7 +201,10 @@ class GenerationConstraints extends Component
 
         $sameDaySlotIds = TimeSlot::where('exam_session_id', $sessionId)
             ->whereDate('date', $slot->date)
+            ->orderBy('start_time')
             ->pluck('id');
+        $positionInDay = $sameDaySlotIds->values()->flip();
+        $dayMaxGap = $positionInDay->count() - 1;
 
         $sameDayAssignments = SubjectSlotAssignment::where('exam_session_id', $sessionId)
             ->whereIn('time_slot_id', $sameDaySlotIds)
@@ -223,12 +229,27 @@ class GenerationConstraints extends Component
             ->reject(fn ($id) => $id === $subjectId)
             ->filter(fn ($id) => ($graph[$subjectId][$id] ?? 0) > 0);
 
-        $sameSemesterClash = $others->filter(function ($id) use ($semesters, $mySemesters) {
+        $sameSemesterClash = $others->filter(function ($id) use ($semesters, $mySemesters, $slotOfSubject, $positionInDay, $dayMaxGap, $slotId) {
             $otherSemesters = $semesters[$id] ?? [];
-
-            return empty($mySemesters) || empty($otherSemesters)
+            $sameSemester = empty($mySemesters) || empty($otherSemesters)
                 ? true
                 : count(array_intersect($mySemesters, $otherSemesters)) > 0;
+
+            if (! $sameSemester) {
+                return false;
+            }
+
+            $otherSlot = $slotOfSubject[$id] ?? null;
+
+            if ($dayMaxGap > 0 && $otherSlot !== null && isset($positionInDay[$slotId], $positionInDay[$otherSlot])) {
+                $gap = abs($positionInDay[$slotId] - $positionInDay[$otherSlot]);
+
+                if ($gap === $dayMaxGap) {
+                    return false;
+                }
+            }
+
+            return true;
         });
 
         $exactSlotClash = $others->filter(fn ($id) => ($slotOfSubject[$id] ?? null) === $slotId);
@@ -747,36 +768,71 @@ class GenerationConstraints extends Component
             ->groupBy(fn ($a) => $timeSlotsById->get($a->time_slot_id)?->date->format('Y-m-d'))
             ->map(fn ($rows) => $rows->pluck('subject_id')->all());
 
-        $distinctDays = $timeSlots->pluck('date')->map(fn ($d) => $d->format('Y-m-d'))->unique();
+        // Position of each slot within its own day (0 = first), and how
+        // many slots each day has — used below to tell a genuine
+        // same-semester day-share apart from two papers placed at that
+        // day's maximum possible separation (e.g. its first and last
+        // slot), which is the accepted way to handle a semester with more
+        // subjects than days and isn't treated as a clash.
+        $positionInDay = [];
+        $daySlotCounts = [];
+        foreach ($timeSlots->groupBy(fn ($t) => $t->date->format('Y-m-d')) as $day => $slotsForDay) {
+            $daySlotCounts[$day] = $slotsForDay->count();
+            foreach ($slotsForDay->values() as $i => $slotModel) {
+                $positionInDay[$slotModel->id] = $i;
+            }
+        }
 
         // Same-semester subjects share almost their whole cohort, so a day
         // another subject of the same semester already occupies is
-        // flagged even without an explicit shared-enrollment record. A
-        // different (known) semester is never flagged at the day level —
-        // that's fine now (a repeater sitting two papers on one day) — see
-        // $clashingSlotsBySubject below for the one thing that still
-        // matters for them: the exact same slot.
-        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject) {
+        // flagged even without an explicit shared-enrollment record —
+        // unless the two land at that day's maximum separation, which
+        // isn't a clash (see above). A different (known) semester is
+        // never flagged at the day level — that's fine now (a repeater
+        // sitting two papers on one day) — see $clashingSlotsBySubject
+        // below for the one thing that still matters for them: the exact
+        // same slot.
+        $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($timeSlots, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject, $assignments, $positionInDay, $daySlotCounts) {
             $mySemesters = $dominantSemesterBySubject->get($subject->id, collect());
 
-            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject, $mySemesters) {
+            $slotIds = $timeSlots->filter(function ($candidateSlot) use ($subject, $subjectIdsByDay, $conflictGraph, $dominantSemesterBySubject, $mySemesters, $assignments, $positionInDay, $daySlotCounts) {
+                $day = $candidateSlot->date->format('Y-m-d');
                 $othersThatDay = collect($subjectIdsByDay->get($day, []))->reject(fn ($id) => $id === $subject->id);
+                $dayMaxGap = ($daySlotCounts[$day] ?? 1) - 1;
 
-                return $othersThatDay->contains(function ($id) use ($conflictGraph, $subject, $dominantSemesterBySubject, $mySemesters) {
-                    $otherSemesters = $dominantSemesterBySubject->get($id, collect());
+                return $othersThatDay->contains(function ($occupantId) use ($conflictGraph, $subject, $dominantSemesterBySubject, $mySemesters, $candidateSlot, $assignments, $positionInDay, $dayMaxGap) {
+                    $otherSemesters = $dominantSemesterBySubject->get($occupantId, collect());
 
-                    if ($mySemesters->isNotEmpty() && $otherSemesters->isNotEmpty()) {
-                        return $otherSemesters->intersect($mySemesters)->isNotEmpty();
+                    $sameSemester = $mySemesters->isNotEmpty() && $otherSemesters->isNotEmpty()
+                        ? $otherSemesters->intersect($mySemesters)->isNotEmpty()
+                        // Semester unknown on one side or both: conservative
+                        // fallback, same as the generator — only flag if
+                        // they demonstrably share a student.
+                        : ($conflictGraph[$subject->id][$occupantId] ?? 0) > 0;
+
+                    if (! $sameSemester) {
+                        return false;
                     }
 
-                    // Semester unknown on one side or both: conservative
-                    // fallback, same as the generator — only flag if they
-                    // demonstrably share a student.
-                    return ($conflictGraph[$subject->id][$id] ?? 0) > 0;
-                });
-            })->values();
+                    $occupantSlotId = $assignments->get($occupantId)?->time_slot_id;
 
-            return [$subject->id => $days];
+                    if ($occupantSlotId === null || $occupantSlotId === $candidateSlot->id) {
+                        return false; // exact-slot case is handled separately below
+                    }
+
+                    if ($dayMaxGap > 0 && isset($positionInDay[$candidateSlot->id], $positionInDay[$occupantSlotId])) {
+                        $gap = abs($positionInDay[$candidateSlot->id] - $positionInDay[$occupantSlotId]);
+
+                        if ($gap === $dayMaxGap) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            })->pluck('id');
+
+            return [$subject->id => $slotIds];
         });
 
         // Exact-slot clash preview: whatever the semester situation, two

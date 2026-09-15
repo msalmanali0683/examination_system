@@ -19,7 +19,9 @@ class TimetableGenerator
      *   genuinely has more subjects than available days, doubling a day
      *   up becomes unavoidable — when that happens, the two papers are
      *   placed as far apart within that day as the day's slots allow
-     *   (e.g. its first and last slot), never adjacent.
+     *   (e.g. its first and last slot), never adjacent — and, having
+     *   reached that day's maximum possible separation, it isn't reported
+     *   as a clash at all; that's the accepted way to handle the overflow.
      * - Different semesters (a repeater/backlog student sitting a paper
      *   from another semester alongside their current one): sharing a
      *   day is fine — that student just sits two papers that day. Only
@@ -182,8 +184,13 @@ class TimetableGenerator
             // within the day as possible rather than a same-day-same-time
             // clash. Occupants in the exact same slot are reported
             // separately below instead, since that's a different (worse)
-            // problem.
+            // problem. A pair placed at that day's maximum possible
+            // separation (e.g. its first and last slot) isn't reported at
+            // all — that's the accepted way to handle a semester with
+            // more subjects than days, not a clash.
             if ($best['sameSemesterDayWeight'] > 0) {
+                $dayMaxGap = count($daySlots[$bestDay]) - 1;
+
                 foreach ($dayOccupants[$bestDay] as $occupantId) {
                     $shared = $conflictGraph[$subjectId][$occupantId] ?? 0;
 
@@ -191,8 +198,18 @@ class TimetableGenerator
                         continue;
                     }
 
-                    if (($placed[$occupantId] ?? null) === $bestSlot) {
+                    $occupantSlot = $placed[$occupantId] ?? null;
+
+                    if ($occupantSlot === $bestSlot) {
                         continue;
+                    }
+
+                    if ($dayMaxGap > 0 && $occupantSlot !== null && isset($positionInDay[$occupantSlot])) {
+                        $gap = abs($positionInDay[$bestSlot] - $positionInDay[$occupantSlot]);
+
+                        if ($gap === $dayMaxGap) {
+                            continue;
+                        }
                     }
 
                     $occupantLabel = $subjectLabels[$occupantId] ?? "#{$occupantId}";

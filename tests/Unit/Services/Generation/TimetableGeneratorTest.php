@@ -342,6 +342,37 @@ class TimetableGeneratorTest extends TestCase
         // and last slot (100 and 102), never the adjacent 101/102 or 100/101.
         $day1Slots = collect($result->assignments)->filter(fn ($slotId) => $slotDays[$slotId] === 'day1')->values();
         $this->assertEqualsCanonicalizing([100, 102], $day1Slots->all());
+
+        // Landing at the day's maximum possible separation is the
+        // accepted way to handle this overflow, not a clash — nothing
+        // should be reported.
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_same_semester_sharing_a_day_without_reaching_max_separation_is_still_reported(): void
+    {
+        // Subject 1 (semester 2) is pinned to the middle slot of a 3-slot
+        // day. Subject 2 (semester 2, shares a student with 1) has no
+        // other day available, so it's forced onto the same day — but the
+        // best it can do from the middle slot is a gap of 1, not the
+        // day's true max gap of 2 (first-to-last). That's still a real
+        // clash and must be reported, unlike the first-and-last case.
+        $graph = [1 => [2 => 3], 2 => [1 => 3]];
+        $slotDays = [100 => 'day1', 101 => 'day1', 102 => 'day1'];
+        $semesters = [1 => [2], 2 => [2]];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 101],
+            timeSlotIds: [100, 101, 102],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: $slotDays,
+            semesterBySubject: $semesters,
+        );
+
+        $this->assertTrue($result->conflicts->isNotEmpty());
+        $this->assertStringContainsString('share 3 student', $result->conflicts->first()->message);
     }
 
     public function test_subjects_with_no_semester_data_still_default_to_never_sharing_a_day(): void
