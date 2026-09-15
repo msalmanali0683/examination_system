@@ -22,7 +22,7 @@ class DutyRebalancer
 
     /**
      * @param  array<int, array{id: int, minDuties: int, maxDuties: int}>  $teachers
-     * @param  array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[]}>  $slots
+     * @param  array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[], adjacentSlotIds?: int[]}>  $slots
      * @param  DutyPlacement[]  $lockedPlacements
      */
     public function rebalance(DutyResult $result, array $teachers, array $slots, array $lockedPlacements): DutyResult
@@ -31,15 +31,23 @@ class DutyRebalancer
         $teachersById = collect($teachers)->keyBy('id');
         $counts = $this->countsFor($teachers, $placements, $lockedPlacements);
         $slotUnavailable = [];
+        $adjacentSlotIds = [];
 
         foreach ($slots as $slot) {
             $slotUnavailable[$slot['id']] = array_flip($slot['unavailableTeacherIds']);
+            $adjacentSlotIds[$slot['id']] = $slot['adjacentSlotIds'] ?? [];
         }
 
         $lockedTeacherBySlot = [];
+        $slotsByTeacher = [];
 
         foreach ($lockedPlacements as $locked) {
             $lockedTeacherBySlot[$locked->timeSlotId][$locked->teacherId] = true;
+            $slotsByTeacher[$locked->teacherId][$locked->timeSlotId] = true;
+        }
+
+        foreach ($placements as $placement) {
+            $slotsByTeacher[$placement->teacherId][$placement->timeSlotId] = true;
         }
 
         for ($pass = 0; $pass < self::MAX_PASSES; $pass++) {
@@ -58,14 +66,16 @@ class DutyRebalancer
                     continue; // an earlier swap this pass already resolved them
                 }
 
-                $swapIndex = $this->findSwap($placements, $needyId, $teachersById, $counts, $slotUnavailable, $lockedTeacherBySlot);
+                $swapIndex = $this->findSwap($placements, $needyId, $teachersById, $counts, $slotUnavailable, $lockedTeacherBySlot, $adjacentSlotIds, $slotsByTeacher);
 
                 if ($swapIndex === null) {
                     continue;
                 }
 
                 $old = $placements[$swapIndex];
+                unset($slotsByTeacher[$old->teacherId][$old->timeSlotId]);
                 $placements[$swapIndex] = new DutyPlacement($needyId, $old->timeSlotId, $old->roomId);
+                $slotsByTeacher[$needyId][$old->timeSlotId] = true;
                 $counts[$old->teacherId]--;
                 $counts[$needyId]++;
                 $swappedAny = true;
@@ -96,8 +106,28 @@ class DutyRebalancer
      * @param  array<int, int>  $counts
      * @param  array<int, array<int, int>>  $slotUnavailable
      * @param  array<int, array<int, bool>>  $lockedTeacherBySlot
+     * @param  array<int, int[]>  $adjacentSlotIds
+     * @param  array<int, array<int, bool>>  $slotsByTeacher
      */
-    private function findSwap(array $placements, int $needyId, $teachersById, array $counts, array $slotUnavailable, array $lockedTeacherBySlot): ?int
+    private function findSwap(array $placements, int $needyId, $teachersById, array $counts, array $slotUnavailable, array $lockedTeacherBySlot, array $adjacentSlotIds = [], array $slotsByTeacher = []): ?int
+    {
+        // First pass avoids handing the needy teacher a slot adjacent to one
+        // they already hold (back-to-back invigilation); if that leaves no
+        // candidate, a second pass allows it rather than leave them short.
+        return $this->findSwapCandidate($placements, $needyId, $teachersById, $counts, $slotUnavailable, $lockedTeacherBySlot, $adjacentSlotIds, $slotsByTeacher, avoidConsecutive: true)
+            ?? $this->findSwapCandidate($placements, $needyId, $teachersById, $counts, $slotUnavailable, $lockedTeacherBySlot, $adjacentSlotIds, $slotsByTeacher, avoidConsecutive: false);
+    }
+
+    /**
+     * @param  DutyPlacement[]  $placements
+     * @param  \Illuminate\Support\Collection<int, array{id: int, minDuties: int, maxDuties: int}>  $teachersById
+     * @param  array<int, int>  $counts
+     * @param  array<int, array<int, int>>  $slotUnavailable
+     * @param  array<int, array<int, bool>>  $lockedTeacherBySlot
+     * @param  array<int, int[]>  $adjacentSlotIds
+     * @param  array<int, array<int, bool>>  $slotsByTeacher
+     */
+    private function findSwapCandidate(array $placements, int $needyId, $teachersById, array $counts, array $slotUnavailable, array $lockedTeacherBySlot, array $adjacentSlotIds, array $slotsByTeacher, bool $avoidConsecutive): ?int
     {
         $needy = $teachersById[$needyId];
 
@@ -136,10 +166,29 @@ class DutyRebalancer
                 continue;
             }
 
+            if ($avoidConsecutive && $this->wouldBeConsecutive($needyId, $placement->timeSlotId, $adjacentSlotIds, $slotsByTeacher)) {
+                continue;
+            }
+
             return $index;
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<int, int[]>  $adjacentSlotIds
+     * @param  array<int, array<int, bool>>  $slotsByTeacher
+     */
+    private function wouldBeConsecutive(int $teacherId, int $timeSlotId, array $adjacentSlotIds, array $slotsByTeacher): bool
+    {
+        foreach ($adjacentSlotIds[$timeSlotId] ?? [] as $adjacentSlotId) {
+            if (isset($slotsByTeacher[$teacherId][$adjacentSlotId])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

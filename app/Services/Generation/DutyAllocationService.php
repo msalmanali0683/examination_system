@@ -9,8 +9,10 @@ use App\Models\SeatAssignment;
 use App\Models\SessionTeacherConstraint;
 use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
+use App\Models\TimeSlot;
 use App\Services\Generation\DTOs\DutyPlacement;
 use App\Services\Generation\DTOs\DutyResult;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -48,7 +50,7 @@ class DutyAllocationService
     }
 
     /**
-     * @return array{0: array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[]}>, 1: DutyPlacement[]}
+     * @return array{0: array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[], adjacentSlotIds: int[]}>, 1: DutyPlacement[]}
      */
     private function buildSlots(ExamSession $session): array
     {
@@ -66,9 +68,12 @@ class DutyAllocationService
 
         $constraints = SessionTeacherConstraint::where('exam_session_id', $session->id)->get()->keyBy('teacher_id');
 
+        $timeSlots = $session->timeSlots()->orderBy('date')->orderBy('start_time')->get();
+        $adjacentSlotIds = $this->adjacentSlotIdsMap($timeSlots);
+
         $slots = [];
 
-        foreach ($session->timeSlots()->orderBy('date')->orderBy('start_time')->get() as $slot) {
+        foreach ($timeSlots as $slot) {
             $roomIds = $roomsBySlot->get($slot->id, []);
 
             if (empty($roomIds)) {
@@ -82,6 +87,7 @@ class DutyAllocationService
                 'id' => $slot->id,
                 'roomIds' => $roomIds,
                 'unavailableTeacherIds' => array_values(array_unique(array_merge($dayUnavailable, $subjectExcluded))),
+                'adjacentSlotIds' => $adjacentSlotIds[$slot->id] ?? [],
             ];
         }
 
@@ -92,6 +98,39 @@ class DutyAllocationService
             ->all();
 
         return [$slots, $lockedPlacements];
+    }
+
+    /**
+     * Maps each time slot to the immediately-preceding and following slot
+     * on the *same day* (by start time) — used to softly avoid assigning a
+     * teacher two back-to-back invigilation duties. Slots on different days
+     * are never considered adjacent, however small the calendar gap.
+     *
+     * @return array<int, int[]>
+     */
+    private function adjacentSlotIdsMap(Collection $timeSlots): array
+    {
+        $map = [];
+
+        foreach ($timeSlots->groupBy(fn (TimeSlot $slot) => $slot->date->format('Y-m-d')) as $dayGroup) {
+            $ordered = $dayGroup->sortBy('start_time')->values();
+
+            foreach ($ordered as $index => $slot) {
+                $neighbors = [];
+
+                if ($index > 0) {
+                    $neighbors[] = $ordered[$index - 1]->id;
+                }
+
+                if ($index < $ordered->count() - 1) {
+                    $neighbors[] = $ordered[$index + 1]->id;
+                }
+
+                $map[$slot->id] = $neighbors;
+            }
+        }
+
+        return $map;
     }
 
     /**

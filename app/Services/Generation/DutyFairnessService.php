@@ -14,7 +14,7 @@ use App\Services\Generation\DTOs\DutyWarning;
 class DutyFairnessService
 {
     /**
-     * @param  array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[]}>  $slots  chronological order
+     * @param  array<int, array{id: int, roomIds: int[], unavailableTeacherIds: int[], adjacentSlotIds?: int[]}>  $slots  chronological order; adjacentSlotIds are the immediately-preceding/following slot(s) on the same day, used to softly avoid back-to-back invigilation
      * @param  array<int, array{id: int, minDuties: int, maxDuties: int}>  $teachers  the eligible pool (active, not excluded from the session)
      * @param  DutyPlacement[]  $lockedPlacements  already-locked duties: counted toward running load, occupy their room/slot as obstacles, and make that teacher unavailable elsewhere in the same slot
      */
@@ -28,6 +28,7 @@ class DutyFairnessService
 
         $lockedCountByRoomSlot = [];
         $lockedTeacherBySlot = [];
+        $slotsByTeacher = [];
 
         foreach ($lockedPlacements as $locked) {
             $counts[$locked->teacherId] = ($counts[$locked->teacherId] ?? 0) + 1;
@@ -35,6 +36,7 @@ class DutyFairnessService
             $key = $locked->timeSlotId.':'.$locked->roomId;
             $lockedCountByRoomSlot[$key] = ($lockedCountByRoomSlot[$key] ?? 0) + 1;
             $lockedTeacherBySlot[$locked->timeSlotId][$locked->teacherId] = true;
+            $slotsByTeacher[$locked->teacherId][$locked->timeSlotId] = true;
         }
 
         $placements = [];
@@ -43,13 +45,19 @@ class DutyFairnessService
         foreach ($slots as $slot) {
             $usedThisSlot = $lockedTeacherBySlot[$slot['id']] ?? [];
             $unavailable = array_flip($slot['unavailableTeacherIds']);
+            $adjacentSlotIds = $slot['adjacentSlotIds'] ?? [];
 
             foreach ($slot['roomIds'] as $roomId) {
                 $key = $slot['id'].':'.$roomId;
                 $needed = $invigilatorsPerRoom - ($lockedCountByRoomSlot[$key] ?? 0);
 
                 for ($i = 0; $i < $needed; $i++) {
-                    $pick = $this->pickLowest($teachers, $counts, $usedThisSlot, $unavailable);
+                    // Prefer a teacher who wasn't just on duty the immediately
+                    // adjacent slot (avoids back-to-back invigilation); only
+                    // fall back to one who was if nobody else is eligible.
+                    $consecutive = $this->consecutiveTeacherIds($slotsByTeacher, $adjacentSlotIds);
+                    $pick = $this->pickLowest($teachers, $counts, $usedThisSlot, $unavailable + $consecutive)
+                        ?? $this->pickLowest($teachers, $counts, $usedThisSlot, $unavailable);
 
                     if ($pick === null) {
                         $warnings->push(new DutyWarning(
@@ -64,11 +72,38 @@ class DutyFairnessService
                     $placements[] = new DutyPlacement($pick, $slot['id'], $roomId);
                     $counts[$pick]++;
                     $usedThisSlot[$pick] = true;
+                    $slotsByTeacher[$pick][$slot['id']] = true;
                 }
             }
         }
 
         return new DutyResult($placements, $warnings);
+    }
+
+    /**
+     * @param  array<int, array<int, bool>>  $slotsByTeacher  teacher id => set of slot ids they're already on duty for
+     * @param  int[]  $adjacentSlotIds
+     * @return array<int, bool> teacher ids already on duty in one of the given adjacent slots
+     */
+    private function consecutiveTeacherIds(array $slotsByTeacher, array $adjacentSlotIds): array
+    {
+        if (empty($adjacentSlotIds)) {
+            return [];
+        }
+
+        $result = [];
+
+        foreach ($slotsByTeacher as $teacherId => $slots) {
+            foreach ($adjacentSlotIds as $adjacentSlotId) {
+                if (isset($slots[$adjacentSlotId])) {
+                    $result[$teacherId] = true;
+
+                    break;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**

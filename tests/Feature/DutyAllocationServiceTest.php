@@ -223,6 +223,43 @@ class DutyAllocationServiceTest extends TestCase
         $this->assertSame(8, $countA + $countB);
     }
 
+    public function test_avoids_giving_a_teacher_two_back_to_back_same_day_duties_when_another_teacher_is_available(): void
+    {
+        $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
+        $subject = Subject::factory()->create();
+        $day = now()->addWeek()->toDateString();
+
+        $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $day, 'start_time' => '09:00', 'end_time' => '10:30']);
+        $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $day, 'start_time' => '11:30', 'end_time' => '13:00']);
+        $slotC = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $day, 'start_time' => '14:00', 'end_time' => '15:30']);
+
+        foreach ([$slotA, $slotB, $slotC] as $slot) {
+            $room = Room::factory()->create();
+            $this->seatOneStudent($session, $subject, $slot, $room);
+        }
+
+        $teacherA = Teacher::factory()->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->create(['is_active' => true]);
+
+        foreach ([$teacherA, $teacherB] as $teacher) {
+            SessionTeacherConstraint::create([
+                'exam_session_id' => $session->id,
+                'teacher_id' => $teacher->id,
+                'min_duties' => 0,
+            ]);
+        }
+
+        (new DutyAllocationService)->generate($session);
+
+        $byTeacher = DutyAssignment::where('exam_session_id', $session->id)
+            ->get()
+            ->keyBy('time_slot_id')
+            ->map(fn ($d) => $d->teacher_id);
+
+        $this->assertNotSame($byTeacher[$slotA->id], $byTeacher[$slotB->id]);
+        $this->assertNotSame($byTeacher[$slotB->id], $byTeacher[$slotC->id]);
+    }
+
     public function test_teacher_subject_exclusion_keeps_a_teacher_off_their_own_subjects_slot(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1, 'teacher_subject_exclusion' => true]);

@@ -90,4 +90,41 @@ class DutyFairnessServiceTest extends TestCase
         $this->assertSame('understaffed', $result->warnings->first()->type);
         $this->assertSame(5, $result->warnings->first()->roomId);
     }
+
+    public function test_avoids_giving_the_same_teacher_two_adjacent_slots_when_another_teacher_is_available(): void
+    {
+        $slots = [
+            ['id' => 100, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [200]],
+            ['id' => 200, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [100, 300]],
+            ['id' => 300, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [200]],
+        ];
+        $teachers = [$this->teacher(1), $this->teacher(2)];
+
+        $result = (new DutyFairnessService)->generate($slots, $teachers, [], 1);
+
+        $byTeacher = collect($result->placements)->pluck('teacherId', 'timeSlotId');
+
+        $this->assertNotSame($byTeacher[100], $byTeacher[200]);
+        $this->assertNotSame($byTeacher[200], $byTeacher[300]);
+        $this->assertTrue($result->warnings->isEmpty());
+    }
+
+    public function test_falls_back_to_a_consecutive_slot_when_no_other_teacher_is_eligible(): void
+    {
+        $slots = [
+            ['id' => 100, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [200]],
+            ['id' => 200, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [100]],
+        ];
+        // Only one eligible teacher exists at all, so back-to-back is
+        // unavoidable — the preference must not turn into a hard block that
+        // leaves the second slot understaffed.
+        $teachers = [$this->teacher(1)];
+
+        $result = (new DutyFairnessService)->generate($slots, $teachers, [], 1);
+
+        $this->assertCount(2, $result->placements);
+        $this->assertSame(1, $result->placements[0]->teacherId);
+        $this->assertSame(1, $result->placements[1]->teacherId);
+        $this->assertTrue($result->warnings->isEmpty());
+    }
 }

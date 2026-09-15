@@ -77,6 +77,48 @@ class DutyRebalancerTest extends TestCase
         $this->assertCount(1, $result->warnings->where('type', 'unmet_minimum'));
     }
 
+    public function test_prefers_a_non_adjacent_swap_over_one_that_would_create_a_back_to_back_duty(): void
+    {
+        $teachers = [$this->teacher(1, min: 2), $this->teacher(2, min: 0)];
+        $locked = [new DutyPlacement(1, 100, 1)]; // teacher 1 already on duty slot 100
+        $slots = [
+            ['id' => 100, 'roomIds' => [1], 'unavailableTeacherIds' => []],
+            ['id' => 200, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [100]],
+            ['id' => 300, 'roomIds' => [1], 'unavailableTeacherIds' => []],
+        ];
+        // Two possible donor slots for teacher 1's missing second duty: 200
+        // (adjacent to their existing slot 100) and 300 (not adjacent).
+        $initial = new DutyResult([
+            new DutyPlacement(2, 200, 1),
+            new DutyPlacement(2, 300, 1),
+        ], collect());
+
+        $result = (new DutyRebalancer)->rebalance($initial, $teachers, $slots, $locked);
+
+        $byTeacher = collect($result->placements)->pluck('teacherId', 'timeSlotId');
+        $this->assertSame(2, $byTeacher[200]); // left alone — would be back-to-back with slot 100
+        $this->assertSame(1, $byTeacher[300]); // swapped instead
+        $this->assertTrue($result->warnings->where('type', 'unmet_minimum')->isEmpty());
+    }
+
+    public function test_still_swaps_into_an_adjacent_slot_when_it_is_the_only_way_to_reach_the_minimum(): void
+    {
+        $teachers = [$this->teacher(1, min: 2), $this->teacher(2, min: 0)];
+        $locked = [new DutyPlacement(1, 100, 1)];
+        $slots = [
+            ['id' => 100, 'roomIds' => [1], 'unavailableTeacherIds' => []],
+            ['id' => 200, 'roomIds' => [1], 'unavailableTeacherIds' => [], 'adjacentSlotIds' => [100]],
+        ];
+        // The only other duty to swap from is adjacent to teacher 1's
+        // existing slot — the preference must not block the swap outright.
+        $initial = new DutyResult([new DutyPlacement(2, 200, 1)], collect());
+
+        $result = (new DutyRebalancer)->rebalance($initial, $teachers, $slots, $locked);
+
+        $this->assertSame(1, $result->placements[0]->teacherId);
+        $this->assertTrue($result->warnings->where('type', 'unmet_minimum')->isEmpty());
+    }
+
     public function test_a_locked_duty_never_gets_swapped_away_and_blocks_the_teachers_slot(): void
     {
         $teachers = [$this->teacher(1, min: 1), $this->teacher(2, min: 0)];
