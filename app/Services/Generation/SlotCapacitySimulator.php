@@ -34,9 +34,19 @@ class SlotCapacitySimulator
     }
 
     /**
+     * $minSubjectsPerSlot/$maxSubjectsPerSlot are optional targets, not
+     * hard guarantees: max is enforced strictly (a slot never grows past
+     * it), while min only biases which slot a subject is offered to first
+     * (fill slots still under the minimum before growing ones that have
+     * already reached it) — a subject that has no clash-free, capacity-
+     * fitting slot to join still opens its own new one regardless, since
+     * there's no way to force company on it that doesn't exist. Leave
+     * either null for "no constraint" (matches the plain capacity-fit
+     * packing this had before).
+     *
      * @return Collection<int, SlotRequirement>
      */
-    public function simulate(ExamSession $session): Collection
+    public function simulate(ExamSession $session, ?int $minSubjectsPerSlot = null, ?int $maxSubjectsPerSlot = null): Collection
     {
         $enrollments = Enrollment::where('exam_session_id', $session->id)
             ->select('id', 'student_id', 'subject_id', 'section')
@@ -62,7 +72,7 @@ class SlotCapacitySimulator
         $roomsAvailable = count($roomTemplate);
         $teachersAvailable = $this->teachersAvailable($session);
 
-        $bins = $this->packIntoBins($subjectIds, $conflictGraph, $enrollmentsBySubject, $roomTemplate);
+        $bins = $this->packIntoBins($subjectIds, $conflictGraph, $enrollmentsBySubject, $roomTemplate, $minSubjectsPerSlot, $maxSubjectsPerSlot);
 
         return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $roomTemplate, $roomsAvailable, $teachersAvailable, $session) {
             $result = $this->allocate($enrollmentsBySubject, $subjectIdsInSlot, $roomTemplate);
@@ -98,14 +108,20 @@ class SlotCapacitySimulator
      * @param  array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>  $roomTemplate
      * @return array<int, int[]>
      */
-    private function packIntoBins(array $subjectIds, array $conflictGraph, Collection $enrollmentsBySubject, array $roomTemplate): array
+    private function packIntoBins(array $subjectIds, array $conflictGraph, Collection $enrollmentsBySubject, array $roomTemplate, ?int $min, ?int $max): array
     {
         $bins = [];
 
         foreach ($subjectIds as $subjectId) {
             $placed = false;
 
-            foreach ($bins as $index => $binSubjectIds) {
+            foreach ($this->candidateBinOrder($bins, $min) as $index) {
+                $binSubjectIds = $bins[$index];
+
+                if ($max !== null && count($binSubjectIds) >= $max) {
+                    continue;
+                }
+
                 if ($this->clashes($conflictGraph, $subjectId, $binSubjectIds)) {
                     continue;
                 }
@@ -125,6 +141,32 @@ class SlotCapacitySimulator
         }
 
         return $bins;
+    }
+
+    /**
+     * Plain creation order, unless a minimum is set — then bins still
+     * short of it are offered first, so they fill toward the minimum
+     * before a bin that's already met it is grown further.
+     *
+     * @param  array<int, int[]>  $bins
+     * @return int[]
+     */
+    private function candidateBinOrder(array $bins, ?int $min): array
+    {
+        $indexes = array_keys($bins);
+
+        if ($min === null) {
+            return $indexes;
+        }
+
+        usort($indexes, function ($a, $b) use ($bins, $min) {
+            $aBelowMin = count($bins[$a]) < $min;
+            $bBelowMin = count($bins[$b]) < $min;
+
+            return $aBelowMin === $bBelowMin ? $a <=> $b : ($aBelowMin ? -1 : 1);
+        });
+
+        return $indexes;
     }
 
     /**

@@ -109,6 +109,68 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->assertSame(3, $result->last()->studentCount);
     }
 
+    public function test_max_subjects_per_slot_caps_how_many_are_packed_together(): void
+    {
+        // Same setup as the "packed together" test above — plenty of room
+        // capacity for all four in one slot — but capped at 1 subject per
+        // slot, so each one must get its own even though nothing forces it.
+        $session = ExamSession::factory()->create();
+        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        $subjects = Subject::factory()->count(4)->create();
+        foreach ($subjects as $subject) {
+            $this->enrollStudents($session, $subject, 'A', 5);
+        }
+
+        $result = (new SlotCapacitySimulator)->simulate($session, maxSubjectsPerSlot: 1);
+
+        $this->assertCount(4, $result);
+        $this->assertTrue($result->every(fn ($r) => $r->studentCount === 5));
+    }
+
+    public function test_minimum_subjects_per_slot_prefers_filling_under_minimum_slots_first(): void
+    {
+        // 4 rooms, plenty of capacity — each subject needs only one room.
+        $session = ExamSession::factory()->create();
+        Room::factory()->count(4)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $subjectC = Subject::factory()->create();
+        $subjectD = Subject::factory()->create();
+        $this->enrollStudents($session, $subjectA, 'A', 4);
+        $this->enrollStudents($session, $subjectB, 'A', 5);
+        $this->enrollStudents($session, $subjectC, 'A', 4);
+        $this->enrollStudents($session, $subjectD, 'A', 5);
+
+        // A and C share a student, added last so it doesn't shift which
+        // subject is encountered first — they can never share a slot.
+        // (Both now total 5 students, same as B and D.)
+        $shared = Student::factory()->create(['roll_no' => 'SHARED01']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectA->id, 'section' => 'A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectC->id, 'section' => 'A']);
+
+        // Without a minimum, A and B fill the first slot; C can't join (clash
+        // with A) so it opens a second slot, which D then joins too since D
+        // fits the first slot it's offered — leaving an uneven 3-and-1 split.
+        $withoutMin = (new SlotCapacitySimulator)->simulate($session);
+        $this->assertCount(2, $withoutMin);
+        $this->assertEqualsCanonicalizing([5, 15], $withoutMin->pluck('studentCount')->all());
+
+        // With a minimum of 2, D is offered to the still-below-minimum slot
+        // (just C) before the already-satisfied slot (A and B already has
+        // 2) is grown further — evening the split to 2-and-2 (10-and-10).
+        $withMin = (new SlotCapacitySimulator)->simulate($session, minSubjectsPerSlot: 2);
+        $this->assertCount(2, $withMin);
+        $this->assertEqualsCanonicalizing([10, 10], $withMin->pluck('studentCount')->all());
+    }
+
     public function test_every_section_of_a_subject_stays_in_the_same_simulated_slot(): void
     {
         $session = ExamSession::factory()->create();

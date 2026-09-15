@@ -53,11 +53,22 @@
                 <input type="number" min="1" wire:model="slotsPerDay" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('slotsPerDay') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
             </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Min subjects per slot</label>
+                <input type="number" min="1" placeholder="Any" wire:model="minSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                @error('minSubjectsPerSlot') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Max subjects per slot</label>
+                <input type="number" min="1" placeholder="Any that fit" wire:model="maxSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                @error('maxSubjectsPerSlot') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
+            </div>
             <x-btn wire:click="simulateSlots" wire:loading.attr="disabled" wire:target="simulateSlots" icon="search">
                 <span wire:loading.remove wire:target="simulateSlots">Simulate</span>
                 <span wire:loading wire:target="simulateSlots">Simulating&hellip;</span>
             </x-btn>
         </div>
+        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Both are optional. Leave Max blank to pack in as many clash-free subjects as the rooms fit; a Min is a best-effort target &mdash; a subject with nowhere clash-free to join still gets its own slot.</p>
 
         @if ($showSlotSimulation)
             @if ($slotRequirements->isEmpty())

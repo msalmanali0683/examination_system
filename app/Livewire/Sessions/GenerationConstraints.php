@@ -181,7 +181,7 @@ class GenerationConstraints extends Component
         $teacherId = $this->missingTeacherSelection[$subjectId][$section] ?? null;
 
         if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
-            session()->flash('error', 'Pick a teacher before assigning.');
+            $this->flashError('Pick a teacher before assigning.');
 
             return;
         }
@@ -218,7 +218,7 @@ class GenerationConstraints extends Component
         $subjectIds = $enrollments->pluck('subject_id')->unique()->values()->all();
 
         if (empty($subjectIds)) {
-            session()->flash('error', 'No enrollments yet — import enrollments before generating a timetable.');
+            $this->flashError('No enrollments yet — import enrollments before generating a timetable.');
 
             return;
         }
@@ -269,12 +269,11 @@ class GenerationConstraints extends Component
             ? 'Generated timetable with no clashes.'
             : "Generated timetable with {$result->conflicts->count()} unavoidable clash(es).");
 
-        session()->flash(
-            $result->conflicts->isEmpty() ? 'status' : 'error',
-            $result->conflicts->isEmpty()
-                ? 'Timetable generated with no clashes.'
-                : "Timetable generated with {$result->conflicts->count()} unavoidable clash(es) — see below."
-        );
+        if ($result->conflicts->isEmpty()) {
+            session()->flash('status', 'Timetable generated with no clashes.');
+        } else {
+            $this->flashError("Timetable generated with {$result->conflicts->count()} unavoidable clash(es) — see below.");
+        }
     }
 
     public function checkRequirements(): void
@@ -294,13 +293,13 @@ class GenerationConstraints extends Component
         $hasSlots = $this->examSession->subjectSlotAssignments()->whereNotNull('time_slot_id')->exists();
 
         if (! $hasSlots) {
-            session()->flash('error', 'Generate the timetable first — seating needs subjects assigned to slots.');
+            $this->flashError('Generate the timetable first — seating needs subjects assigned to slots.');
 
             return;
         }
 
         if (! (new RequirementCalculator)->isFullyMet($this->examSession)) {
-            session()->flash('error', 'Not enough active rooms or available teachers for one or more slots — see the Capacity Check below before generating.');
+            $this->flashError('Not enough active rooms or available teachers for one or more slots — see the Capacity Check below before generating.');
 
             return;
         }
@@ -311,12 +310,11 @@ class GenerationConstraints extends Component
             ? 'Generated seating for every slot.'
             : "Generated seating with {$result->warnings->count()} warning(s).");
 
-        session()->flash(
-            $result->warnings->isEmpty() ? 'status' : 'error',
-            $result->warnings->isEmpty()
-                ? 'Seating generated for every slot.'
-                : "Seating generated with {$result->warnings->count()} warning(s) — some students couldn't be seated or adjacency couldn't be avoided."
-        );
+        if ($result->warnings->isEmpty()) {
+            session()->flash('status', 'Seating generated for every slot.');
+        } else {
+            $this->flashError("Seating generated with {$result->warnings->count()} warning(s) — some students couldn't be seated or adjacency couldn't be avoided.");
+        }
     }
 
     public function generateDuties(): void
@@ -328,7 +326,7 @@ class GenerationConstraints extends Component
         }
 
         if (! $this->examSession->seatAssignments()->exists()) {
-            session()->flash('error', 'Generate seating first — duties are assigned to the rooms actually in use each slot.');
+            $this->flashError('Generate seating first — duties are assigned to the rooms actually in use each slot.');
 
             return;
         }
@@ -344,12 +342,22 @@ class GenerationConstraints extends Component
             ? 'Generated duties for every slot.'
             : "Generated duties with {$result->warnings->count()} warning(s).");
 
-        session()->flash(
-            $result->warnings->isEmpty() ? 'status' : 'error',
-            $result->warnings->isEmpty()
-                ? 'Duties generated for every slot.'
-                : "Duties generated with {$result->warnings->count()} warning(s) — see below."
-        );
+        if ($result->warnings->isEmpty()) {
+            session()->flash('status', 'Duties generated for every slot.');
+        } else {
+            $this->flashError("Duties generated with {$result->warnings->count()} warning(s) — see below.");
+        }
+    }
+
+    /**
+     * Flashes a session error and pops it open as a dialog immediately —
+     * a plain flash banner is easy to miss above the fold on this long
+     * page, especially after a wire:confirm click already drew focus away.
+     */
+    private function flashError(string $message): void
+    {
+        session()->flash('error', $message);
+        $this->dispatch('open-modal', 'generation-error');
     }
 
     #[Layout('layouts.app')]

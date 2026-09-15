@@ -22,6 +22,16 @@ class CapacityCheck extends Component
      */
     public int $slotsPerDay = 2;
 
+    /**
+     * Optional targets for how many subjects share a simulated slot.
+     * Left blank ('') for "no constraint" — plain string properties so an
+     * emptied number input doesn't fail Livewire's int-cast hydration;
+     * simulateSlots() converts them to nullable ints before simulating.
+     */
+    public string $minSubjectsPerSlot = '';
+
+    public string $maxSubjectsPerSlot = '';
+
     public bool $showSlotSimulation = false;
 
     /**
@@ -52,14 +62,28 @@ class CapacityCheck extends Component
         $this->authorize('generate_roster');
 
         try {
-            $this->validate(['slotsPerDay' => ['required', 'integer', 'min:1']]);
+            $this->validate([
+                'slotsPerDay' => ['required', 'integer', 'min:1'],
+                'minSubjectsPerSlot' => ['nullable', 'integer', 'min:1'],
+                'maxSubjectsPerSlot' => [
+                    'nullable', 'integer', 'min:1',
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        if ($value !== null && $value !== '' && $this->minSubjectsPerSlot !== '' && (int) $value < (int) $this->minSubjectsPerSlot) {
+                            $fail('The maximum subjects per slot must be at least the minimum.');
+                        }
+                    },
+                ],
+            ]);
         } catch (ValidationException $e) {
             $this->dispatch('open-modal', 'capacity-check-error');
 
             throw $e;
         }
 
-        $this->slotRequirementsData = (new SlotCapacitySimulator)->simulate($this->examSession)
+        $min = $this->minSubjectsPerSlot === '' ? null : (int) $this->minSubjectsPerSlot;
+        $max = $this->maxSubjectsPerSlot === '' ? null : (int) $this->maxSubjectsPerSlot;
+
+        $this->slotRequirementsData = (new SlotCapacitySimulator)->simulate($this->examSession, $min, $max)
             ->map(fn (SlotRequirement $r) => get_object_vars($r))
             ->all();
         $this->showSlotSimulation = true;

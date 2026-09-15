@@ -128,6 +128,48 @@ class CapacityCheckTest extends TestCase
             ->assertDispatched('open-modal');
     }
 
+    public function test_max_subjects_per_slot_is_passed_through_to_the_simulator(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Room::factory()->count(2)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        foreach (range(1, 2) as $i) {
+            $subject = Subject::factory()->create();
+            $student = Student::factory()->create(['roll_no' => str_pad((string) ++self::$rollNoSequence, 8, '0', STR_PAD_LEFT)]);
+            Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'A']);
+        }
+
+        $component = Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('maxSubjectsPerSlot', '1')
+            ->call('simulateSlots')
+            ->assertHasNoErrors();
+
+        // With capacity for both subjects in one slot but capped at 1
+        // each, they must end up in two separate simulated slots.
+        $this->assertCount(2, $component->viewData('slotRequirements'));
+    }
+
+    public function test_max_subjects_per_slot_must_be_at_least_the_minimum(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('minSubjectsPerSlot', '3')
+            ->set('maxSubjectsPerSlot', '2')
+            ->call('simulateSlots')
+            ->assertHasErrors(['maxSubjectsPerSlot'])
+            ->assertSet('showSlotSimulation', false)
+            ->assertDispatched('open-modal');
+    }
+
     public function test_re_simulating_with_an_invalid_slots_per_day_does_not_crash_on_cached_results(): void
     {
         // Regression: after a successful simulate, slotRequirementsData
