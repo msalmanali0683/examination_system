@@ -175,9 +175,13 @@ class GenerationConstraints extends Component
 
     /**
      * A manual pin doesn't go through TimetableGenerator, so it never gets
-     * the same-day clash check that gives — this runs it immediately
-     * instead of leaving the admin to find out only after the next full
-     * "Generate Timetable" run. Only the subject just pinned is annotated
+     * the same-day/same-slot clash check that gives — this runs it
+     * immediately instead of leaving the admin to find out only after the
+     * next full "Generate Timetable" run. Mirrors the generator's own
+     * rule: a same-semester subject sharing this day is flagged (that's
+     * the whole cohort, never share a day); a different-semester subject
+     * (a repeater) sharing this day is fine — only the exact same slot is
+     * flagged for those. Only the subject just pinned is annotated
      * (matches how the generator itself only notes a conflict on whichever
      * subject it placed last), so this never overwrites an unrelated note
      * already sitting on another subject.
@@ -196,10 +200,11 @@ class GenerationConstraints extends Component
             ->whereDate('date', $slot->date)
             ->pluck('id');
 
-        $subjectIdsSameDay = SubjectSlotAssignment::where('exam_session_id', $sessionId)
+        $sameDayAssignments = SubjectSlotAssignment::where('exam_session_id', $sessionId)
             ->whereIn('time_slot_id', $sameDaySlotIds)
-            ->pluck('subject_id')
-            ->all();
+            ->get(['subject_id', 'time_slot_id']);
+
+        $subjectIdsSameDay = $sameDayAssignments->pluck('subject_id')->all();
 
         if (count($subjectIdsSameDay) < 2) {
             return;
@@ -210,20 +215,59 @@ class GenerationConstraints extends Component
             ->get(['student_id', 'subject_id']);
 
         $graph = (new ConflictGraphBuilder)->build($enrollments);
+        $semesters = $this->semestersForSubjects($sessionId, $subjectIdsSameDay);
+        $mySemesters = $semesters[$subjectId] ?? [];
+        $slotOfSubject = $sameDayAssignments->pluck('time_slot_id', 'subject_id');
 
-        $clashingWith = collect($subjectIdsSameDay)
+        $others = collect($subjectIdsSameDay)
             ->reject(fn ($id) => $id === $subjectId)
             ->filter(fn ($id) => ($graph[$subjectId][$id] ?? 0) > 0);
 
-        if ($clashingWith->isEmpty()) {
+        $sameSemesterClash = $others->filter(function ($id) use ($semesters, $mySemesters) {
+            $otherSemesters = $semesters[$id] ?? [];
+
+            return empty($mySemesters) || empty($otherSemesters)
+                ? true
+                : count(array_intersect($mySemesters, $otherSemesters)) > 0;
+        });
+
+        $exactSlotClash = $others->filter(fn ($id) => ($slotOfSubject[$id] ?? null) === $slotId);
+
+        $messages = [];
+
+        if ($sameSemesterClash->isNotEmpty()) {
+            $names = Subject::whereIn('id', $sameSemesterClash)->pluck('code')->implode(', ');
+            $messages[] = "Shares students with {$names} on the same day — placed anyway.";
+        }
+
+        if ($exactSlotClash->isNotEmpty()) {
+            $names = Subject::whereIn('id', $exactSlotClash)->pluck('code')->implode(', ');
+            $messages[] = "Shares students with {$names} in the exact same time slot — placed anyway.";
+        }
+
+        if (empty($messages)) {
             return;
         }
 
-        $names = Subject::whereIn('id', $clashingWith)->pluck('code')->implode(', ');
-
         SubjectSlotAssignment::where('exam_session_id', $sessionId)
             ->where('subject_id', $subjectId)
-            ->update(['conflict_note' => "Shares students with {$names} on the same day — placed anyway."]);
+            ->update(['conflict_note' => implode(' ', $messages)]);
+    }
+
+    /**
+     * @param  int[]  $subjectIds
+     * @return array<int, int[]> subject_id => semester number(s)
+     */
+    private function semestersForSubjects(int $sessionId, array $subjectIds): array
+    {
+        return Enrollment::where('exam_session_id', $sessionId)
+            ->whereIn('subject_id', $subjectIds)
+            ->select('subject_id', 'section')
+            ->distinct()
+            ->get()
+            ->groupBy('subject_id')
+            ->map(fn ($rows) => SemesterExtractor::fromSections($rows->pluck('section'))->all())
+            ->all();
     }
 
     /**
@@ -433,9 +477,15 @@ class GenerationConstraints extends Component
         $subjects = Subject::whereIn('id', $subjectIds)->get()->keyBy('id');
         $labels = $subjects->mapWithKeys(fn (Subject $s) => [$s->id => "{$s->code} - {$s->title}"])->all();
 
+        // Which semester(s) each subject belongs to — lets the generator
+        // tell a whole-cohort same-semester clash (never share a day)
+        // apart from a repeater sharing a paper across semesters (fine on
+        // the same day, just never the same exact slot).
+        $semesterBySubject = $this->semestersForSubjects($sessionId, $subjectIds);
+
         $graph = (new ConflictGraphBuilder)->build($enrollments);
         $roomsFit = $this->examSession->respect_room_capacity ? $this->roomsFitChecker($sessionId, $excludedIds) : null;
-        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays, $roomsFit);
+        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays, $roomsFit, $semesterBySubject);
 
         DB::transaction(function () use ($result, $sessionId, $pinned, $excludedIds) {
             foreach ($result->assignments as $subjectId => $slotId) {
@@ -673,17 +723,53 @@ class GenerationConstraints extends Component
 
         $distinctDays = $timeSlots->pluck('date')->map(fn ($d) => $d->format('Y-m-d'))->unique();
 
+        // Same-semester subjects share almost their whole cohort, so a day
+        // another subject of the same semester already occupies is
+        // flagged even without an explicit shared-enrollment record. A
+        // different (known) semester is never flagged at the day level —
+        // that's fine now (a repeater sitting two papers on one day) — see
+        // $clashingSlotsBySubject below for the one thing that still
+        // matters for them: the exact same slot.
         $clashingDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $conflictGraph, $semesterBySubject) {
             $mySemesters = $semesterBySubject->get($subject->id, collect());
 
             $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $conflictGraph, $semesterBySubject, $mySemesters) {
                 $othersThatDay = collect($subjectIdsByDay->get($day, []))->reject(fn ($id) => $id === $subject->id);
 
-                return $othersThatDay->contains(fn ($id) => ($conflictGraph[$subject->id][$id] ?? 0) > 0)
-                    || $othersThatDay->flatMap(fn ($id) => $semesterBySubject->get($id, collect()))->intersect($mySemesters)->isNotEmpty();
+                return $othersThatDay->contains(function ($id) use ($conflictGraph, $subject, $semesterBySubject, $mySemesters) {
+                    $otherSemesters = $semesterBySubject->get($id, collect());
+
+                    if ($mySemesters->isNotEmpty() && $otherSemesters->isNotEmpty()) {
+                        return $otherSemesters->intersect($mySemesters)->isNotEmpty();
+                    }
+
+                    // Semester unknown on one side or both: conservative
+                    // fallback, same as the generator — only flag if they
+                    // demonstrably share a student.
+                    return ($conflictGraph[$subject->id][$id] ?? 0) > 0;
+                });
             })->values();
 
             return [$subject->id => $days];
+        });
+
+        // Exact-slot clash preview: whatever the semester situation, two
+        // subjects that share a student can never both sit the exact same
+        // time slot — the one thing that's never allowed regardless of
+        // the day-level rule above.
+        $subjectIdsBySlot = $assignments
+            ->filter(fn ($a) => $a->time_slot_id !== null && ! $a->is_excluded)
+            ->groupBy('time_slot_id')
+            ->map(fn ($rows) => $rows->pluck('subject_id')->all());
+
+        $clashingSlotsBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($timeSlots, $subjectIdsBySlot, $conflictGraph) {
+            $slotIds = $timeSlots->filter(function ($slot) use ($subject, $subjectIdsBySlot, $conflictGraph) {
+                $othersInSlot = collect($subjectIdsBySlot->get($slot->id, []))->reject(fn ($id) => $id === $subject->id);
+
+                return $othersInSlot->contains(fn ($id) => ($conflictGraph[$subject->id][$id] ?? 0) > 0);
+            })->pluck('id');
+
+            return [$subject->id => $slotIds];
         });
 
         $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
@@ -711,6 +797,7 @@ class GenerationConstraints extends Component
             'seatsAvailableTotal' => $seatsAvailableTotal,
             'seatsUsedPerSlot' => $seatsUsedPerSlot,
             'clashingDaysBySubject' => $clashingDaysBySubject,
+            'clashingSlotsBySubject' => $clashingSlotsBySubject,
             'missingTeacherSections' => $missingTeacherSections,
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,

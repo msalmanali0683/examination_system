@@ -259,4 +259,109 @@ class TimetableGeneratorTest extends TestCase
 
         $this->assertSame('day2', $slotDays[$result->assignments[2]]);
     }
+
+    public function test_different_semester_subjects_sharing_a_student_are_allowed_the_same_day_different_slot(): void
+    {
+        // Subject 1 (semester 1) and subject 2 (semester 3) share a
+        // student — a repeater sitting an earlier-semester paper alongside
+        // their current one. Only one day exists, so the only way to place
+        // subject 2 at all is to share subject 1's day at a different
+        // slot — proving that's allowed rather than being blocked outright
+        // (which the old "never share a day" rule would have done).
+        $graph = [1 => [2 => 1], 2 => [1 => 1]];
+        $slotDays = [100 => 'day1', 101 => 'day1'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 100],
+            timeSlotIds: [100, 101],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: $slotDays,
+            semesterBySubject: [1 => [1], 2 => [3]],
+        );
+
+        $this->assertSame(101, $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_different_semester_subjects_sharing_a_student_still_avoid_the_exact_same_slot(): void
+    {
+        // Same repeater scenario, but only one slot exists that day (slot
+        // 100 already taken by subject 1) — subject 2 must be pushed to
+        // day2 rather than landing in the literal same slot as 1.
+        $graph = [1 => [2 => 1], 2 => [1 => 1]];
+        $slotDays = [100 => 'day1', 200 => 'day2'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 100],
+            timeSlotIds: [100, 200],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: $slotDays,
+            semesterBySubject: [1 => [1], 2 => [3]],
+        );
+
+        $this->assertSame(200, $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_same_semester_overflow_spreads_across_the_days_slots_as_far_apart_as_possible(): void
+    {
+        // 3 same-semester subjects (1, 2, 3), all mutually sharing
+        // students (the whole cohort), but only 2 days exist — one day
+        // must carry two of that semester's papers. When forced, they
+        // should land in that day's first and last slot (max gap), not
+        // two adjacent slots.
+        $graph = [
+            1 => [2 => 5, 3 => 5],
+            2 => [1 => 5, 3 => 5],
+            3 => [1 => 5, 2 => 5],
+        ];
+        $slotDays = [100 => 'day1', 101 => 'day1', 102 => 'day1', 200 => 'day2'];
+        $semesters = [1 => [2], 2 => [2], 3 => [2]];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2, 3],
+            pinned: [],
+            timeSlotIds: [100, 101, 102, 200],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2, 3]),
+            slotDays: $slotDays,
+            semesterBySubject: $semesters,
+        );
+
+        // Exactly one day ends up with two of the three (day2 only has one
+        // slot, so it can hold at most one).
+        $dayCounts = collect($result->assignments)->countBy(fn ($slotId) => $slotDays[$slotId]);
+        $this->assertSame(2, $dayCounts['day1']);
+        $this->assertSame(1, $dayCounts['day2']);
+
+        // Whichever two subjects share day1, they must be in its first
+        // and last slot (100 and 102), never the adjacent 101/102 or 100/101.
+        $day1Slots = collect($result->assignments)->filter(fn ($slotId) => $slotDays[$slotId] === 'day1')->values();
+        $this->assertEqualsCanonicalizing([100, 102], $day1Slots->all());
+    }
+
+    public function test_subjects_with_no_semester_data_still_default_to_never_sharing_a_day(): void
+    {
+        // No $semesterBySubject entries at all for either subject — must
+        // fall back to the original "always separate days" behavior
+        // rather than assuming they're safely different semesters.
+        $graph = [1 => [2 => 1], 2 => [1 => 1]];
+        $slotDays = [100 => 'day1', 101 => 'day1', 200 => 'day2', 201 => 'day2'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 101, 200, 201],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: $slotDays,
+        );
+
+        $this->assertNotSame($slotDays[$result->assignments[1]], $slotDays[$result->assignments[2]]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
 }

@@ -245,10 +245,13 @@
                                                     $day = $slot->date->format('Y-m-d');
                                                     $used = $seatsUsedPerSlot->get($slot->id, 0);
                                                     $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
-                                                    $wouldClash = $clashingDaysBySubject->get($subject->id, collect())->contains($day);
+                                                    $wouldClashExactSlot = $clashingSlotsBySubject->get($subject->id, collect())->contains($slot->id);
+                                                    $wouldClashSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($day);
+                                                    $wouldClash = $wouldClashExactSlot || $wouldClashSameDay;
+                                                    $clashLabel = $wouldClashExactSlot ? ' &mdash; &#9888; clash (same slot)' : ($wouldClashSameDay ? ' &mdash; &#9888; clash (same day)' : '');
                                                 @endphp
                                                 <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClash])>
-                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $wouldClash ? ' &mdash; &#9888; clash (same day)' : '' !!}
+                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $clashLabel !!}
                                                 </option>
                                             @endforeach
                                         </select>
