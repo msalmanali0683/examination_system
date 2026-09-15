@@ -225,6 +225,39 @@ class RequirementCalculatorTest extends TestCase
         $this->assertSame(6, $requirement->studentCount);
     }
 
+    public function test_a_slot_with_an_unresolved_clash_is_not_met_even_with_full_capacity(): void
+    {
+        // Regression: Capacity Check only ever simulated room/teacher
+        // capacity, so a slot could show "Ready" here while Pin Subjects
+        // to Slots was warning about a real student clash the timetable
+        // generator couldn't avoid (conflict_note gets set when it placed
+        // a subject anyway because no clash-free day was left).
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 3);
+
+        \App\Models\SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'conflict_note' => 'Clashes with CS101 (12 shared students) — no clash-free day remained; placed anyway.',
+        ]);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertSame(0, $requirement->roomsShortfall());
+        $this->assertSame(0, $requirement->teachersShortfall());
+        $this->assertFalse($requirement->hasUnseatedStudents);
+        $this->assertTrue($requirement->hasUnresolvedClash);
+        $this->assertFalse($requirement->isMet());
+    }
+
     public function test_a_strategy_override_simulates_a_different_strategy_without_touching_the_sessions_saved_one(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);

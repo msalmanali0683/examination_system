@@ -113,10 +113,106 @@ class GenerationConstraints extends Component
             return;
         }
 
+        $slotId = (int) $value;
+
         SubjectSlotAssignment::updateOrCreate(
             ['exam_session_id' => $this->examSession->id, 'subject_id' => $subjectId],
-            ['time_slot_id' => (int) $value, 'is_pinned' => true, 'conflict_note' => null]
+            ['time_slot_id' => $slotId, 'is_pinned' => true, 'conflict_note' => null]
         );
+
+        $this->recordClashNoteForSameDay($subjectId, $slotId);
+    }
+
+    /**
+     * Unassigns a single subject's slot outright — unlike switching its
+     * Pin dropdown back to "Auto" (which only unpins and leaves the last
+     * slot in place until the next Generate Timetable run), this clears
+     * the slot immediately so the row goes back to "Not yet generated".
+     */
+    public function removeSlot(int $subjectId): void
+    {
+        $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
+            ->where('subject_id', $subjectId)
+            ->update(['time_slot_id' => null, 'is_pinned' => false, 'conflict_note' => null]);
+    }
+
+    /**
+     * Clears every subject's slot assignment for the whole session in one
+     * go — a fresh start for manual pinning, or to back out of a
+     * Generate Timetable run without regenerating. Exclusions are left
+     * untouched; this only clears slot/pin/conflict data.
+     */
+    public function removeAllSlots(): void
+    {
+        $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
+            ->update(['time_slot_id' => null, 'is_pinned' => false, 'conflict_note' => null]);
+
+        session()->flash('status', 'Removed every subject\'s slot assignment.');
+    }
+
+    /**
+     * A manual pin doesn't go through TimetableGenerator, so it never gets
+     * the same-day clash check that gives — this runs it immediately
+     * instead of leaving the admin to find out only after the next full
+     * "Generate Timetable" run. Only the subject just pinned is annotated
+     * (matches how the generator itself only notes a conflict on whichever
+     * subject it placed last), so this never overwrites an unrelated note
+     * already sitting on another subject.
+     */
+    private function recordClashNoteForSameDay(int $subjectId, int $slotId): void
+    {
+        $slot = TimeSlot::find($slotId);
+
+        if (! $slot) {
+            return;
+        }
+
+        $sessionId = $this->examSession->id;
+
+        $sameDaySlotIds = TimeSlot::where('exam_session_id', $sessionId)
+            ->whereDate('date', $slot->date)
+            ->pluck('id');
+
+        $subjectIdsSameDay = SubjectSlotAssignment::where('exam_session_id', $sessionId)
+            ->whereIn('time_slot_id', $sameDaySlotIds)
+            ->pluck('subject_id')
+            ->all();
+
+        if (count($subjectIdsSameDay) < 2) {
+            return;
+        }
+
+        $enrollments = Enrollment::where('exam_session_id', $sessionId)
+            ->whereIn('subject_id', $subjectIdsSameDay)
+            ->get(['student_id', 'subject_id']);
+
+        $graph = (new ConflictGraphBuilder)->build($enrollments);
+
+        $clashingWith = collect($subjectIdsSameDay)
+            ->reject(fn ($id) => $id === $subjectId)
+            ->filter(fn ($id) => ($graph[$subjectId][$id] ?? 0) > 0);
+
+        if ($clashingWith->isEmpty()) {
+            return;
+        }
+
+        $names = Subject::whereIn('id', $clashingWith)->pluck('code')->implode(', ');
+
+        SubjectSlotAssignment::where('exam_session_id', $sessionId)
+            ->where('subject_id', $subjectId)
+            ->update(['conflict_note' => "Shares students with {$names} on the same day — placed anyway."]);
     }
 
     /**
@@ -442,6 +538,39 @@ class GenerationConstraints extends Component
             ->groupBy('subject_id')
             ->map(fn ($rows) => $rows->sortBy('section')->pluck('c', 'section'));
 
+        // A section string is "<program> <semester><letter>" (e.g. "BSAI
+        // 2A") — the leading number is the semester/year group. Subjects
+        // in the same semester share the same cohort of students almost
+        // entirely, so grouping the table this way makes same-semester
+        // subjects visually adjacent — exactly the ones that must never
+        // land on the same day.
+        $semesterBySubject = $sectionBreakdown->map(fn ($sections) => $sections->keys()
+            ->map(function (string $section) {
+                preg_match('/(\d+)/', $section, $m);
+
+                return $m[1] ?? null;
+            })
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values());
+
+        $subjects = $subjects->sortBy(fn (Subject $s) => (int) ($semesterBySubject->get($s->id, collect())->first() ?? 999))->values();
+
+        // Every active room is available in every slot (rooms aren't
+        // restricted per slot in this app), so total seat capacity is one
+        // constant number; what varies per slot is how much of it other
+        // subjects already assigned there are using — that's what the Pin
+        // dropdown needs to show so the admin can see, before picking a
+        // slot, whether it still has room for this subject's students.
+        $seatsAvailableTotal = $this->examSession->sessionRooms()->where('is_active', true)->with('room')->get()
+            ->sum(fn ($sr) => $sr->effectiveCapacity());
+
+        $seatsUsedPerSlot = $subjects
+            ->filter(fn (Subject $s) => $assignments->get($s->id)?->time_slot_id !== null && ! $assignments->get($s->id)?->is_excluded)
+            ->groupBy(fn (Subject $s) => $assignments->get($s->id)->time_slot_id)
+            ->map(fn ($rows) => $rows->sum('enrollments_count'));
+
         $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
             ->whereNull('enrollments.teacher_id')
             ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
@@ -463,6 +592,9 @@ class GenerationConstraints extends Component
             'subjects' => $subjects,
             'assignments' => $assignments,
             'sectionBreakdown' => $sectionBreakdown,
+            'semesterBySubject' => $semesterBySubject,
+            'seatsAvailableTotal' => $seatsAvailableTotal,
+            'seatsUsedPerSlot' => $seatsUsedPerSlot,
             'missingTeacherSections' => $missingTeacherSections,
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),

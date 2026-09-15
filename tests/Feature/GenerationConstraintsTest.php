@@ -438,6 +438,117 @@ class GenerationConstraintsTest extends TestCase
         ]);
     }
 
+    public function test_remove_slot_clears_a_single_subjects_assignment(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slot->id, 'is_pinned' => true, 'conflict_note' => 'x']);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'time_slot_id' => $slot->id]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('removeSlot', $subjectA->id);
+
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => null,
+            'is_pinned' => false,
+            'conflict_note' => null,
+        ]);
+        // Subject B is untouched.
+        $this->assertDatabaseHas('subject_slot_assignments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectB->id,
+            'time_slot_id' => $slot->id,
+        ]);
+    }
+
+    public function test_remove_all_slots_clears_every_subjects_assignment(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slot->id, 'is_pinned' => true]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'time_slot_id' => $slot->id, 'conflict_note' => 'clash']);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('removeAllSlots');
+
+        $this->assertDatabaseHas('subject_slot_assignments', ['subject_id' => $subjectA->id, 'time_slot_id' => null, 'is_pinned' => false]);
+        $this->assertDatabaseHas('subject_slot_assignments', ['subject_id' => $subjectB->id, 'time_slot_id' => null, 'conflict_note' => null]);
+    }
+
+    public function test_manually_pinning_a_subject_flags_a_same_day_clash_with_another_subject(): void
+    {
+        // Regression: Capacity Check showed "Ready" while Pin Subjects to
+        // Slots showed no warning either, because a manual pin never ran
+        // the clash check the real timetable generator runs — only a full
+        // "Generate Timetable" rerun surfaced the clash. Pinning must
+        // check same-day clashes immediately.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $sharedStudent = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $morning->id,
+            'is_pinned' => true,
+        ]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+
+        // Different slot, but the SAME day as subject A — must be flagged.
+        $component->call('updatePin', $subjectB->id, (string) $afternoon->id);
+
+        $noteB = SubjectSlotAssignment::where('exam_session_id', $session->id)->where('subject_id', $subjectB->id)->value('conflict_note');
+        $this->assertNotNull($noteB);
+        $this->assertStringContainsString($subjectA->code, $noteB);
+    }
+
+    public function test_manually_pinning_a_subject_to_a_clash_free_day_leaves_no_note(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $day1 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+        $day2 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21']);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $sharedStudent = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $day1->id,
+            'is_pinned' => true,
+        ]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $component->call('updatePin', $subjectB->id, (string) $day2->id);
+
+        $noteB = SubjectSlotAssignment::where('exam_session_id', $session->id)->where('subject_id', $subjectB->id)->value('conflict_note');
+        $this->assertNull($noteB);
+    }
+
     public function test_generate_places_non_conflicting_subjects_without_notes(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

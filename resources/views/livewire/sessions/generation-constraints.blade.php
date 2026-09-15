@@ -132,10 +132,16 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Pin Subjects to Slots</h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Optional. Everything else is placed automatically, clash-free where possible.</p>
         </div>
-        <x-btn wire:click="generateTimetable" wire:loading.attr="disabled" wire:confirm="Regenerate the timetable? Pinned subjects are left untouched; everything else will be recomputed." icon="refresh">
-            <span wire:loading.remove wire:target="generateTimetable">Generate Timetable</span>
-            <span wire:loading wire:target="generateTimetable">Generating&hellip;</span>
-        </x-btn>
+        <div class="flex items-center gap-2">
+            <x-btn wire:click="removeAllSlots" wire:loading.attr="disabled" wire:confirm="Remove every subject's assigned slot? Pins and slot assignments will be cleared for the whole session." variant="secondary" icon="trash">
+                <span wire:loading.remove wire:target="removeAllSlots">Remove All Slots</span>
+                <span wire:loading wire:target="removeAllSlots">Removing&hellip;</span>
+            </x-btn>
+            <x-btn wire:click="generateTimetable" wire:loading.attr="disabled" wire:confirm="Regenerate the timetable? Pinned subjects are left untouched; everything else will be recomputed." icon="refresh">
+                <span wire:loading.remove wire:target="generateTimetable">Generate Timetable</span>
+                <span wire:loading wire:target="generateTimetable">Generating&hellip;</span>
+            </x-btn>
+        </div>
     </div>
 
     <div class="p-4 sm:p-6">
@@ -149,6 +155,7 @@
                     <thead>
                         <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                             <th class="py-2 pl-4 sm:pl-6 pr-4">Subject</th>
+                            <th class="py-2 pr-4">Semester</th>
                             <th class="py-2 pr-4">Students</th>
                             <th class="py-2 pr-4">Assigned Slot</th>
                             <th class="py-2 pr-4">Pin</th>
@@ -161,7 +168,9 @@
                             @php
                                 $assignment = $assignments->get($subject->id);
                                 $sections = $sectionBreakdown->get($subject->id, collect());
+                                $semesters = $semesterBySubject->get($subject->id, collect());
                                 $excluded = (bool) $assignment?->is_excluded;
+                                $semesterColors = ['blue', 'green', 'indigo', 'yellow', 'gray'];
                             @endphp
                             <tr @class(['hover:bg-gray-50 dark:hover:bg-gray-900/30', 'opacity-50' => $excluded])>
                                 <td class="py-2.5 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">
@@ -171,6 +180,13 @@
                                             {{ $sections->map(fn ($c, $section) => "{$section}: {$c}")->implode(', ') }}
                                         </div>
                                     @endif
+                                </td>
+                                <td class="py-2.5 pr-4">
+                                    @forelse ($semesters as $semester)
+                                        <x-badge :color="$semesterColors[((int) $semester - 1) % count($semesterColors)]">{{ $semester }}</x-badge>
+                                    @empty
+                                        <span class="text-gray-400">&mdash;</span>
+                                    @endforelse
                                 </td>
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->enrollments_count }}</td>
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">
@@ -186,14 +202,26 @@
                                     @endif
                                 </td>
                                 <td class="py-2.5 pr-4">
-                                    <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" @disabled($excluded) class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm disabled:opacity-50">
-                                        <option value="">Auto</option>
-                                        @foreach ($timeSlots as $slot)
-                                            <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id)>
-                                                {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }}
-                                            </option>
-                                        @endforeach
-                                    </select>
+                                    <div class="flex items-center gap-1.5">
+                                        <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" @disabled($excluded) class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm disabled:opacity-50">
+                                            <option value="">Auto</option>
+                                            @foreach ($timeSlots as $slot)
+                                                @php
+                                                    $alreadyThere = $assignment?->time_slot_id === $slot->id;
+                                                    $used = $seatsUsedPerSlot->get($slot->id, 0);
+                                                    $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
+                                                @endphp
+                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal])>
+                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @if ($assignment?->time_slot_id && ! $excluded)
+                                            <button type="button" wire:click="removeSlot({{ $subject->id }})" wire:loading.attr="disabled" title="Remove this subject's assigned slot" class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50">
+                                                <x-icon name="trash" class="h-4 w-4" />
+                                            </button>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="py-2.5 pr-4">
                                     <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) @disabled($excluded) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">

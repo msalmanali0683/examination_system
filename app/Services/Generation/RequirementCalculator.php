@@ -4,6 +4,7 @@ namespace App\Services\Generation;
 
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
+use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\SeatingStrategy;
@@ -46,7 +47,19 @@ class RequirementCalculator
         $excludedCount = $constraints->where('is_excluded', true)->count();
         $constrainedNotExcluded = $constraints->where('is_excluded', false);
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $session) {
+        // A slot can have plenty of room/teacher capacity and still not be
+        // ready: the real timetable generator records a conflict_note on a
+        // subject when it couldn't find a clash-free day for it and placed
+        // it anyway (see TimetableGenerator's capacity-shortfall/clash
+        // conflicts). Capacity Check must surface that too, or it can show
+        // "Ready" for a slot that Pin Subjects to Slots is warning about.
+        $slotsWithUnresolvedClash = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->whereNotNull('conflict_note')
+            ->pluck('time_slot_id')
+            ->unique();
+
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $slotsWithUnresolvedClash, $session) {
             $slot = $active['slot'];
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
@@ -79,6 +92,7 @@ class RequirementCalculator
                 teachersAvailable: max(0, $teachersAvailable),
                 hasUnseatedStudents: $unseated->isNotEmpty(),
                 seatsAvailable: $seatsAvailable,
+                hasUnresolvedClash: $slotsWithUnresolvedClash->contains($slot->id),
             );
         })->values();
     }

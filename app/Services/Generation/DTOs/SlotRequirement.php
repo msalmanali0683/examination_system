@@ -14,6 +14,7 @@ final class SlotRequirement
         public readonly int $teachersAvailable,
         public readonly bool $hasUnseatedStudents,
         public readonly int $seatsAvailable = 0,
+        public readonly bool $hasUnresolvedClash = false,
     ) {
     }
 
@@ -43,6 +44,6 @@ final class SlotRequirement
 
     public function isMet(): bool
     {
-        return ! $this->hasUnseatedStudents && $this->roomsShortfall() === 0 && $this->teachersShortfall() === 0;
+        return ! $this->hasUnseatedStudents && $this->roomsShortfall() === 0 && $this->teachersShortfall() === 0 && ! $this->hasUnresolvedClash;
     }
 }
