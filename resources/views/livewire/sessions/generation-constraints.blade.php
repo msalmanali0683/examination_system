@@ -61,6 +61,50 @@
     </form>
 </x-card>
 
+@if ($missingTeacherSections->isNotEmpty())
+    <x-card :padded="false">
+        <div class="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700">
+            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Missing Teachers</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">These subject/section combinations had no teacher on the enrollment sheet. Assign one so the exclusion and duty-matches-sections rules above can account for them.</p>
+        </div>
+
+        <div class="p-4 sm:p-6">
+            <div class="overflow-x-auto -mx-4 sm:-mx-6">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead>
+                        <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                            <th class="py-2 pl-4 sm:pl-6 pr-4">Subject</th>
+                            <th class="py-2 pr-4">Section</th>
+                            <th class="py-2 pr-4">Missing</th>
+                            <th class="py-2 pr-4 sm:pr-6">Assign Teacher</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        @foreach ($missingTeacherSections as $row)
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
+                                <td class="py-2.5 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">{{ $row->code }} &mdash; {{ $row->title }}</td>
+                                <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $row->section }}</td>
+                                <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $row->missing_count }} student{{ $row->missing_count === 1 ? '' : 's' }}</td>
+                                <td class="py-2.5 pr-4 sm:pr-6">
+                                    <div class="flex items-center gap-2">
+                                        <select wire:model="missingTeacherSelection.{{ $row->subject_id }}.{{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                            <option value="">Select teacher&hellip;</option>
+                                            @foreach ($activeTeachers as $teacher)
+                                                <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        <x-btn wire:click="assignMissingTeacher({{ $row->subject_id }}, {{ Illuminate\Support\Js::from($row->section) }})" wire:loading.attr="disabled" variant="secondary">Assign</x-btn>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </x-card>
+@endif
+
 <x-card :padded="false">
     <div class="p-4 sm:p-6 flex items-center justify-between gap-4 flex-wrap border-b border-gray-100 dark:border-gray-700">
         <div>

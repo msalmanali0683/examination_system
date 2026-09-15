@@ -38,6 +38,15 @@ class GenerationConstraints extends Component
 
     public bool $showRequirements = false;
 
+    /**
+     * Pending teacher choice for each subject/section that has no teacher
+     * on any of its enrollments (e.g. the import row's Teacher column was
+     * blank) — keyed by subject_id then section. Assigning fills in only
+     * the enrollments still missing a teacher for that pair, so it never
+     * overwrites a teacher already recorded on some of them.
+     */
+    public array $missingTeacherSelection = [];
+
     public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_sessions');
@@ -153,6 +162,39 @@ class GenerationConstraints extends Component
             ['exam_session_id' => $this->examSession->id, 'subject_id' => $subjectId],
             ['is_excluded' => true, 'is_pinned' => false, 'time_slot_id' => null, 'conflict_note' => null]
         );
+    }
+
+    /**
+     * Assigns the chosen teacher to every enrollment for this subject+
+     * section that currently has no teacher, so features that depend on
+     * the enrollment Teacher column (invigilator-subject exclusion,
+     * duty-matches-sections) can account for them.
+     */
+    public function assignMissingTeacher(int $subjectId, string $section): void
+    {
+        $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $teacherId = $this->missingTeacherSelection[$subjectId][$section] ?? null;
+
+        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+            session()->flash('error', 'Pick a teacher before assigning.');
+
+            return;
+        }
+
+        Enrollment::where('exam_session_id', $this->examSession->id)
+            ->where('subject_id', $subjectId)
+            ->where('section', $section)
+            ->whereNull('teacher_id')
+            ->update(['teacher_id' => $teacherId]);
+
+        unset($this->missingTeacherSelection[$subjectId][$section]);
+
+        session()->flash('status', "Teacher assigned to {$section}.");
     }
 
     public function generateTimetable(): void
@@ -332,6 +374,15 @@ class GenerationConstraints extends Component
             ->groupBy('subject_id')
             ->map(fn ($rows) => $rows->sortBy('section')->pluck('c', 'section'));
 
+        $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
+            ->whereNull('enrollments.teacher_id')
+            ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
+            ->selectRaw('enrollments.subject_id, enrollments.section, subjects.code, subjects.title, count(*) as missing_count')
+            ->groupBy('enrollments.subject_id', 'enrollments.section', 'subjects.code', 'subjects.title')
+            ->orderBy('subjects.code')
+            ->orderBy('enrollments.section')
+            ->get();
+
         // Computing this runs a full seating simulation across every slot,
         // so it's only done when the admin asks for it (Check Capacity),
         // not on every render — otherwise every unrelated click (pinning a
@@ -344,6 +395,8 @@ class GenerationConstraints extends Component
             'subjects' => $subjects,
             'assignments' => $assignments,
             'sectionBreakdown' => $sectionBreakdown,
+            'missingTeacherSections' => $missingTeacherSections,
+            'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(),
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
             'requirements' => $requirements,
