@@ -12,6 +12,6 @@
 <body>
     <h1>{{ config('exam.university_name') }} &mdash; {{ $session->effectiveDepartmentName() }}</h1>
     <h2>Invigilation Duty Roster: {{ $session->name }}</h2>
-    @include('reports.duty-sheet', ['teacherGroups' => $teacherGroups, 'session' => $session])
+    @include('reports.duty-sheet', ['teacherGroups' => $teacherGroups, 'session' => $session, 'showRoomSubject' => $showRoomSubject ?? true])
 </body>
 </html>

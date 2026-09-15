@@ -84,6 +84,10 @@
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Every teacher's invigilation duties &mdash; date, time, room and subject &mdash; grouped by teacher.</p>
             @if ($hasDuties)
+                <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 mb-3">
+                    <input type="checkbox" wire:model.live="showRoomSubjectOnDuty" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    Print room &amp; subject
+                </label>
                 <div class="flex items-center gap-2 flex-wrap">
                     <a href="{{ route('sessions.reports.duty-roster.xlsx', array_merge(['examSession' => $examSession], $this->dutyReportQuery())) }}">
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>

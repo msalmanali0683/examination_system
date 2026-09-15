@@ -293,6 +293,38 @@ class ReportDownloadsTest extends TestCase
         $this->assertStringContainsString($teacherName, $dutyHtml);
     }
 
+    public function test_hiding_room_and_subject_blanks_them_on_the_duty_roster_but_keeps_the_other_columns(): void
+    {
+        $session = $this->seedSession();
+        $duty = DutyAssignment::where('exam_session_id', $session->id)->first();
+        $roomName = $duty->room->name;
+        $teacherName = $duty->teacher->name;
+
+        $shown = (new \App\Exports\DutySheetExport($session, null, true))->view()->render();
+        $hidden = (new \App\Exports\DutySheetExport($session, null, false))->view()->render();
+
+        $this->assertStringContainsString($roomName, $shown);
+        $this->assertStringNotContainsString($roomName, $hidden);
+
+        // Date/day/time and the teacher's own name stay regardless.
+        $this->assertStringContainsString($teacherName, $shown);
+        $this->assertStringContainsString($teacherName, $hidden);
+    }
+
+    public function test_duty_roster_downloads_accept_the_show_room_subject_query_flag(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)
+            ->get(route('sessions.reports.duty-roster.pdf', [$session, 'show_room_subject' => '0']))
+            ->assertOk();
+
+        $this->actingAs($staff)
+            ->get(route('sessions.reports.duty-roster.xlsx', [$session, 'show_room_subject' => '0']))
+            ->assertOk();
+    }
+
     public function test_report_downloads_panel_shows_links_once_generated(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

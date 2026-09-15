@@ -31,6 +31,12 @@ class ReportDownloads extends Component
      */
     public bool $showInvigilators = true;
 
+    /**
+     * Duty Roster only — whether its Room / Subject(s) columns print. No
+     * other report has this option.
+     */
+    public bool $showRoomSubjectOnDuty = true;
+
     public function emailAllDutySheets(): void
     {
         $this->authorize('view_reports');
@@ -56,6 +62,7 @@ class ReportDownloads extends Component
             $pdf = Pdf::loadView('reports.duty-sheet-pdf', [
                 'teacherGroups' => collect([$group]),
                 'session' => $this->examSession,
+                'showRoomSubject' => $this->showRoomSubjectOnDuty,
             ])->setPaper('a4', 'portrait')->output();
 
             Mail::to($group->teacher->email)->send(
@@ -98,12 +105,23 @@ class ReportDownloads extends Component
     }
 
     /**
-     * Same as reportQuery(), minus the invigilator flag — the Duty Roster
-     * always shows invigilators, so that option never applies to it.
+     * Same as reportQuery(), minus the invigilator flag (the Duty Roster
+     * always shows invigilators, so that option never applies to it) but
+     * with its own room/subject-visibility flag instead.
      */
     public function dutyReportQuery(): array
     {
-        return $this->filterDate !== '' ? ['date' => $this->filterDate] : [];
+        $query = [];
+
+        if ($this->filterDate !== '') {
+            $query['date'] = $this->filterDate;
+        }
+
+        if (! $this->showRoomSubjectOnDuty) {
+            $query['show_room_subject'] = '0';
+        }
+
+        return $query;
     }
 
     public function render()

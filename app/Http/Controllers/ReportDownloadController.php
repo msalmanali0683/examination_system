@@ -65,7 +65,7 @@ class ReportDownloadController extends Controller
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
 
-        return Excel::download(new DutySheetExport($examSession, $date), $this->filename($examSession, 'Duty-Roster', 'xlsx', $date));
+        return Excel::download(new DutySheetExport($examSession, $date, $this->showRoomSubject($request)), $this->filename($examSession, 'Duty-Roster', 'xlsx', $date));
     }
 
     public function dutySheetPdf(Request $request, ExamSession $examSession): Response
@@ -75,7 +75,7 @@ class ReportDownloadController extends Controller
 
         $teacherGroups = (new ReportDataBuilder)->dutyRowsByTeacher($examSession, $date);
 
-        return Pdf::loadView('reports.duty-sheet-pdf', ['teacherGroups' => $teacherGroups, 'session' => $examSession])
+        return Pdf::loadView('reports.duty-sheet-pdf', ['teacherGroups' => $teacherGroups, 'session' => $examSession, 'showRoomSubject' => $this->showRoomSubject($request)])
             ->setPaper('a4', 'portrait')
             ->download($this->filename($examSession, 'Duty-Roster', 'pdf', $date));
     }
@@ -145,6 +145,16 @@ class ReportDownloadController extends Controller
     private function showInvigilators(Request $request): bool
     {
         return $request->query('show_invigilators', '1') !== '0';
+    }
+
+    /**
+     * Duty Roster only — whether the Room / Subject(s) columns print,
+     * defaulting to true (current behaviour) unless turned off with
+     * ?show_room_subject=0.
+     */
+    private function showRoomSubject(Request $request): bool
+    {
+        return $request->query('show_room_subject', '1') !== '0';
     }
 
     private function filename(ExamSession $examSession, string $report, string $extension, ?string $date = null): string
