@@ -44,15 +44,20 @@ class SlotCapacitySimulatorTest extends TestCase
         Teacher::factory()->count(3)->create(['is_active' => true]);
 
         // No TimeSlot, no SubjectSlotAssignment created anywhere in this test.
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 2);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertCount(1, $result);
         $this->assertSame(5, $result->first()->studentCount);
         $this->assertSame(1, $result->first()->roomsNeeded);
     }
 
-    public function test_subjects_are_grouped_into_slots_largest_first(): void
+    public function test_clash_free_subjects_are_packed_together_as_tightly_as_capacity_allows(): void
     {
+        // 4 rooms, capacity 20 each = plenty of room for all four subjects
+        // (10+8+6+4 = 28 students, needing at most 4 rooms since Strict
+        // gives each subject its own room) — none of them share a student,
+        // so a capacity-aware packer should fit every one of them into a
+        // single simulated slot instead of splitting into fixed batches.
         $session = ExamSession::factory()->create();
         Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
         foreach (Room::all() as $room) {
@@ -68,13 +73,40 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->enrollStudents($session, $small, 'A', 6);
         $this->enrollStudents($session, $tiny, 'A', 4);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 2);
+        $result = (new SlotCapacitySimulator)->simulate($session);
+
+        $this->assertCount(1, $result);
+        $this->assertSame(28, $result->first()->studentCount);
+        $this->assertSame(4, $result->first()->roomsNeeded);
+    }
+
+    public function test_a_slot_only_takes_as_many_subjects_as_its_rooms_can_hold_then_opens_another(): void
+    {
+        // Same 4 rooms as above (so the first four subjects exactly fill
+        // them), plus a fifth clash-free subject that has nowhere left to
+        // go in that slot — it must open a second, smaller slot rather
+        // than being force-fit or dropped. Demonstrates slots naturally
+        // needing different numbers of rooms (4 vs 1), not a fixed count.
+        $session = ExamSession::factory()->create();
+        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        $subjects = Subject::factory()->count(5)->create();
+        $this->enrollStudents($session, $subjects[0], 'A', 10);
+        $this->enrollStudents($session, $subjects[1], 'A', 8);
+        $this->enrollStudents($session, $subjects[2], 'A', 6);
+        $this->enrollStudents($session, $subjects[3], 'A', 4);
+        $this->enrollStudents($session, $subjects[4], 'A', 3);
+
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertCount(2, $result);
-        // Largest two subjects (10 + 8) share the first simulated slot.
-        $this->assertSame(18, $result->first()->studentCount);
-        // The remaining two (6 + 4) share the second.
-        $this->assertSame(10, $result->last()->studentCount);
+        $this->assertSame(4, $result->first()->roomsNeeded);
+        $this->assertSame(28, $result->first()->studentCount);
+        $this->assertSame(1, $result->last()->roomsNeeded);
+        $this->assertSame(3, $result->last()->studentCount);
     }
 
     public function test_every_section_of_a_subject_stays_in_the_same_simulated_slot(): void
@@ -91,13 +123,43 @@ class SlotCapacitySimulatorTest extends TestCase
         $other = Subject::factory()->create();
         $this->enrollStudents($session, $other, 'BSAI 2A', 3);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 2);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
-        // Both subjects fit in one slot (subjectsPerSlot=2), and the
-        // multi-section subject's two sections (6 + 4) both count —
-        // nothing from it leaks into a second slot.
+        // Both subjects fit in one slot, and the multi-section subject's
+        // two sections (6 + 4) both count — nothing from it leaks into a
+        // second slot.
         $this->assertCount(1, $result);
         $this->assertSame(13, $result->first()->studentCount);
+    }
+
+    public function test_subjects_sharing_a_student_are_never_placed_in_the_same_simulated_slot(): void
+    {
+        // Plenty of room capacity for both subjects together, but one
+        // student is enrolled in both — a real clash the real timetable
+        // could never allow, so the simulator must not allow it either,
+        // even though it would otherwise pack them into one slot.
+        $session = ExamSession::factory()->create();
+        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        }
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $shared = Student::factory()->create(['roll_no' => 'SHARED01']);
+
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectA->id, 'section' => 'A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectB->id, 'section' => 'A']);
+        $this->enrollStudents($session, $subjectA, 'A', 4);
+        $this->enrollStudents($session, $subjectB, 'A', 4);
+
+        $result = (new SlotCapacitySimulator)->simulate($session);
+
+        // Each subject (1 shared student + 4 of its own) lands in its own
+        // slot — if they'd been packed together the shared student would
+        // push one slot's count to 9, not two slots of 5 each.
+        $this->assertCount(2, $result);
+        $this->assertSame([5, 5], $result->pluck('studentCount')->sort()->values()->all());
     }
 
     public function test_teachers_available_excludes_teachers_excluded_from_this_session(): void
@@ -117,7 +179,7 @@ class SlotCapacitySimulatorTest extends TestCase
             'is_excluded' => true,
         ]);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertSame(1, $result->first()->teachersAvailable);
     }
@@ -140,7 +202,7 @@ class SlotCapacitySimulatorTest extends TestCase
             'max_duties' => 0,
         ]);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertSame(1, $result->first()->teachersAvailable);
     }
@@ -162,7 +224,7 @@ class SlotCapacitySimulatorTest extends TestCase
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 15);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $requirement = $result->first();
         $this->assertTrue($requirement->hasUnseatedStudents);
@@ -176,7 +238,7 @@ class SlotCapacitySimulatorTest extends TestCase
     {
         $session = ExamSession::factory()->create();
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 2);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertTrue($result->isEmpty());
     }
@@ -192,7 +254,7 @@ class SlotCapacitySimulatorTest extends TestCase
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 8);
 
-        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+        $result = (new SlotCapacitySimulator)->simulate($session);
 
         $this->assertSame(2, $result->first()->roomsNeeded);
         $this->assertSame(4, $result->first()->teachersNeeded);

@@ -73,7 +73,7 @@ class CapacityCheckTest extends TestCase
             ->assertViewHas('currentRequirements', fn ($requirements) => $requirements->count() === 1 && $requirements->first()->isMet());
     }
 
-    public function test_simulate_slots_groups_enrollments_by_the_chosen_subjects_per_slot_without_any_timetable(): void
+    public function test_simulate_slots_auto_groups_clash_free_enrollments_without_any_timetable(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
@@ -85,6 +85,9 @@ class CapacityCheckTest extends TestCase
 
         // Enrollments only — no TimeSlot/SubjectSlotAssignment at all,
         // matching "usable right after uploading the enrollment sheet".
+        // Four small, clash-free (distinct students) subjects easily fit
+        // together in the four active rooms, so the auto-packer should
+        // group all of them into a single simulated slot.
         foreach (range(1, 4) as $i) {
             $subject = Subject::factory()->create();
 
@@ -101,27 +104,52 @@ class CapacityCheckTest extends TestCase
 
         $component = Livewire::actingAs($staff)
             ->test(CapacityCheck::class, ['examSession' => $session])
-            ->set('subjectsPerSlot', 2)
             ->set('slotsPerDay', 1)
             ->call('simulateSlots')
             ->assertSet('showSlotSimulation', true)
-            ->assertViewHas('daysNeeded', 2);
+            ->assertViewHas('daysNeeded', 1);
 
         $requirements = $component->viewData('slotRequirements');
-        $this->assertCount(2, $requirements);
-        $this->assertSame(6, $requirements->first()->studentCount);
+        $this->assertCount(1, $requirements);
+        $this->assertSame(12, $requirements->first()->studentCount);
     }
 
-    public function test_subjects_per_slot_must_be_at_least_one(): void
+    public function test_slots_per_day_must_be_at_least_one(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
             ->test(CapacityCheck::class, ['examSession' => $session])
-            ->set('subjectsPerSlot', 0)
+            ->set('slotsPerDay', 0)
             ->call('simulateSlots')
-            ->assertHasErrors(['subjectsPerSlot'])
-            ->assertSet('showSlotSimulation', false);
+            ->assertHasErrors(['slotsPerDay'])
+            ->assertSet('showSlotSimulation', false)
+            ->assertDispatched('open-modal');
+    }
+
+    public function test_re_simulating_with_an_invalid_slots_per_day_does_not_crash_on_cached_results(): void
+    {
+        // Regression: after a successful simulate, slotRequirementsData
+        // stays populated on the component. A second attempt with an
+        // invalid slotsPerDay (0) must not divide by it while
+        // re-rendering the still-cached (non-empty) results.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+
+        Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('slotsPerDay', 1)
+            ->call('simulateSlots')
+            ->assertSet('showSlotSimulation', true)
+            ->set('slotsPerDay', 0)
+            ->call('simulateSlots')
+            ->assertHasErrors(['slotsPerDay'])
+            ->assertViewHas('daysNeeded', 0);
     }
 }

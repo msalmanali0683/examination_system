@@ -1,4 +1,23 @@
 <div class="space-y-6">
+    <x-modal name="capacity-check-error" :show="$errors->isNotEmpty()" focusable>
+        <div class="p-6">
+            <div class="flex items-start gap-3">
+                <x-icon name="warning" class="h-6 w-6 text-red-600 shrink-0" />
+                <div>
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Error</h2>
+                    <div class="mt-2 text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                        @foreach ($errors->all() as $message)
+                            <p>{{ $message }}</p>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <x-btn variant="secondary" x-on:click="$dispatch('close')">Close</x-btn>
+            </div>
+        </div>
+    </x-modal>
+
     <x-card>
         <div class="flex items-center justify-between gap-4 flex-wrap">
             <div>
@@ -23,17 +42,12 @@
             <div>
                 <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Slot Capacity Simulator</h3>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    If this many subjects/papers were held at the same time, how many rooms and teachers would each slot need? Works straight from the enrollment sheet &mdash; no timetable required yet. Every section of a subject always lands in the same simulated slot, same as the real timetable.
+                    Automatically packs every enrolled subject into as few simultaneous slots as possible &mdash; as full as the active rooms allow, and never two subjects that share a student in the same slot. Works straight from the enrollment sheet &mdash; no timetable required yet. Every section of a subject always lands in the same simulated slot, same as the real timetable.
                 </p>
             </div>
         </div>
 
         <div class="mt-4 flex items-end gap-4 flex-wrap">
-            <div>
-                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Subjects per slot</label>
-                <input type="number" min="1" wire:model="subjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
-                @error('subjectsPerSlot') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
-            </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Slots per day</label>
                 <input type="number" min="1" wire:model="slotsPerDay" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">

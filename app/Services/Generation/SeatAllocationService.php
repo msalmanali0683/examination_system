@@ -77,44 +77,6 @@ class SeatAllocationService
     }
 
     /**
-     * Simulates seating a hypothetical slot containing exactly these
-     * subjects (every enrolled section of each, combined) — with no real
-     * TimeSlot behind it, so there's nothing locked to treat as an
-     * obstacle. Always allocates with Strict placement (one room per
-     * subject, never shared) since the question this answers is "if
-     * these subjects were examined at the same time, each in its own
-     * room(s), how much room and teacher capacity would that take" — not
-     * a seating-strategy choice. Used by the Check Capacity slot
-     * simulator, which works directly from enrollment data before any
-     * real timetable exists.
-     *
-     * @param  int[]  $subjectIds
-     * @return array{result: SeatingResult, roomsUsed: int}
-     */
-    public function previewForSubjects(ExamSession $session, array $subjectIds): array
-    {
-        $enrollments = Enrollment::whereIn('enrollments.subject_id', $subjectIds)
-            ->where('enrollments.exam_session_id', $session->id)
-            ->join('students', 'students.id', '=', 'enrollments.student_id')
-            ->orderBy('students.roll_no')
-            ->select('enrollments.id', 'enrollments.subject_id', 'enrollments.section')
-            ->get();
-
-        if ($enrollments->isEmpty()) {
-            return ['result' => new SeatingResult([], collect()), 'roomsUsed' => 0];
-        }
-
-        $rooms = $this->allRoomsPool()->map(fn ($r) => [...$r, 'occupied' => []])->sortByDesc('capacity')->values()->all();
-
-        $result = (new StrictSeatingStrategy)->allocate($enrollments, $rooms);
-
-        return [
-            'result' => $result,
-            'roomsUsed' => collect($result->placements)->pluck('roomId')->unique()->count(),
-        ];
-    }
-
-    /**
      * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
      */
     private function activeSessionRoomPool(ExamSession $session): Collection

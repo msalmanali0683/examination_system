@@ -6,73 +6,175 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
+use App\Services\Generation\DTOs\SeatingResult;
 use App\Services\Generation\DTOs\SlotRequirement;
+use App\Services\Generation\Strategies\StrictSeatingStrategy;
 use Illuminate\Support\Collection;
 
 /**
- * Answers "if N subjects were examined at the same time, how many rooms
- * and teachers would that slot need" — directly from enrollment data, so
- * it works as soon as enrollments are uploaded, before any real timetable
- * or subject-slot assignment exists. Every subject's students (every
- * section combined — a subject's paper is always one slot in this app)
- * are grouped into batches of $subjectsPerSlot, largest subject first,
- * and each batch is simulated as its own hypothetical slot.
+ * Automatically groups every enrolled subject into as few simultaneous
+ * slots as possible — directly from enrollment data, so it works as soon
+ * as enrollments are uploaded, before any real timetable or subject-slot
+ * assignment exists. Subjects are packed largest-first into the first
+ * slot that can take them: never one that shares a student with anything
+ * already in that slot (a real clash, exactly like the real Timetable
+ * Generator avoids), and never one that would leave a student unseated
+ * given the session's actual active rooms. A slot only grows as long as
+ * both hold; once nothing else fits, a new slot opens. Every section of a
+ * subject always lands in the same slot (a subject's paper is always one
+ * slot in this app).
  */
 class SlotCapacitySimulator
 {
-    public function __construct(private SeatAllocationService $seatAllocationService = new SeatAllocationService)
+    private StrictSeatingStrategy $strategy;
+
+    public function __construct()
     {
+        $this->strategy = new StrictSeatingStrategy;
     }
 
     /**
      * @return Collection<int, SlotRequirement>
      */
-    public function simulate(ExamSession $session, int $subjectsPerSlot): Collection
+    public function simulate(ExamSession $session): Collection
     {
-        $subjectSizes = Enrollment::where('exam_session_id', $session->id)
-            ->selectRaw('subject_id, COUNT(*) as student_count')
-            ->groupBy('subject_id')
-            ->orderByDesc('student_count')
-            ->pluck('student_count', 'subject_id');
+        $enrollments = Enrollment::where('exam_session_id', $session->id)
+            ->select('id', 'student_id', 'subject_id', 'section')
+            ->get();
 
-        if ($subjectSizes->isEmpty()) {
+        if ($enrollments->isEmpty()) {
             return collect();
         }
 
-        $roomsAvailable = $session->sessionRooms()->where('is_active', true)->count();
+        // Indexed by subject_id so every capacity/clash check below is a
+        // handful of array lookups instead of re-scanning every enrollment
+        // in the session — this runs dozens of times per subject while
+        // packing, so that difference is the gap between instant and slow.
+        $enrollmentsBySubject = $enrollments->groupBy('subject_id');
+
+        $subjectIds = $enrollmentsBySubject
+            ->sortByDesc(fn (Collection $rows) => $rows->count())
+            ->keys()
+            ->all();
+
+        $conflictGraph = (new ConflictGraphBuilder)->build($enrollments);
+        $roomTemplate = $this->activeRoomTemplate($session);
+        $roomsAvailable = count($roomTemplate);
         $teachersAvailable = $this->teachersAvailable($session);
 
-        return collect($subjectSizes->keys()->all())
-            ->chunk(max(1, $subjectsPerSlot))
-            ->values()
-            ->map(function (Collection $subjectIds, int $index) use ($session, $roomsAvailable, $teachersAvailable) {
-                $preview = $this->seatAllocationService->previewForSubjects($session, $subjectIds->all());
-                $unseated = $preview['result']->warnings->where('type', 'unseated');
-                $studentCount = collect($preview['result']->placements)->count() + $unseated->count();
+        $bins = $this->packIntoBins($subjectIds, $conflictGraph, $enrollmentsBySubject, $roomTemplate);
 
-                // roomsUsed only counts rooms that actually received a
-                // student, so when the whole system's room pool runs out
-                // mid-placement it's capped at "however many rooms exist" —
-                // it can't express "more than that would be needed", even
-                // though that's exactly what's true here. Never let that
-                // cap make the display claim "no shortfall" while students
-                // were actually left unseated.
-                $roomsNeeded = $preview['roomsUsed'];
-                if ($unseated->isNotEmpty() && $roomsNeeded <= $roomsAvailable) {
-                    $roomsNeeded = $roomsAvailable + 1;
+        return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $roomTemplate, $roomsAvailable, $teachersAvailable, $session) {
+            $result = $this->allocate($enrollmentsBySubject, $subjectIdsInSlot, $roomTemplate);
+            $unseated = $result->warnings->where('type', 'unseated');
+            $studentCount = collect($result->placements)->count() + $unseated->count();
+
+            // roomsUsed only counts rooms that actually received a student,
+            // capped by however many rooms exist — if a lone subject alone
+            // exceeds total active capacity, that cap can coincidentally
+            // equal roomsAvailable. Never let that read as "no shortfall".
+            $roomsNeeded = collect($result->placements)->pluck('roomId')->unique()->count();
+            if ($unseated->isNotEmpty() && $roomsNeeded <= $roomsAvailable) {
+                $roomsNeeded = $roomsAvailable + 1;
+            }
+
+            return new SlotRequirement(
+                timeSlotId: $index + 1,
+                label: 'Simulated Slot '.($index + 1).' ('.count($subjectIdsInSlot).' '.str('subject')->plural(count($subjectIdsInSlot)).')',
+                studentCount: $studentCount,
+                roomsNeeded: $roomsNeeded,
+                roomsAvailable: $roomsAvailable,
+                teachersNeeded: $roomsNeeded * $session->invigilators_per_room,
+                teachersAvailable: $teachersAvailable,
+                hasUnseatedStudents: $unseated->isNotEmpty(),
+            );
+        });
+    }
+
+    /**
+     * @param  int[]  $subjectIds  largest-first
+     * @param  array<int, array<int, int>>  $conflictGraph
+     * @param  Collection<int, Collection>  $enrollmentsBySubject
+     * @param  array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>  $roomTemplate
+     * @return array<int, int[]>
+     */
+    private function packIntoBins(array $subjectIds, array $conflictGraph, Collection $enrollmentsBySubject, array $roomTemplate): array
+    {
+        $bins = [];
+
+        foreach ($subjectIds as $subjectId) {
+            $placed = false;
+
+            foreach ($bins as $index => $binSubjectIds) {
+                if ($this->clashes($conflictGraph, $subjectId, $binSubjectIds)) {
+                    continue;
                 }
 
-                return new SlotRequirement(
-                    timeSlotId: $index + 1,
-                    label: 'Simulated Slot '.($index + 1).' ('.$subjectIds->count().' '.str('subject')->plural($subjectIds->count()).')',
-                    studentCount: $studentCount,
-                    roomsNeeded: $roomsNeeded,
-                    roomsAvailable: $roomsAvailable,
-                    teachersNeeded: $roomsNeeded * $session->invigilators_per_room,
-                    teachersAvailable: $teachersAvailable,
-                    hasUnseatedStudents: $unseated->isNotEmpty(),
-                );
-            });
+                $candidate = [...$binSubjectIds, $subjectId];
+
+                if ($this->allocate($enrollmentsBySubject, $candidate, $roomTemplate)->warnings->where('type', 'unseated')->isEmpty()) {
+                    $bins[$index][] = $subjectId;
+                    $placed = true;
+                    break;
+                }
+            }
+
+            if (! $placed) {
+                $bins[] = [$subjectId];
+            }
+        }
+
+        return $bins;
+    }
+
+    /**
+     * @param  array<int, array<int, int>>  $graph
+     * @param  int[]  $binSubjectIds
+     */
+    private function clashes(array $graph, int $subjectId, array $binSubjectIds): bool
+    {
+        foreach ($binSubjectIds as $existingId) {
+            if (($graph[$subjectId][$existingId] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  Collection<int, Collection>  $enrollmentsBySubject
+     * @param  int[]  $subjectIds
+     * @param  array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>  $roomTemplate
+     */
+    private function allocate(Collection $enrollmentsBySubject, array $subjectIds, array $roomTemplate): SeatingResult
+    {
+        $subset = collect($subjectIds)->flatMap(fn ($id) => $enrollmentsBySubject->get($id) ?? collect());
+
+        return $this->strategy->allocate($subset, $roomTemplate);
+    }
+
+    /**
+     * Pre-sorted (largest capacity first) with a fresh, empty "occupied"
+     * list baked in — every allocate() call below reuses this same array
+     * read-only (PHP arrays copy on write, so nothing leaks between the
+     * dozens of independent simulations run while packing).
+     *
+     * @return array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
+     */
+    private function activeRoomTemplate(ExamSession $session): array
+    {
+        return $session->sessionRooms()->where('is_active', true)->with('room')->get()
+            ->map(fn ($sr) => [
+                'room_id' => $sr->room_id,
+                'rows' => $sr->room->rows,
+                'columns' => $sr->room->columns,
+                'capacity' => $sr->effectiveCapacity(),
+                'occupied' => [],
+            ])
+            ->sortByDesc('capacity')
+            ->values()
+            ->all();
     }
 
     /**

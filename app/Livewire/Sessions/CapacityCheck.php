@@ -3,8 +3,10 @@
 namespace App\Livewire\Sessions;
 
 use App\Models\ExamSession;
+use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SlotCapacitySimulator;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
 class CapacityCheck extends Component
@@ -14,19 +16,24 @@ class CapacityCheck extends Component
     public bool $showCurrent = false;
 
     /**
-     * How many subjects sit together in one hypothetical slot, and how
-     * many such slots run per day — used to simulate "if N papers were
-     * held at once, how many rooms/teachers would that take" directly
-     * from enrollment data, independent of any real timetable. Every
-     * section of a subject is always kept in the same simulated slot,
-     * matching how the real timetable always keeps a subject's sections
-     * together.
+     * How many simulated slots run per day — used only to turn the
+     * auto-grouped slot count into a day count; it has no effect on how
+     * subjects are grouped (see SlotCapacitySimulator).
      */
-    public int $subjectsPerSlot = 2;
-
     public int $slotsPerDay = 2;
 
     public bool $showSlotSimulation = false;
+
+    /**
+     * The last computed simulation, as plain arrays (Livewire can't persist
+     * arbitrary DTOs across requests). Packing is real work — every active
+     * room and every subject pairing gets tried — so it only runs when the
+     * admin clicks Simulate, never as a side effect of an unrelated click
+     * (e.g. Check Capacity above) triggering a re-render.
+     *
+     * @var array<int, array>
+     */
+    public array $slotRequirementsData = [];
 
     public function mount(ExamSession $examSession): void
     {
@@ -43,23 +50,29 @@ class CapacityCheck extends Component
     public function simulateSlots(): void
     {
         $this->authorize('generate_roster');
-        $this->validate([
-            'subjectsPerSlot' => ['required', 'integer', 'min:1'],
-            'slotsPerDay' => ['required', 'integer', 'min:1'],
-        ]);
+
+        try {
+            $this->validate(['slotsPerDay' => ['required', 'integer', 'min:1']]);
+        } catch (ValidationException $e) {
+            $this->dispatch('open-modal', 'capacity-check-error');
+
+            throw $e;
+        }
+
+        $this->slotRequirementsData = (new SlotCapacitySimulator)->simulate($this->examSession)
+            ->map(fn (SlotRequirement $r) => get_object_vars($r))
+            ->all();
         $this->showSlotSimulation = true;
     }
 
     public function render()
     {
-        $slotRequirements = $this->showSlotSimulation
-            ? (new SlotCapacitySimulator)->simulate($this->examSession, $this->subjectsPerSlot)
-            : collect();
+        $slotRequirements = collect($this->slotRequirementsData)->map(fn (array $data) => new SlotRequirement(...$data));
 
         return view('livewire.sessions.capacity-check', [
             'currentRequirements' => $this->showCurrent ? (new RequirementCalculator)->calculate($this->examSession) : collect(),
             'slotRequirements' => $slotRequirements,
-            'daysNeeded' => $slotRequirements->isEmpty() ? 0 : (int) ceil($slotRequirements->count() / $this->slotsPerDay),
+            'daysNeeded' => ($slotRequirements->isEmpty() || $this->slotsPerDay < 1) ? 0 : (int) ceil($slotRequirements->count() / $this->slotsPerDay),
             'peakRoomsNeeded' => $slotRequirements->max('roomsNeeded') ?? 0,
             'peakTeachersNeeded' => $slotRequirements->max('teachersNeeded') ?? 0,
         ]);
