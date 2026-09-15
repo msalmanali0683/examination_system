@@ -127,4 +127,72 @@ class TimetableGeneratorTest extends TestCase
 
         $this->assertSame(100, $result->assignments[1]);
     }
+
+    public function test_subjects_sharing_a_student_are_never_placed_on_the_same_day_even_in_different_slots(): void
+    {
+        // Two slots on day 1 (100, 101), two on day 2 (200, 201). Subjects
+        // 1 and 2 share students. Without day-level checking they'd both
+        // fit day 1 (different exact slots there) — but a real student
+        // can't sit two papers the same day, so they must land on
+        // different days entirely.
+        $graph = [
+            1 => [2 => 5],
+            2 => [1 => 5],
+        ];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 101, 200, 201],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 101 => 'day1', 200 => 'day2', 201 => 'day2'],
+        );
+
+        $dayOf = fn ($slotId) => in_array($slotId, [100, 101]) ? 'day1' : 'day2';
+        $this->assertNotSame($dayOf($result->assignments[1]), $dayOf($result->assignments[2]));
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_clash_free_subjects_spread_across_days_instead_of_piling_into_the_first(): void
+    {
+        // 3 days, 2 slots each, 6 mutually clash-free subjects (nothing in
+        // the conflict graph at all). Every subject is "clash-free" against
+        // every day, so a purely clash-avoidance algorithm would happily
+        // pile all 6 into day 1's two slots. Load-balancing should instead
+        // spread them 2-per-day across all 3 days.
+        $slotDays = [100 => 'day1', 101 => 'day1', 200 => 'day2', 201 => 'day2', 300 => 'day3', 301 => 'day3'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2, 3, 4, 5, 6],
+            pinned: [],
+            timeSlotIds: [100, 101, 200, 201, 300, 301],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2, 3, 4, 5, 6]),
+            slotDays: $slotDays,
+        );
+
+        $dayCounts = collect($result->assignments)->countBy(fn ($slotId) => $slotDays[$slotId]);
+        $this->assertSame(['day1' => 2, 'day2' => 2, 'day3' => 2], $dayCounts->sortKeys()->all());
+    }
+
+    public function test_a_day_already_used_by_a_pinned_subject_still_counts_toward_load_balancing(): void
+    {
+        // Subject 1 is pinned to day1 (slot 100). Subject 2 is clash-free
+        // with everything, so — day1 already carrying the pinned subject's
+        // load — it should prefer the genuinely empty day2 rather than
+        // treating day1 as if nothing were there yet.
+        $slotDays = [100 => 'day1', 101 => 'day1', 200 => 'day2', 201 => 'day2'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 100],
+            timeSlotIds: [100, 101, 200, 201],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: $slotDays,
+        );
+
+        $this->assertSame('day2', $slotDays[$result->assignments[2]]);
+    }
 }

@@ -10,18 +10,32 @@ class TimetableGenerator
 {
     /**
      * Assigns every unpinned subject to a time slot, avoiding clashes with
-     * subjects that share students wherever possible. Pinned subjects are
-     * fixed obstacles and are never moved. Hardest-to-place subjects (most
-     * total shared-student weight) are processed first. When a subject
-     * truly cannot avoid every clash, it's placed in whichever slot has the
-     * least total conflict, and the specific clash is reported rather than
-     * silently dropped or thrown as an error.
+     * subjects that share students wherever possible. A clash is checked at
+     * the *day* level, not just the exact slot — two subjects that share a
+     * student are never placed on the same calendar day at all, even in
+     * different time periods, since a student can only sit one paper a day
+     * regardless of how many slots that day has. Pinned subjects are fixed
+     * obstacles and are never moved. Hardest-to-place subjects (most total
+     * shared-student weight) are processed first.
+     *
+     * Among multiple clash-free days, the least-loaded one (fewest subjects
+     * placed there so far) is preferred — and likewise the least-loaded
+     * slot within the chosen day — so subjects spread out across the whole
+     * available window instead of piling into the first few days that
+     * happen to be clash-free, leaving later days empty. When a subject
+     * truly cannot avoid every clash, it's placed on whichever day has the
+     * least total conflict (ties broken the same way), and the specific
+     * clash is reported rather than silently dropped or thrown as an error.
      *
      * @param  int[]  $subjectIds  every subject needing a slot this session
      * @param  array<int, int>  $pinned  subject_id => time_slot_id, fixed and never moved
      * @param  int[]  $timeSlotIds  candidate slots, in preference order (earliest first)
      * @param  array<int, array<int, int>>  $conflictGraph  from ConflictGraphBuilder::build()
      * @param  array<int, string>  $subjectLabels  subject_id => display label, for conflict messages
+     * @param  array<int, string>  $slotDays  time_slot_id => calendar-day key (e.g. 'Y-m-d'); slots missing
+     *                                        from this map default to being their own day, so callers that
+     *                                        don't care about day-grouping (or existing tests) get plain
+     *                                        slot-level behavior unchanged.
      */
     public function generate(
         array $subjectIds,
@@ -29,12 +43,17 @@ class TimetableGenerator
         array $timeSlotIds,
         array $conflictGraph,
         array $subjectLabels,
+        array $slotDays = [],
     ): TimetableResult {
+        $dayOf = fn (int $slotId): string => $slotDays[$slotId] ?? 'slot-'.$slotId;
+
         $placed = $pinned;
         $slotOccupants = [];
+        $dayOccupants = [];
 
         foreach ($pinned as $subjectId => $slotId) {
             $slotOccupants[$slotId][] = $subjectId;
+            $dayOccupants[$dayOf($slotId)][] = $subjectId;
         }
 
         $unpinned = array_values(array_diff($subjectIds, array_keys($pinned)));
@@ -55,32 +74,55 @@ class TimetableGenerator
             return new TimetableResult([], $conflicts);
         }
 
+        // Each day's slots, in original (earliest-first) order — computed
+        // once so every subject's placement search reuses it.
+        $daySlots = [];
+        foreach ($timeSlotIds as $slotId) {
+            $daySlots[$dayOf($slotId)][] = $slotId;
+        }
+        $days = array_keys($daySlots);
+
         usort($unpinned, fn ($a, $b) => $this->totalWeight($conflictGraph, $b) <=> $this->totalWeight($conflictGraph, $a));
 
         foreach ($unpinned as $subjectId) {
-            $bestSlot = null;
-            $bestWeight = null;
+            $bestDay = null;
+            $bestDayWeight = null;
+            $bestDayLoad = null;
 
-            foreach ($timeSlotIds as $slotId) {
-                $weight = $this->clashWeight($conflictGraph, $subjectId, $slotOccupants[$slotId] ?? []);
+            foreach ($days as $day) {
+                $occupants = $dayOccupants[$day] ?? [];
+                $weight = $this->clashWeight($conflictGraph, $subjectId, $occupants);
+                $load = count($occupants);
 
-                if ($weight === 0) {
-                    $bestSlot = $slotId;
-                    $bestWeight = 0;
-                    break;
+                if ($bestDayWeight === null
+                    || $weight < $bestDayWeight
+                    || ($weight === $bestDayWeight && $load < $bestDayLoad)) {
+                    $bestDay = $day;
+                    $bestDayWeight = $weight;
+                    $bestDayLoad = $load;
                 }
+            }
 
-                if ($bestWeight === null || $weight < $bestWeight) {
+            // Within the chosen day, prefer whichever slot has the fewest
+            // subjects so far, spreading across that day's own periods too.
+            $bestSlot = null;
+            $bestSlotLoad = null;
+
+            foreach ($daySlots[$bestDay] as $slotId) {
+                $load = count($slotOccupants[$slotId] ?? []);
+
+                if ($bestSlotLoad === null || $load < $bestSlotLoad) {
                     $bestSlot = $slotId;
-                    $bestWeight = $weight;
+                    $bestSlotLoad = $load;
                 }
             }
 
             $placed[$subjectId] = $bestSlot;
             $slotOccupants[$bestSlot][] = $subjectId;
+            $dayOccupants[$bestDay][] = $subjectId;
 
-            if ($bestWeight > 0) {
-                foreach ($slotOccupants[$bestSlot] as $occupantId) {
+            if ($bestDayWeight > 0) {
+                foreach ($dayOccupants[$bestDay] as $occupantId) {
                     $shared = $conflictGraph[$subjectId][$occupantId] ?? 0;
 
                     if ($occupantId === $subjectId || $shared === 0) {
@@ -96,7 +138,7 @@ class TimetableGenerator
                         conflictingSubjectId: $occupantId,
                         conflictingSubjectLabel: $occupantLabel,
                         sharedStudentCount: $shared,
-                        message: "{$subjectLabel} and {$occupantLabel} share {$shared} student(s) but were placed in the same slot — no free slot remained without a clash. Consider adding a slot or pinning one of them elsewhere.",
+                        message: "{$subjectLabel} and {$occupantLabel} share {$shared} student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.",
                     ));
                 }
             }

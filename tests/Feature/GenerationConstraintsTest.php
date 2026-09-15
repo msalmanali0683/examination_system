@@ -236,6 +236,73 @@ class GenerationConstraintsTest extends TestCase
         ]);
     }
 
+    public function test_generate_spreads_clash_free_subjects_across_all_available_days(): void
+    {
+        // 3 days, 2 slots each, 6 mutually clash-free subjects (no shared
+        // students at all). A purely clash-avoidance algorithm would
+        // happily cram all 6 into day one's two slots, leaving the other
+        // two days empty — this proves it spreads them out instead.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        foreach (['2026-09-20', '2026-09-21', '2026-09-22'] as $date) {
+            TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $date, 'start_time' => '09:00']);
+            TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $date, 'start_time' => '11:00']);
+        }
+
+        foreach (range(1, 6) as $i) {
+            $subject = Subject::factory()->create();
+            Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id]);
+        }
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $dayCounts = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->with('timeSlot')
+            ->get()
+            ->groupBy(fn ($a) => $a->timeSlot->date->format('Y-m-d'))
+            ->map->count();
+
+        $this->assertCount(3, $dayCounts);
+        $this->assertTrue($dayCounts->every(fn ($count) => $count === 2));
+    }
+
+    public function test_generate_never_places_subjects_sharing_a_student_on_the_same_day(): void
+    {
+        // Two slots on one day. Two subjects share a student. Placing them
+        // in the day's two different slots would avoid a slot-level clash
+        // but still double-book that student's day — must not happen.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '11:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-21', 'start_time' => '09:00']);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subjectA->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subjectB->id]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $assignments = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereIn('subject_id', [$subjectA->id, $subjectB->id])
+            ->with('timeSlot')
+            ->get()
+            ->keyBy('subject_id');
+
+        $this->assertNotSame(
+            $assignments[$subjectA->id]->timeSlot->date->format('Y-m-d'),
+            $assignments[$subjectB->id]->timeSlot->date->format('Y-m-d'),
+        );
+    }
+
     public function test_pinning_and_unpinning_a_subject(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

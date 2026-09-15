@@ -11,6 +11,7 @@ use App\Models\SessionTeacherConstraint;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
+use App\Models\TimeSlot;
 use App\Services\Generation\ConflictGraphBuilder;
 use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
@@ -223,7 +224,9 @@ class GenerationConstraints extends Component
             return;
         }
 
-        $timeSlotIds = $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->pluck('id')->all();
+        $timeSlots = $this->examSession->timeSlots()->orderBy('date')->orderBy('start_time')->get(['id', 'date']);
+        $timeSlotIds = $timeSlots->pluck('id')->all();
+        $slotDays = $timeSlots->mapWithKeys(fn (TimeSlot $t) => [$t->id => $t->date->format('Y-m-d')])->all();
 
         $pinned = SubjectSlotAssignment::where('exam_session_id', $sessionId)
             ->where('is_pinned', true)
@@ -234,7 +237,7 @@ class GenerationConstraints extends Component
         $labels = $subjects->mapWithKeys(fn (Subject $s) => [$s->id => "{$s->code} - {$s->title}"])->all();
 
         $graph = (new ConflictGraphBuilder)->build($enrollments);
-        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels);
+        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays);
 
         DB::transaction(function () use ($result, $sessionId, $pinned, $excludedIds) {
             foreach ($result->assignments as $subjectId => $slotId) {
