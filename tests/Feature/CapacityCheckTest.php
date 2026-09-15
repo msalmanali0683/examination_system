@@ -73,41 +73,55 @@ class CapacityCheckTest extends TestCase
             ->assertViewHas('currentRequirements', fn ($requirements) => $requirements->count() === 1 && $requirements->first()->isMet());
     }
 
-    public function test_check_what_if_simulates_the_chosen_number_of_subjects_per_room(): void
+    public function test_simulate_slots_groups_enrollments_by_the_chosen_subjects_per_slot_without_any_timetable(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $session = ExamSession::factory()->create();
 
-        for ($i = 0; $i < 3; $i++) {
-            Room::factory()->create(['rows' => 2, 'columns' => 1, 'capacity' => 2]);
+        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        foreach (Room::all() as $room) {
+            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
         }
-        Room::factory()->create(['rows' => 2, 'columns' => 3, 'capacity' => 6]);
 
-        $this->seedSlotWithSubjects($session, 3, 2);
+        // Enrollments only — no TimeSlot/SubjectSlotAssignment at all,
+        // matching "usable right after uploading the enrollment sheet".
+        foreach (range(1, 4) as $i) {
+            $subject = Subject::factory()->create();
+
+            for ($s = 0; $s < 3; $s++) {
+                $student = Student::factory()->create(['roll_no' => str_pad((string) ++self::$rollNoSequence, 8, '0', STR_PAD_LEFT)]);
+                Enrollment::factory()->create([
+                    'exam_session_id' => $session->id,
+                    'student_id' => $student->id,
+                    'subject_id' => $subject->id,
+                    'section' => 'A',
+                ]);
+            }
+        }
 
         $component = Livewire::actingAs($staff)
             ->test(CapacityCheck::class, ['examSession' => $session])
-            ->set('whatIfSubjectsPerRoom', 3)
-            ->call('checkWhatIf')
-            ->assertSet('showWhatIf', true);
+            ->set('subjectsPerSlot', 2)
+            ->set('slotsPerDay', 1)
+            ->call('simulateSlots')
+            ->assertSet('showSlotSimulation', true)
+            ->assertViewHas('daysNeeded', 2);
 
-        $requirements = $component->viewData('whatIfRequirements');
-        $this->assertSame(1, $requirements->first()->roomsNeeded);
-
-        // Never persisted to the session.
-        $this->assertSame('strict', $session->fresh()->seating_strategy);
+        $requirements = $component->viewData('slotRequirements');
+        $this->assertCount(2, $requirements);
+        $this->assertSame(6, $requirements->first()->studentCount);
     }
 
-    public function test_what_if_subjects_per_room_must_be_at_least_two(): void
+    public function test_subjects_per_slot_must_be_at_least_one(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
             ->test(CapacityCheck::class, ['examSession' => $session])
-            ->set('whatIfSubjectsPerRoom', 1)
-            ->call('checkWhatIf')
-            ->assertHasErrors(['whatIfSubjectsPerRoom'])
-            ->assertSet('showWhatIf', false);
+            ->set('subjectsPerSlot', 0)
+            ->call('simulateSlots')
+            ->assertHasErrors(['subjectsPerSlot'])
+            ->assertSet('showSlotSimulation', false);
     }
 }

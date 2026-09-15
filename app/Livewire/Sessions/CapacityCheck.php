@@ -4,7 +4,7 @@ namespace App\Livewire\Sessions;
 
 use App\Models\ExamSession;
 use App\Services\Generation\RequirementCalculator;
-use App\Services\Generation\Strategies\MixedSeatingStrategy;
+use App\Services\Generation\SlotCapacitySimulator;
 use Livewire\Component;
 
 class CapacityCheck extends Component
@@ -14,13 +14,19 @@ class CapacityCheck extends Component
     public bool $showCurrent = false;
 
     /**
-     * The "what if I combined N subjects per room" number the admin is
-     * experimenting with — independent of the session's actual saved
-     * seating strategy, so checking it never changes real settings.
+     * How many subjects sit together in one hypothetical slot, and how
+     * many such slots run per day — used to simulate "if N papers were
+     * held at once, how many rooms/teachers would that take" directly
+     * from enrollment data, independent of any real timetable. Every
+     * section of a subject is always kept in the same simulated slot,
+     * matching how the real timetable always keeps a subject's sections
+     * together.
      */
-    public int $whatIfSubjectsPerRoom = 2;
+    public int $subjectsPerSlot = 2;
 
-    public bool $showWhatIf = false;
+    public int $slotsPerDay = 2;
+
+    public bool $showSlotSimulation = false;
 
     public function mount(ExamSession $examSession): void
     {
@@ -34,24 +40,28 @@ class CapacityCheck extends Component
         $this->showCurrent = true;
     }
 
-    public function checkWhatIf(): void
+    public function simulateSlots(): void
     {
         $this->authorize('generate_roster');
         $this->validate([
-            'whatIfSubjectsPerRoom' => ['required', 'integer', 'min:2', 'max:50'],
+            'subjectsPerSlot' => ['required', 'integer', 'min:1'],
+            'slotsPerDay' => ['required', 'integer', 'min:1'],
         ]);
-        $this->showWhatIf = true;
+        $this->showSlotSimulation = true;
     }
 
     public function render()
     {
-        $calculator = new RequirementCalculator;
+        $slotRequirements = $this->showSlotSimulation
+            ? (new SlotCapacitySimulator)->simulate($this->examSession, $this->subjectsPerSlot)
+            : collect();
 
         return view('livewire.sessions.capacity-check', [
-            'currentRequirements' => $this->showCurrent ? $calculator->calculate($this->examSession) : collect(),
-            'whatIfRequirements' => $this->showWhatIf
-                ? $calculator->calculate($this->examSession, new MixedSeatingStrategy($this->whatIfSubjectsPerRoom))
-                : collect(),
+            'currentRequirements' => $this->showCurrent ? (new RequirementCalculator)->calculate($this->examSession) : collect(),
+            'slotRequirements' => $slotRequirements,
+            'daysNeeded' => $slotRequirements->isEmpty() ? 0 : (int) ceil($slotRequirements->count() / $this->slotsPerDay),
+            'peakRoomsNeeded' => $slotRequirements->max('roomsNeeded') ?? 0,
+            'peakTeachersNeeded' => $slotRequirements->max('teachersNeeded') ?? 0,
         ]);
     }
 }
