@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ReportDownloadController;
 use App\Livewire\Dashboard;
+use App\Livewire\Rooms\Import as RoomsImport;
 use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
@@ -31,6 +32,10 @@ Route::get('users', UsersIndex::class)
 Route::get('rooms', RoomsIndex::class)
     ->middleware(['auth'])
     ->name('rooms.index');
+
+Route::get('rooms/import', RoomsImport::class)
+    ->middleware(['auth'])
+    ->name('rooms.import');
 
 Route::get('teachers', TeachersIndex::class)
     ->middleware(['auth'])

@@ -1,6 +1,9 @@
 <x-slot name="header">
     <x-page-header title="Rooms" subtitle="Exam venues, their seating grid and capacity." icon="door">
         <x-slot name="actions">
+            <a href="{{ route('rooms.import') }}" wire:navigate>
+                <x-btn variant="secondary" icon="upload">Import</x-btn>
+            </a>
             @if (! $showForm)
                 <x-btn wire:click="addRoom" icon="plus">Add Room</x-btn>
             @endif
