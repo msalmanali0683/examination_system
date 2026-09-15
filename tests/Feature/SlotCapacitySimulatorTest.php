@@ -6,6 +6,7 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SessionRoom;
+use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
@@ -97,6 +98,51 @@ class SlotCapacitySimulatorTest extends TestCase
         // nothing from it leaks into a second slot.
         $this->assertCount(1, $result);
         $this->assertSame(13, $result->first()->studentCount);
+    }
+
+    public function test_teachers_available_excludes_teachers_excluded_from_this_session(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => Room::first()->id, 'is_active' => true]);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+
+        $available = Teacher::factory()->create(['is_active' => true]);
+        $excluded = Teacher::factory()->create(['is_active' => true]);
+        SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $excluded->id,
+            'is_excluded' => true,
+        ]);
+
+        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+
+        $this->assertSame(1, $result->first()->teachersAvailable);
+    }
+
+    public function test_teachers_available_excludes_teachers_capped_at_zero_max_duties(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => Room::first()->id, 'is_active' => true]);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+
+        $available = Teacher::factory()->create(['is_active' => true]);
+        $zeroMax = Teacher::factory()->create(['is_active' => true]);
+        SessionTeacherConstraint::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $zeroMax->id,
+            'is_excluded' => false,
+            'max_duties' => 0,
+        ]);
+
+        $result = (new SlotCapacitySimulator)->simulate($session, subjectsPerSlot: 1);
+
+        $this->assertSame(1, $result->first()->teachersAvailable);
     }
 
     public function test_no_enrollments_yet_returns_an_empty_collection(): void
