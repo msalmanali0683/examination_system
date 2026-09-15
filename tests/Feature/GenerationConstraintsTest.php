@@ -426,9 +426,13 @@ class GenerationConstraintsTest extends TestCase
 
         $subjectA = Subject::factory()->create(['code' => 'CS999']);
         $subjectB = Subject::factory()->create(['code' => 'MAT888']);
+        // Different semesters (2 and 4) — a repeater/backlog student sitting
+        // both, not two subjects of the same cohort. This keeps the two
+        // subjects outside the hard same-semester block below, so this
+        // scenario still exercises the softer shared-student clash marker.
         $sharedStudent = Student::factory()->create();
-        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
-        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 4A']);
 
         SubjectSlotAssignment::create([
             'exam_session_id' => $session->id,
@@ -439,13 +443,82 @@ class GenerationConstraintsTest extends TestCase
 
         $html = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session])->html();
 
-        // Only subject B is at risk (it shares a student with A, which is
-        // already pinned to the clash day) — the marker must appear
-        // exactly once, attached to B's "20 Apr" option, not A's own (A
-        // doesn't clash with itself) and not either subject's "21 Apr"
-        // (clash-free) option.
-        $this->assertSame(1, substr_count($html, 'clash (same day)'));
-        $this->assertMatchesRegularExpression('/20 Apr 09:00[^<]*clash \(same day\)/', $html);
+        $optionsForB = $this->pinDropdownOptionTexts($html, $subjectB->id);
+        $optionsForA = $this->pinDropdownOptionTexts($html, $subjectA->id);
+
+        $this->assertStringContainsString('clash (same day)', $optionsForB['20 Apr 09:00'] ?? '');
+        $this->assertStringNotContainsString('clash (same day)', $optionsForB['21 Apr 09:00'] ?? '');
+        // A doesn't clash with itself on its own day.
+        $this->assertStringNotContainsString('clash (same day)', $optionsForA['20 Apr 09:00'] ?? '');
+    }
+
+    /**
+     * Parses a subject's own Pin dropdown (identified by its updatePin(id,
+     * ...) wire:change attribute) out of the rendered page and returns its
+     * option labels keyed by the leading "d M H:i" date/time text — lets
+     * tests assert on exactly that one dropdown's content instead of
+     * guessing at HTML boundaries with regex.
+     *
+     * @return array<string, string>
+     */
+    private function pinDropdownOptionTexts(string $html, int $subjectId): array
+    {
+        $dom = new \DOMDocument;
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        libxml_clear_errors();
+
+        $xpath = new \DOMXPath($dom);
+        $select = $xpath->query("//select[@*[name()='wire:change']=\"updatePin({$subjectId}, \$event.target.value)\"]")->item(0);
+
+        if (! $select) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($xpath->query('.//option', $select) as $option) {
+            $text = trim(preg_replace('/\s+/', ' ', $option->textContent));
+            if (preg_match('/^(\d{1,2} \w{3} \d{2}:\d{2})/', $text, $m)) {
+                $options[$m[1]] = $text;
+            }
+        }
+
+        return $options;
+    }
+
+    public function test_pin_dropdown_hides_a_day_another_same_semester_subject_already_occupies(): void
+    {
+        // A harder rule than the clash marker above: two subjects of the
+        // same semester share almost their whole cohort, so once one of
+        // them sits on a day, that day must not even be offered as an
+        // option to another subject of that semester — not just flagged.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $occupiedDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        $freeDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
+
+        $subjectA = Subject::factory()->create(['code' => 'CS111']);
+        $subjectB = Subject::factory()->create(['code' => 'MAT111']);
+        // Both semester 2 (BSAI 2A / BSAI 2B) — no shared student required,
+        // the semester itself is enough to block the day.
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2B']);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subjectA->id,
+            'time_slot_id' => $occupiedDay->id,
+            'is_pinned' => true,
+        ]);
+
+        $html = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session])->html();
+
+        $optionsForB = $this->pinDropdownOptionTexts($html, $subjectB->id);
+
+        // Subject B's dropdown must not offer 20 Apr at all, but must
+        // still offer the clash-free 21 Apr.
+        $this->assertArrayNotHasKey('20 Apr 09:00', $optionsForB);
+        $this->assertArrayHasKey('21 Apr 09:00', $optionsForB);
     }
 
     public function test_pinning_and_unpinning_a_subject(): void

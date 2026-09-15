@@ -601,6 +601,32 @@ class GenerationConstraints extends Component
             return [$subject->id => $days];
         });
 
+        // A harder rule on top of the clash preview above: same-semester
+        // subjects share almost their entire cohort, so once any of a
+        // semester's subjects sits on a day, no other subject of that
+        // same semester should even be offered that day — not just
+        // warned about it. A subject with no parseable semester (see
+        // $semesterBySubject above) isn't restricted by this, since
+        // there's no cohort to compare against; the plain student-shared
+        // clash check above still guards it.
+        $semesterBlockedDaysBySubject = $subjects->mapWithKeys(function (Subject $subject) use ($distinctDays, $subjectIdsByDay, $semesterBySubject) {
+            $mySemesters = $semesterBySubject->get($subject->id, collect());
+
+            if ($mySemesters->isEmpty()) {
+                return [$subject->id => collect()];
+            }
+
+            $days = $distinctDays->filter(function (string $day) use ($subject, $subjectIdsByDay, $semesterBySubject, $mySemesters) {
+                $otherSemestersThatDay = collect($subjectIdsByDay->get($day, []))
+                    ->reject(fn ($id) => $id === $subject->id)
+                    ->flatMap(fn ($id) => $semesterBySubject->get($id, collect()));
+
+                return $otherSemestersThatDay->intersect($mySemesters)->isNotEmpty();
+            })->values();
+
+            return [$subject->id => $days];
+        });
+
         $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
             ->whereNull('enrollments.teacher_id')
             ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
@@ -626,6 +652,7 @@ class GenerationConstraints extends Component
             'seatsAvailableTotal' => $seatsAvailableTotal,
             'seatsUsedPerSlot' => $seatsUsedPerSlot,
             'clashingDaysBySubject' => $clashingDaysBySubject,
+            'semesterBlockedDaysBySubject' => $semesterBlockedDaysBySubject,
             'missingTeacherSections' => $missingTeacherSections,
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,
