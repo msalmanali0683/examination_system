@@ -198,7 +198,15 @@ class SeatAllocationService
         });
     }
 
-    private function strategyFor(string $seatingStrategy, int $mixedSubjectsPerRoom = 2): SeatingStrategy
+    /**
+     * Exposed publicly (not just used internally) so anything that needs
+     * to simulate "would this fit" — e.g. the room-capacity check during
+     * timetable generation — uses the exact same strategy the session is
+     * actually configured with, rather than assuming a plain one-room-
+     * per-subject model that's more conservative than what's really
+     * going to happen at the real seating step.
+     */
+    public function strategyFor(string $seatingStrategy, int $mixedSubjectsPerRoom = 2): SeatingStrategy
     {
         return match ($seatingStrategy) {
             'combine_sections' => new CombineSectionsSeatingStrategy,

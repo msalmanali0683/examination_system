@@ -378,6 +378,41 @@ class GenerationConstraintsTest extends TestCase
         $this->assertFalse($notes->contains(fn ($note) => str_contains($note, 'room capacity')));
     }
 
+    public function test_room_capacity_check_uses_the_sessions_real_seating_strategy_not_plain_strict(): void
+    {
+        // One room, capacity 6, two 3-student clash-free subjects sharing
+        // the only slot. Under plain Strict (one room per subject) that's
+        // a real shortfall — but this session's actual strategy is the
+        // overflow one, which happily seats both together in the same
+        // room (3 + 3 = 6). The capacity check must simulate with that
+        // real strategy, not assume Strict, or it would report a
+        // shortfall that seating would never actually produce.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create([
+            'respect_room_capacity' => true,
+            'seating_strategy' => 'strict_overflow_subject',
+        ]);
+        $room = Room::factory()->create(['rows' => 6, 'columns' => 1, 'capacity' => 6]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        foreach ([$subjectA, $subjectB] as $subject) {
+            for ($i = 0; $i < 3; $i++) {
+                $student = Student::factory()->create();
+                Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+            }
+        }
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateTimetable');
+
+        $notes = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('conflict_note')->filter();
+        $this->assertFalse($notes->contains(fn ($note) => str_contains($note, 'room capacity')));
+    }
+
     public function test_pinning_and_unpinning_a_subject(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

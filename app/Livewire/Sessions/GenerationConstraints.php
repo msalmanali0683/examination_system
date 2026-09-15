@@ -16,7 +16,6 @@ use App\Services\Generation\ConflictGraphBuilder;
 use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
-use App\Services\Generation\Strategies\StrictSeatingStrategy;
 use App\Services\Generation\TimetableGenerator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -298,9 +297,13 @@ class GenerationConstraints extends Component
     /**
      * Builds the closure TimetableGenerator uses to decide whether the
      * active rooms can seat a candidate group of subjects together in one
-     * slot — same Strict, one-room-per-subject-section simulation the rest
-     * of generation uses, so "fits" here means the same thing it will
-     * during real seating later.
+     * slot — simulated with the session's own saved seating strategy, not
+     * a plain one-room-per-subject assumption. This matters a lot when an
+     * overflow strategy is selected (e.g. "fill leftover seats with a
+     * different subject"): it can seat several small subjects in one room
+     * that Strict alone would insist on spreading across separate rooms,
+     * so checking fit with the real strategy avoids readjusting subjects
+     * away from a slot they'd actually have fit in once seated for real.
      *
      * @param  int[]  $excludedIds
      */
@@ -324,7 +327,7 @@ class GenerationConstraints extends Component
             ->values()
             ->all();
 
-        $strategy = new StrictSeatingStrategy;
+        $strategy = (new SeatAllocationService)->strategyFor($this->examSession->seating_strategy, $this->examSession->mixed_subjects_per_room);
 
         return function (array $subjectIdsInSlot) use ($enrollmentsBySubject, $roomTemplate, $strategy): bool {
             $subset = collect($subjectIdsInSlot)->flatMap(fn ($id) => $enrollmentsBySubject->get($id) ?? collect());
