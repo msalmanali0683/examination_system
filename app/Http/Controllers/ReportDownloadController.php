@@ -148,6 +148,7 @@ class ReportDownloadController extends Controller
 
             if ($shouldDispatch) {
                 GenerateReportFile::dispatch($examSession->id, $reportKey, $filters, $method, $date, $timeSlotIds, $flagValue, false);
+                GenerateReportFile::drainQueueAfterResponse();
             }
 
             $file = $this->cache->find($examSession, $reportKey, $filters);

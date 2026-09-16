@@ -122,6 +122,10 @@ class ReportDownloads extends Component
             }
         }
 
+        if ($dispatched > 0) {
+            GenerateReportFile::drainQueueAfterResponse();
+        }
+
         session()->flash('status', $dispatched > 0
             ? 'Regenerating in the background — this page will update automatically once the fresh version is ready.'
             : 'Already regenerating — hang tight, this page will update automatically.');

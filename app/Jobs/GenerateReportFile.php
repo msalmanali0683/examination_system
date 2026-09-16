@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Artisan;
 use Throwable;
 
 /**
@@ -69,5 +70,44 @@ class GenerateReportFile implements ShouldQueue
         if ($session) {
             (new ReportFileCache)->markFailed($session, $this->reportKey, $this->filters, $e->getMessage());
         }
+    }
+
+    /**
+     * Shared hosting has no persistent queue worker daemon — the schedule
+     * in routes/console.php drains the queue once a minute via cron, but
+     * that depends on the host actually triggering `schedule:run`, which
+     * can lag by minutes after a fresh cron entry is saved (or fail
+     * silently). This is the belt-and-suspenders fix: right after
+     * dispatching a report job, the caller also calls this, which
+     * schedules an immediate drain for the moment after THIS request's
+     * response has already been sent to the browser — so the click still
+     * returns instantly, but the build starts within the same second
+     * instead of waiting for the next cron tick.
+     */
+    public static function drainQueueAfterResponse(): void
+    {
+        dispatch(function () {
+            static::drainQueueNow();
+        })->afterResponse();
+    }
+
+    /**
+     * Processes whatever's currently waiting in the real queue table and
+     * stops — the exact command the cron schedule runs, extracted so it
+     * can also be triggered immediately (see drainQueueAfterResponse())
+     * or called directly, e.g. in tests.
+     */
+    public static function drainQueueNow(): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+
+        Artisan::call('queue:work', [
+            '--stop-when-empty' => true,
+            '--max-time' => 250,
+            '--tries' => 1,
+            '--sleep' => 0,
+        ]);
     }
 }

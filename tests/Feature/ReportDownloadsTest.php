@@ -674,6 +674,41 @@ class ReportDownloadsTest extends TestCase
             ->assertSee('Retry');
     }
 
+    /**
+     * The shared-hosting fallback: with a real (non-sync) queue
+     * connection, dispatch() only persists a row to the jobs table —
+     * nothing runs until something drains it (cron, or this). Proves
+     * GenerateReportFile::drainQueueNow() — what drainQueueAfterResponse()
+     * calls once the browser already has its response — actually clears a
+     * real pending job rather than relying on QUEUE_CONNECTION=sync
+     * quietly making every other test in this file pass either way.
+     */
+    public function test_drain_queue_now_processes_a_job_sitting_in_the_real_queue_table(): void
+    {
+        config(['queue.default' => 'database']);
+        $session = $this->seedSession();
+        $filters = (new ReportFileGenerator)->normalizeFilters(null, null, ['showInvigilators' => true]);
+
+        [, $shouldDispatch] = (new ReportFileCache)->enqueue($session, 'datesheet.pdf', $filters);
+        $this->assertTrue($shouldDispatch);
+        GenerateReportFile::dispatch($session->id, 'datesheet.pdf', $filters, 'datesheetPdf', null, null, true, false);
+
+        // Dispatching only persisted a row to the jobs table — nothing
+        // has run it yet, unlike every other test in this file which
+        // relies on QUEUE_CONNECTION=sync running it inline.
+        $this->assertDatabaseHas('report_files', [
+            'exam_session_id' => $session->id,
+            'report_key' => 'datesheet.pdf',
+            'status' => ReportFile::STATUS_QUEUED,
+        ]);
+
+        GenerateReportFile::drainQueueNow();
+
+        $file = ReportFile::where('exam_session_id', $session->id)->where('report_key', 'datesheet.pdf')->first();
+        $this->assertSame(ReportFile::STATUS_READY, $file->status);
+        $this->assertTrue(Storage::disk('local')->exists($file->disk_path));
+    }
+
     public function test_regenerating_while_already_in_flight_does_not_dispatch_a_second_pair_of_jobs(): void
     {
         Queue::fake();
