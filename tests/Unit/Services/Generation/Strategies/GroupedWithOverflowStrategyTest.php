@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services\Generation\Strategies;
 
 use App\Services\Generation\Strategies\GroupedWithOverflowStrategy;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\TestCase;
 
 class GroupedWithOverflowStrategyTest extends TestCase
@@ -34,7 +35,7 @@ class GroupedWithOverflowStrategyTest extends TestCase
         ];
     }
 
-    private function roomOf(array $placements): \Illuminate\Support\Collection
+    private function roomOf(array $placements): Collection
     {
         return collect($placements)->pluck('roomId', 'enrollmentId');
     }
@@ -93,6 +94,75 @@ class GroupedWithOverflowStrategyTest extends TestCase
 
         foreach ($sameSubjectOtherSection as $e) {
             $this->assertNotSame(1, $roomOf[$e->id], 'same subject, different section must not be used as overflow under other_subject');
+        }
+    }
+
+    public function test_same_subject_then_other_prefers_the_same_subject_when_one_is_available(): void
+    {
+        $nextId = 1;
+        // Room seats 10; primary fills 7, leaving exactly 3 leftover. The
+        // same-subject section has more than enough (5) to use up every
+        // one of those 3 seats itself, so the other-subject group never
+        // gets a chance to fill anything in this room.
+        $primary = $this->enrollments(7, 100, 'A', $nextId);
+        $sameSubjectOtherSection = $this->enrollments(5, 100, 'B', $nextId);
+        $otherSubject = $this->enrollments(2, 200, 'A', $nextId);
+
+        $strategy = new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject_then_other');
+        $result = $strategy->allocate(collect([...$primary, ...$sameSubjectOtherSection, ...$otherSubject]), [
+            $this->room(1, 10, 1),
+            $this->room(2, 10, 1), // headroom for the leftover same-subject and other-subject groups
+        ]);
+
+        $roomOf = $this->roomOf($result->placements);
+
+        $sameSubjectInRoom1 = collect($sameSubjectOtherSection)->filter(fn ($e) => $roomOf[$e->id] === 1);
+        $this->assertCount(3, $sameSubjectInRoom1, 'the same subject\'s other section should fill all 3 leftover seats first');
+
+        foreach ($otherSubject as $e) {
+            $this->assertNotSame(1, $roomOf[$e->id], 'a different subject must not be used while a same-subject candidate is still available');
+        }
+    }
+
+    public function test_same_subject_then_other_falls_back_to_a_different_subject_once_the_same_subject_pool_is_empty(): void
+    {
+        $nextId = 1;
+        // Room seats 10; primary (subject 100) fills 6, same-subject
+        // section B only has 2 (leaves 2 seats still empty after it's
+        // used up), so a different subject must fill the remainder.
+        $primary = $this->enrollments(6, 100, 'A', $nextId);
+        $sameSubjectOtherSection = $this->enrollments(2, 100, 'B', $nextId);
+        $otherSubject = $this->enrollments(2, 200, 'A', $nextId);
+
+        $strategy = new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject_then_other');
+        $result = $strategy->allocate(collect([...$primary, ...$sameSubjectOtherSection, ...$otherSubject]), [
+            $this->room(1, 10, 1),
+        ]);
+
+        $this->assertTrue($result->warnings->isEmpty());
+        $roomOf = $this->roomOf($result->placements);
+
+        foreach ([...$primary, ...$sameSubjectOtherSection, ...$otherSubject] as $e) {
+            $this->assertSame(1, $roomOf[$e->id], "enrollment {$e->id} should have been seated in the one room, mixing same-subject then other-subject overflow");
+        }
+    }
+
+    public function test_same_subject_then_other_falls_back_immediately_when_no_same_subject_candidate_exists(): void
+    {
+        $nextId = 1;
+        $primary = $this->enrollments(7, 100, 'A', $nextId);
+        $otherSubject = $this->enrollments(3, 200, 'A', $nextId);
+
+        $strategy = new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject_then_other');
+        $result = $strategy->allocate(collect([...$primary, ...$otherSubject]), [
+            $this->room(1, 10, 1),
+        ]);
+
+        $this->assertTrue($result->warnings->isEmpty());
+        $roomOf = $this->roomOf($result->placements);
+
+        foreach ($otherSubject as $e) {
+            $this->assertSame(1, $roomOf[$e->id]);
         }
     }
 

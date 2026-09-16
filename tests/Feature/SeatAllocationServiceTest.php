@@ -222,4 +222,32 @@ class SeatAllocationServiceTest extends TestCase
             'no two students should ever share a seat'
         );
     }
+
+    public function test_strict_overflow_section_then_subject_strategy_prefers_a_section_but_falls_back_to_another_subject(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict_overflow_section_then_subject']);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $primarySubject = Subject::factory()->create();
+        $otherSubject = Subject::factory()->create();
+        // Primary section A (6) leaves 4 leftover seats: section B (2) of
+        // the same subject only covers half of them, so the other
+        // subject's 2 students must fill the rest — proving the real
+        // strategyFor() wiring picks the combined strategy, not just the
+        // unit-level class.
+        $this->enrollStudents($session, $primarySubject, 'BSAI 1A', 6);
+        $this->enrollStudents($session, $primarySubject, 'BSAI 1B', 2);
+        $this->enrollStudents($session, $otherSubject, 'BSCS 1A', 2);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $primarySubject->id, 'time_slot_id' => $slot->id]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $otherSubject->id, 'time_slot_id' => $slot->id]);
+
+        $result = (new SeatAllocationService)->generate($session->fresh());
+
+        $this->assertTrue($result->warnings->isEmpty());
+        $seats = SeatAssignment::where('exam_session_id', $session->id)->get();
+        $this->assertCount(10, $seats);
+        $this->assertTrue($seats->every(fn ($s) => $s->room_id === $room->id));
+    }
 }

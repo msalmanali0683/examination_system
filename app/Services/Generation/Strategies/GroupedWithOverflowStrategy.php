@@ -20,6 +20,13 @@ use Illuminate\Support\Collection;
  *    Sections already merges every section of a subject, so there's no
  *    "other section" left to add.
  *  - 'other_subject': any different subject's group.
+ *  - 'same_subject_then_other': prefers another section of the same
+ *    subject, same as 'same_subject' — but once none is left (or none
+ *    exists), falls back to a different subject's group instead of
+ *    leaving the seats empty. Re-checked on every seat filled, so a room
+ *    can legitimately end up seating the primary group, then a
+ *    same-subject section, then a different subject once the
+ *    same-subject pool truly runs out.
  * A room's seat order is unaffected: the primary group fills column by
  * column from the top as usual, and the overflow group (if any) simply
  * continues filling whatever seats are left in that same order — reusing
@@ -32,8 +39,7 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
         private readonly string $groupBy,
         private readonly string $overflowSource,
         protected RoomFiller $filler = new RoomFiller
-    ) {
-    }
+    ) {}
 
     public function allocate(Collection $enrollments, array $rooms): SeatingResult
     {
@@ -136,12 +142,15 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
             return null;
         }
 
-        $candidates = collect($groups)
+        $pool = collect($groups)
             ->except($primaryKey)
-            ->filter(fn ($g) => ! empty($g['ids']))
-            ->filter(fn ($g) => $this->overflowSource === 'same_subject'
-                ? $g['subject_id'] === $primarySubjectId
-                : $g['subject_id'] !== $primarySubjectId);
+            ->filter(fn ($g) => ! empty($g['ids']));
+
+        $candidates = match ($this->overflowSource) {
+            'same_subject' => $pool->filter(fn ($g) => $g['subject_id'] === $primarySubjectId),
+            'other_subject' => $pool->filter(fn ($g) => $g['subject_id'] !== $primarySubjectId),
+            'same_subject_then_other' => $this->sameSubjectThenOther($pool, $primarySubjectId),
+        };
 
         if ($candidates->isEmpty()) {
             return null;
@@ -154,6 +163,17 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
         }
 
         return $candidates->sortByDesc(fn ($g) => count($g['ids']))->keys()->first();
+    }
+
+    /**
+     * @param  Collection<string, array{subject_id:int, ids:int[]}>  $pool
+     * @return Collection<string, array{subject_id:int, ids:int[]}>
+     */
+    private function sameSubjectThenOther(Collection $pool, int $primarySubjectId): Collection
+    {
+        $sameSubject = $pool->filter(fn ($g) => $g['subject_id'] === $primarySubjectId);
+
+        return $sameSubject->isNotEmpty() ? $sameSubject : $pool;
     }
 
     /**

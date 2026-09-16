@@ -21,6 +21,7 @@ class ExamSession extends Model
         'combine_sections' => 'Combine sections of the same subject',
         'strict_overflow_section' => 'Strict, fill leftover seats with another section of the same subject',
         'strict_overflow_subject' => 'Strict, fill leftover seats with a different subject',
+        'strict_overflow_section_then_subject' => 'Strict, fill leftover seats with another section, then a different subject if none left',
         'combine_sections_overflow_subject' => 'Combine sections, fill leftover seats with a different subject',
         'mixed' => 'Mix different subjects (whole columns alternate)',
     ];

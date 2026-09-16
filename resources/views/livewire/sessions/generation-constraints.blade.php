@@ -113,6 +113,7 @@
                 <optgroup label="Fill leftover seats instead of wasting them">
                     <option value="strict_overflow_section">Strict, then fill leftover seats with another section</option>
                     <option value="strict_overflow_subject">Strict, then fill leftover seats with a different subject</option>
+                    <option value="strict_overflow_section_then_subject">Strict, then fill leftover seats with another section &mdash; or a different subject if none left</option>
                     <option value="combine_sections_overflow_subject">Combine sections, then fill leftover seats with a different subject</option>
                 </optgroup>
             </select>

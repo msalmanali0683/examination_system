@@ -69,6 +69,20 @@ class GenerationConstraintsTest extends TestCase
         $this->assertSame('strict_overflow_subject', $session->fresh()->seating_strategy);
     }
 
+    public function test_staff_can_save_the_combined_section_then_subject_overflow_strategy(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('seating_strategy', 'strict_overflow_section_then_subject')
+            ->call('saveSettings')
+            ->assertHasNoErrors();
+
+        $this->assertSame('strict_overflow_section_then_subject', $session->fresh()->seating_strategy);
+    }
+
     public function test_mixed_subjects_per_room_resets_to_default_outside_mixed_mode(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

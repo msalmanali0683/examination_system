@@ -277,6 +277,7 @@ class SeatAllocationService
             'combine_sections_overflow_subject' => new GroupedWithOverflowStrategy(groupBy: 'subject', overflowSource: 'other_subject'),
             'strict_overflow_section' => new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject'),
             'strict_overflow_subject' => new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'other_subject'),
+            'strict_overflow_section_then_subject' => new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'same_subject_then_other'),
             'mixed' => new MixedSeatingStrategy($mixedSubjectsPerRoom),
             default => new StrictSeatingStrategy,
         };
