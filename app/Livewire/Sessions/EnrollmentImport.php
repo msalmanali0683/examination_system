@@ -195,7 +195,12 @@ class EnrollmentImport extends Component
                 $code = $data['course_code'];
 
                 if ($existingSubjects->has($code)) {
-                    $subject = Subject::find($existingSubjects[$code]);
+                    // A subject merged away (see SubjectMergeService) keeps
+                    // its row and code, so a future file using that same
+                    // code still resolves it — but to the surviving
+                    // subject, not the retired one, so both codes stay
+                    // treated as one course going forward.
+                    $subject = Subject::find($existingSubjects[$code])->canonical();
                 } else {
                     $subject = Subject::create([
                         'code' => $code,

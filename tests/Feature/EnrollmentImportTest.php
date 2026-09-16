@@ -4,11 +4,15 @@ namespace Tests\Feature;
 
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Models\ExamSession;
+use App\Models\Subject;
+use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class EnrollmentImportTest extends TestCase
@@ -28,7 +32,7 @@ class EnrollmentImportTest extends TestCase
      */
     private function csv(): UploadedFile
     {
-        $content = <<<CSV
+        $content = <<<'CSV'
         Campus Name,Department Name,SapNo,Name,Program Title,AdmissonYear,Course Code,Course Title,Cr.Hrs,Section,Teacher,PERNR,EMAIL
         Lahore Campus,Dept of SE,70138441,Moeez Arif,BSAI,2026,CS09186|11,Applications of ICT,3,BSAI 1B,Huria Ali,22044,huria.ali@example.com
         Lahore Campus,Dept of SE,70138441,Moeez Arif,BSAI,2026,PHY01115|11,Applied Physics,3,BSAI 1B,Ahmed Iftikhar,6206,ahmed@example.com
@@ -132,7 +136,7 @@ class EnrollmentImportTest extends TestCase
         $this->assertCount(3, $summary);
         $this->assertSame(1, $summary->firstWhere('code', 'CS09186|11')->enrollments_count);
 
-        $subject = \App\Models\Subject::where('code', 'CS09186|11')->first();
+        $subject = Subject::where('code', 'CS09186|11')->first();
         $breakdown = $component->viewData('sectionBreakdown')->get($subject->id);
         $this->assertSame(['BSAI 1B' => 1], $breakdown->all());
     }
@@ -157,7 +161,7 @@ class EnrollmentImportTest extends TestCase
 
     public function test_existing_teacher_matched_by_pernr_is_reused_not_duplicated(): void
     {
-        \App\Models\Teacher::factory()->create(['pernr' => '22044', 'name' => 'Huria Ali (old spelling)']);
+        Teacher::factory()->create(['pernr' => '22044', 'name' => 'Huria Ali (old spelling)']);
 
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
@@ -169,6 +173,31 @@ class EnrollmentImportTest extends TestCase
             ->call('commitImport');
 
         $this->assertDatabaseCount('teachers', 2); // Huria Ali (reused) + Ahmed Iftikhar
+    }
+
+    public function test_importing_a_merged_away_code_resolves_to_the_surviving_subject(): void
+    {
+        $survivor = Subject::factory()->create(['code' => 'CS09186-NEW|11', 'title' => 'ICT Applications']);
+        $mergedAway = Subject::factory()->create([
+            'code' => 'CS09186|11',
+            'title' => 'Applications of ICT',
+            'merged_into_id' => $survivor->id,
+        ]);
+
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(EnrollmentImport::class, ['examSession' => $session])
+            ->set('file', $this->csv())
+            ->call('confirmMapping')
+            ->call('commitImport');
+
+        $this->assertDatabaseHas('enrollments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $survivor->id,
+        ]);
+        $this->assertDatabaseMissing('enrollments', ['subject_id' => $mergedAway->id]);
     }
 
     public function test_user_without_manage_enrollments_permission_is_forbidden(): void
@@ -191,7 +220,7 @@ class EnrollmentImportTest extends TestCase
      */
     public function test_picks_the_data_sheet_when_a_smaller_summary_sheet_comes_first(): void
     {
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
+        $spreadsheet = new Spreadsheet;
 
         $summarySheet = $spreadsheet->getActiveSheet();
         $summarySheet->setTitle('Sheet2');
@@ -204,7 +233,7 @@ class EnrollmentImportTest extends TestCase
         $dataSheet->fromArray(['70138441', 'Moeez Arif', 'CS09186|11', 'Applications of ICT', 'BSAI 1B'], null, 'A2');
 
         $tempPath = tempnam(sys_get_temp_dir(), 'xlsx').'.xlsx';
-        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($tempPath);
+        (new Xlsx($spreadsheet))->save($tempPath);
         $upload = UploadedFile::fake()->createWithContent('multi-sheet.xlsx', file_get_contents($tempPath));
         unlink($tempPath);
 
