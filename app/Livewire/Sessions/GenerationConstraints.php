@@ -19,6 +19,7 @@ use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SemesterExtractor;
 use App\Services\Generation\TimetableGenerator;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -70,6 +71,14 @@ class GenerationConstraints extends Component
      * always reflects the session's current enrollments/assignments.
      */
     public ?array $clashDetails = null;
+
+    /**
+     * The teacher currently open in the duty-list modal, as a plain array
+     * (teacher name and one entry per duty with its day/time/room/lock
+     * state) — null when the modal is closed. Computed fresh on click,
+     * same as $clashDetails.
+     */
+    public ?array $teacherDutyDetails = null;
 
     public function mount(ExamSession $examSession): void
     {
@@ -382,6 +391,44 @@ class GenerationConstraints extends Component
         ];
 
         $this->dispatch('open-modal', 'clash-details');
+    }
+
+    /**
+     * Opens the duty-list modal for a teacher's row in the Duty Fairness
+     * table — every duty this teacher has in this session, in order,
+     * so the admin can see exactly where a low/high count comes from
+     * without leaving the generation page.
+     */
+    public function showTeacherDuties(int $teacherId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $teacher = Teacher::find($teacherId);
+
+        if (! $teacher) {
+            return;
+        }
+
+        $duties = DutyAssignment::where('duty_assignments.exam_session_id', $this->examSession->id)
+            ->where('duty_assignments.teacher_id', $teacherId)
+            ->with('room')
+            ->join('time_slots', 'time_slots.id', '=', 'duty_assignments.time_slot_id')
+            ->orderBy('time_slots.date')
+            ->orderBy('time_slots.start_time')
+            ->select('duty_assignments.*', 'time_slots.date as slot_date', 'time_slots.start_time as slot_start', 'time_slots.end_time as slot_end')
+            ->get();
+
+        $this->teacherDutyDetails = [
+            'teacherName' => $teacher->name,
+            'duties' => $duties->map(fn ($duty) => [
+                'date' => Carbon::parse($duty->slot_date)->format('d M Y'),
+                'time' => substr($duty->slot_start, 0, 5).' – '.substr($duty->slot_end, 0, 5),
+                'room' => $duty->room->name,
+                'locked' => $duty->is_locked,
+            ])->all(),
+        ];
+
+        $this->dispatch('open-modal', 'teacher-duty-details');
     }
 
     /**

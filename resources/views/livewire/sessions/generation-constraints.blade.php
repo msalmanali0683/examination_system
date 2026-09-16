@@ -51,6 +51,38 @@
     @endif
 </x-modal>
 
+<x-modal name="teacher-duty-details" :show="$teacherDutyDetails !== null" focusable max-width="lg">
+    @if ($teacherDutyDetails)
+        <div class="p-6">
+            <div class="flex items-start gap-3">
+                <x-icon name="clipboard" class="h-6 w-6 text-indigo-600 shrink-0" />
+                <div>
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ $teacherDutyDetails['teacherName'] }}</h2>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ count($teacherDutyDetails['duties']) }} duty/duties this session:</p>
+                </div>
+            </div>
+            <div class="mt-4 max-h-96 overflow-y-auto">
+                <ul class="text-sm text-gray-700 dark:text-gray-300 divide-y divide-gray-100 dark:divide-gray-700 border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
+                    @foreach ($teacherDutyDetails['duties'] as $duty)
+                        <li class="px-3 py-2 flex items-center justify-between gap-2">
+                            <span>{{ $duty['date'] }}, {{ $duty['time'] }}</span>
+                            <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                {{ $duty['room'] }}
+                                @if ($duty['locked'])
+                                    <span title="Locked">&#128274;</span>
+                                @endif
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <x-btn variant="secondary" wire:click="$set('teacherDutyDetails', null)" x-on:click="$dispatch('close')">Close</x-btn>
+            </div>
+        </div>
+    @endif
+</x-modal>
+
 @if (session('status'))
     <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
         {{ session('status') }}
@@ -342,7 +374,13 @@
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                     @foreach ($dutyFairness as $row)
                         <tr>
-                            <td class="py-2 px-3 text-gray-900 dark:text-gray-100">{{ $row->teacher->name }}</td>
+                            <td class="py-2 px-3">
+                                @if ($row->count > 0)
+                                    <button type="button" wire:click="showTeacherDuties({{ $row->teacher->id }})" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ $row->teacher->name }}</button>
+                                @else
+                                    <span class="text-gray-900 dark:text-gray-100">{{ $row->teacher->name }}</span>
+                                @endif
+                            </td>
                             <td class="py-2 px-3 text-gray-500 dark:text-gray-400">{{ $row->count }}</td>
                             <td class="py-2 px-3 text-gray-500 dark:text-gray-400">{{ $row->min }} / {{ $row->max }}</td>
                             <td class="py-2 px-3">

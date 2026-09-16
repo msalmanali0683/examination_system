@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Sessions\GenerationConstraints;
+use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
@@ -705,6 +706,35 @@ class GenerationConstraintsTest extends TestCase
         $this->assertCount(1, $details['pairs']);
         $this->assertSame('MAT222 — Fresh Subject', $details['pairs'][0]['subjectLabel']);
         $this->assertSame([['rollNo' => '00000001', 'name' => 'Shared Student']], $details['pairs'][0]['students']);
+    }
+
+    public function test_show_teacher_duties_lists_every_duty_in_order_with_lock_state(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create(['name' => 'Dr Naveed']);
+        $roomA = Room::factory()->create(['name' => 'Room A']);
+        $roomB = Room::factory()->create(['name' => 'Room B']);
+        $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
+        $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '13:00', 'end_time' => '15:00']);
+
+        // Deliberately created out of chronological order — the modal
+        // must still list them earliest first.
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $afternoon->id, 'room_id' => $roomB->id, 'is_locked' => true]);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $morning->id, 'room_id' => $roomA->id, 'is_locked' => false]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $component->call('showTeacherDuties', $teacher->id);
+
+        $details = $component->get('teacherDutyDetails');
+        $this->assertSame('Dr Naveed', $details['teacherName']);
+        $this->assertCount(2, $details['duties']);
+        $this->assertSame('20 Apr 2026', $details['duties'][0]['date']);
+        $this->assertSame('Room A', $details['duties'][0]['room']);
+        $this->assertFalse($details['duties'][0]['locked']);
+        $this->assertSame('21 Apr 2026', $details['duties'][1]['date']);
+        $this->assertSame('Room B', $details['duties'][1]['room']);
+        $this->assertTrue($details['duties'][1]['locked']);
     }
 
     public function test_manually_pinning_a_subject_flags_a_same_day_clash_with_another_subject(): void
