@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Exports\DutySheetExport;
+use App\Exports\FormattedDatesheetExport;
+use App\Exports\MasterDatesheetExport;
+use App\Exports\SeatingChartExport;
+use App\Livewire\Sessions\ReportDownloads;
 use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
@@ -12,7 +17,9 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
+use App\Services\Reports\ReportDataBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class ReportDownloadsTest extends TestCase
@@ -214,7 +221,7 @@ class ReportDownloadsTest extends TestCase
             ]);
         }
 
-        $rows = (new \App\Services\Reports\ReportDataBuilder)->formattedDatesheetRows($session);
+        $rows = (new ReportDataBuilder)->formattedDatesheetRows($session);
 
         $this->assertCount(1, $rows);
         $row = $rows->first();
@@ -226,7 +233,7 @@ class ReportDownloadsTest extends TestCase
         $this->assertTrue($row->rooms->every(fn ($r) => $r->count === 1));
         $this->assertEqualsCanonicalizing(['Ms Ayesha', 'Mr Zoraiz'], $row->rooms->pluck('invigilator')->all());
 
-        $html = (new \App\Exports\FormattedDatesheetExport($session))->view()->render();
+        $html = (new FormattedDatesheetExport($session))->view()->render();
         $this->assertStringContainsString('ITC-501', $html);
         $this->assertStringContainsString('ITC-502', $html);
         $this->assertStringContainsString('Ms Ayesha', $html);
@@ -244,11 +251,11 @@ class ReportDownloadsTest extends TestCase
             'report_version' => 'v2',
         ]);
 
-        $datesheetHtml = (new \App\Exports\MasterDatesheetExport($session))->view()->render();
+        $datesheetHtml = (new MasterDatesheetExport($session))->view()->render();
         $this->assertStringContainsString('Department of Computer Science', $datesheetHtml);
         $this->assertStringContainsString('FINAL — v2', $datesheetHtml);
 
-        $seatingHtml = (new \App\Exports\SeatingChartExport($session))->sheets()[0]->view()->render();
+        $seatingHtml = (new SeatingChartExport($session))->sheets()[0]->view()->render();
         $this->assertStringContainsString('Department of Computer Science', $seatingHtml);
         $this->assertStringContainsString('FINAL — v2', $seatingHtml);
     }
@@ -257,13 +264,13 @@ class ReportDownloadsTest extends TestCase
     {
         $session = $this->seedSession();
 
-        $html = (new \App\Exports\MasterDatesheetExport($session))->view()->render();
+        $html = (new MasterDatesheetExport($session))->view()->render();
         $this->assertStringContainsString(config('exam.department_name'), $html);
         $this->assertStringContainsString('TENTATIVE — SUBJECT TO CHANGE', $html);
 
         // The duty roster carries no per-row department column, but it
         // still stamps the tentative/final status at the top of the sheet.
-        $dutyHtml = (new \App\Exports\DutySheetExport($session))->view()->render();
+        $dutyHtml = (new DutySheetExport($session))->view()->render();
         $this->assertStringContainsString('TENTATIVE — SUBJECT TO CHANGE', $dutyHtml);
     }
 
@@ -321,7 +328,7 @@ class ReportDownloadsTest extends TestCase
 
         // Build the same filtered data directly to check the actual rows,
         // since the PDF binary itself isn't easily assertable on text.
-        $rows = (new \App\Services\Reports\ReportDataBuilder)->datesheetRowsByDate($session, '2026-05-04');
+        $rows = (new ReportDataBuilder)->datesheetRowsByDate($session, '2026-05-04');
         $this->assertCount(1, $rows);
         $this->assertTrue($rows->has('2026-05-04'));
         $this->assertSame('DAY1-SUBJ', $rows->get('2026-05-04')->first()->code);
@@ -335,8 +342,105 @@ class ReportDownloadsTest extends TestCase
         $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'date' => '1999-01-01']));
         $response->assertOk();
 
-        $rows = (new \App\Services\Reports\ReportDataBuilder)->datesheetRowsByDate($session);
+        $rows = (new ReportDataBuilder)->datesheetRowsByDate($session);
         $this->assertCount(2, $rows);
+    }
+
+    /**
+     * Three slots on the SAME date, each with its own identifiable
+     * subject/teacher, so a multi-slot filter can be checked for
+     * including exactly the checked slots and nothing else that day.
+     */
+    private function seedThreeSlotsOneDaySession(): array
+    {
+        $session = ExamSession::factory()->create();
+        $slots = [];
+        $subjects = [];
+
+        foreach (['09:00', '11:30', '14:00'] as $i => $time) {
+            $room = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+            $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-04', 'start_time' => $time]);
+            $subject = Subject::factory()->create(['code' => 'SLOT'.$i.'-SUBJ']);
+            $teacher = Teacher::factory()->create(['is_active' => true]);
+            $student = Student::factory()->create();
+            $enrollment = Enrollment::factory()->create([
+                'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'A',
+            ]);
+            SeatAssignment::create([
+                'exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id,
+                'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1,
+            ]);
+            DutyAssignment::create([
+                'exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id,
+            ]);
+
+            $slots[] = $slot;
+            $subjects[] = $subject;
+        }
+
+        return [$session, $slots, $subjects];
+    }
+
+    public function test_filtering_by_multiple_slots_only_includes_those_slots_data(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session, $slots, $subjects] = $this->seedThreeSlotsOneDaySession();
+
+        $slotsParam = $slots[0]->id.','.$slots[2]->id;
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'slots' => $slotsParam]));
+        $response->assertOk();
+
+        $rows = (new ReportDataBuilder)->datesheetRowsByDate($session, null, [$slots[0]->id, $slots[2]->id]);
+        $codes = $rows->get('2026-05-04')->pluck('code')->all();
+
+        $this->assertEqualsCanonicalizing(['SLOT0-SUBJ', 'SLOT2-SUBJ'], $codes);
+    }
+
+    public function test_a_slots_filter_belonging_to_another_session_is_ignored(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session, $slots, $subjects] = $this->seedThreeSlotsOneDaySession();
+        $otherSlot = TimeSlot::factory()->create(['exam_session_id' => ExamSession::factory()->create()->id]);
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'slots' => (string) $otherSlot->id]));
+        $response->assertOk();
+
+        // None of the other session's slot IDs belong here, so the filter
+        // is dropped entirely and every slot for this session is reported.
+        $rows = (new ReportDataBuilder)->datesheetRowsByDate($session);
+        $this->assertCount(3, $rows->get('2026-05-04'));
+    }
+
+    public function test_selecting_a_date_then_checking_slots_builds_a_query_with_both(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session, $slots] = $this->seedThreeSlotsOneDaySession();
+
+        $component = Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session]);
+        $component->set('filterDate', '2026-05-04')
+            ->set('filterSlotIds', [$slots[0]->id, $slots[1]->id]);
+
+        $this->assertSame([
+            'date' => '2026-05-04',
+            'slots' => $slots[0]->id.','.$slots[1]->id,
+        ], $component->instance()->reportQuery());
+    }
+
+    public function test_changing_the_date_clears_any_previously_checked_slots(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session, $slots] = $this->seedThreeSlotsOneDaySession();
+
+        $component = Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session]);
+        $component->set('filterDate', '2026-05-04')
+            ->set('filterSlotIds', [$slots[0]->id]);
+
+        $this->assertSame([$slots[0]->id], $component->get('filterSlotIds'));
+
+        $component->set('filterDate', '');
+
+        $this->assertSame([], $component->get('filterSlotIds'));
     }
 
     public function test_hiding_invigilators_blanks_them_on_the_affected_reports_but_not_the_duty_roster(): void
@@ -344,12 +448,12 @@ class ReportDownloadsTest extends TestCase
         $session = $this->seedSession();
         $teacherName = DutyAssignment::where('exam_session_id', $session->id)->first()->teacher->name;
 
-        $shown = (new \App\Exports\MasterDatesheetExport($session, null, true))->view()->render();
-        $hidden = (new \App\Exports\MasterDatesheetExport($session, null, false))->view()->render();
+        $shown = (new MasterDatesheetExport($session, null, true))->view()->render();
+        $hidden = (new MasterDatesheetExport($session, null, false))->view()->render();
         $this->assertStringContainsString($teacherName, $shown);
         $this->assertStringNotContainsString($teacherName, $hidden);
 
-        $dutyHtml = (new \App\Exports\DutySheetExport($session))->view()->render();
+        $dutyHtml = (new DutySheetExport($session))->view()->render();
         $this->assertStringContainsString($teacherName, $dutyHtml);
     }
 
@@ -360,8 +464,8 @@ class ReportDownloadsTest extends TestCase
         $roomName = $duty->room->name;
         $teacherName = $duty->teacher->name;
 
-        $shown = (new \App\Exports\DutySheetExport($session, null, true))->view()->render();
-        $hidden = (new \App\Exports\DutySheetExport($session, null, false))->view()->render();
+        $shown = (new DutySheetExport($session, null, true))->view()->render();
+        $hidden = (new DutySheetExport($session, null, false))->view()->render();
 
         $this->assertStringContainsString($roomName, $shown);
         $this->assertStringNotContainsString($roomName, $hidden);

@@ -24,6 +24,16 @@ class ReportDownloads extends Component
     public string $filterDate = '';
 
     /**
+     * Time slot IDs checked for the selected date — empty means "every
+     * slot that day" (the whole-day filter above still applies on its
+     * own). Cleared whenever the date changes, since a different date's
+     * slot IDs don't apply.
+     *
+     * @var int[]
+     */
+    public array $filterSlotIds = [];
+
+    /**
      * Whether the Seating Chart, Datesheet, Batch Schedule and
      * Subject-wise Seating reports print invigilator names — off by
      * request when a copy needs to be shared before duties are settled.
@@ -36,6 +46,11 @@ class ReportDownloads extends Component
      * other report has this option.
      */
     public bool $showRoomSubjectOnDuty = true;
+
+    public function updatedFilterDate(): void
+    {
+        $this->filterSlotIds = [];
+    }
 
     public function emailAllDutySheets(): void
     {
@@ -86,8 +101,9 @@ class ReportDownloads extends Component
 
     /**
      * The query string appended to every download link: the selected date
-     * (if any) and the invigilator-visibility flag, only when it's off
-     * (keeps links clean in the common case where it's left on).
+     * (if any), the selected slots within it (if any), and the
+     * invigilator-visibility flag, only when it's off (keeps links clean
+     * in the common case where it's left on).
      */
     public function reportQuery(): array
     {
@@ -95,6 +111,10 @@ class ReportDownloads extends Component
 
         if ($this->filterDate !== '') {
             $query['date'] = $this->filterDate;
+        }
+
+        if (! empty($this->filterSlotIds)) {
+            $query['slots'] = implode(',', $this->filterSlotIds);
         }
 
         if (! $this->showInvigilators) {
@@ -117,6 +137,10 @@ class ReportDownloads extends Component
             $query['date'] = $this->filterDate;
         }
 
+        if (! empty($this->filterSlotIds)) {
+            $query['slots'] = implode(',', $this->filterSlotIds);
+        }
+
         if (! $this->showRoomSubjectOnDuty) {
             $query['show_room_subject'] = '0';
         }
@@ -126,6 +150,13 @@ class ReportDownloads extends Component
 
     public function render()
     {
+        $slotsForDate = $this->filterDate !== ''
+            ? TimeSlot::where('exam_session_id', $this->examSession->id)
+                ->whereDate('date', $this->filterDate)
+                ->orderBy('start_time')
+                ->get()
+            : collect();
+
         return view('livewire.sessions.report-downloads', [
             'hasSeating' => SeatAssignment::where('exam_session_id', $this->examSession->id)->exists(),
             'hasDuties' => DutyAssignment::where('exam_session_id', $this->examSession->id)->exists(),
@@ -134,6 +165,7 @@ class ReportDownloads extends Component
                 ->distinct()
                 ->orderBy('date')
                 ->pluck('date'),
+            'slotsForDate' => $slotsForDate,
         ]);
     }
 }

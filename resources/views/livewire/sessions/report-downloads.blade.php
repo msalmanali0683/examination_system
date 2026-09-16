@@ -23,11 +23,27 @@
                 @endforeach
             </select>
         </div>
+
+        @if ($filterDate !== '' && $slotsForDate->isNotEmpty())
+            <div class="flex items-center gap-2 flex-wrap">
+                <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Slots</label>
+                @foreach ($slotsForDate as $slot)
+                    <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg px-2 py-1">
+                        <input type="checkbox" wire:model.live="filterSlotIds" value="{{ $slot->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        {{ substr($slot->start_time, 0, 5) }}&ndash;{{ substr($slot->end_time, 0, 5) }}
+                    </label>
+                @endforeach
+            </div>
+        @endif
+
         <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input type="checkbox" wire:model.live="showInvigilators" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
             Print invigilator names
         </label>
         <p class="text-xs text-gray-400">Applies to Seating Chart, Datesheet, Subject-wise Seating and Batch Schedule below. The Duty Roster always shows invigilators.</p>
+        @if ($filterDate !== '' && $slotsForDate->isNotEmpty())
+            <p class="text-xs text-gray-400 w-full">Leave every slot unchecked to include the whole day, or check specific slots to narrow further &mdash; multiple slots can be selected at once.</p>
+        @endif
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -24,17 +24,19 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
         $showInvigilators = $this->showInvigilators($request);
 
-        return Excel::download(new SeatingChartExport($examSession, $date, $showInvigilators), $this->filename($examSession, 'Seating-Chart', 'xlsx', $date));
+        return Excel::download(new SeatingChartExport($examSession, $date, $showInvigilators, $timeSlotIds), $this->filename($examSession, 'Seating-Chart', 'xlsx', $date));
     }
 
     public function seatingChartPdf(Request $request, ExamSession $examSession): Response
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $charts = (new ReportDataBuilder)->seatingCharts($examSession, $date);
+        $charts = (new ReportDataBuilder)->seatingCharts($examSession, $date, $timeSlotIds);
 
         return Pdf::loadView('reports.seating-chart-pdf', ['charts' => $charts, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
             ->setPaper('a4', 'landscape')
@@ -45,16 +47,18 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new MasterDatesheetExport($examSession, $date, $this->showInvigilators($request)), $this->filename($examSession, 'Datesheet', 'xlsx', $date));
+        return Excel::download(new MasterDatesheetExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Datesheet', 'xlsx', $date));
     }
 
     public function datesheetPdf(Request $request, ExamSession $examSession): Response
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $rowsByDate = (new ReportDataBuilder)->datesheetRowsByDate($examSession, $date);
+        $rowsByDate = (new ReportDataBuilder)->datesheetRowsByDate($examSession, $date, $timeSlotIds);
 
         return Pdf::loadView('reports.master-datesheet-pdf', ['rowsByDate' => $rowsByDate, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
             ->setPaper('a4', 'landscape')
@@ -73,24 +77,27 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new FormattedDatesheetExport($examSession, $date, $this->showInvigilators($request)), $this->filename($examSession, 'Formatted-Datesheet', 'xlsx', $date));
+        return Excel::download(new FormattedDatesheetExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Formatted-Datesheet', 'xlsx', $date));
     }
 
     public function dutySheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new DutySheetExport($examSession, $date, $this->showRoomSubject($request)), $this->filename($examSession, 'Duty-Roster', 'xlsx', $date));
+        return Excel::download(new DutySheetExport($examSession, $date, $this->showRoomSubject($request), $timeSlotIds), $this->filename($examSession, 'Duty-Roster', 'xlsx', $date));
     }
 
     public function dutySheetPdf(Request $request, ExamSession $examSession): Response
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $teacherGroups = (new ReportDataBuilder)->dutyRowsByTeacher($examSession, $date);
+        $teacherGroups = (new ReportDataBuilder)->dutyRowsByTeacher($examSession, $date, $timeSlotIds);
 
         return Pdf::loadView('reports.duty-sheet-pdf', ['teacherGroups' => $teacherGroups, 'session' => $examSession, 'showRoomSubject' => $this->showRoomSubject($request)])
             ->setPaper('a4', 'portrait')
@@ -101,16 +108,18 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new SubjectWiseSeatingExport($examSession, $date, $this->showInvigilators($request)), $this->filename($examSession, 'Subject-wise-Seating', 'xlsx', $date));
+        return Excel::download(new SubjectWiseSeatingExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Subject-wise-Seating', 'xlsx', $date));
     }
 
     public function subjectWiseSeatingPdf(Request $request, ExamSession $examSession): Response
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $subjects = (new ReportDataBuilder)->subjectWiseSeatingRows($examSession, $date);
+        $subjects = (new ReportDataBuilder)->subjectWiseSeatingRows($examSession, $date, $timeSlotIds);
 
         return Pdf::loadView('reports.subject-wise-seating-pdf', ['subjects' => $subjects, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
             ->setPaper('a4', 'portrait')
@@ -121,16 +130,18 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new BatchScheduleExport($examSession, $date, $this->showInvigilators($request)), $this->filename($examSession, 'Batch-Schedule', 'xlsx', $date));
+        return Excel::download(new BatchScheduleExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Batch-Schedule', 'xlsx', $date));
     }
 
     public function batchSchedulePdf(Request $request, ExamSession $examSession): Response
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
+        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $sections = (new ReportDataBuilder)->batchScheduleRows($examSession, $date);
+        $sections = (new ReportDataBuilder)->batchScheduleRows($examSession, $date, $timeSlotIds);
 
         return Pdf::loadView('reports.batch-schedule-pdf', ['sections' => $sections, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
             ->setPaper('a4', 'portrait')
@@ -152,6 +163,34 @@ class ReportDownloadController extends Controller
         }
 
         return $examSession->timeSlots()->whereDate('date', $date)->exists() ? $date : null;
+    }
+
+    /**
+     * Reads the optional ?slots=1,2,3 query filter (comma-separated
+     * time_slot ids) — only IDs that actually belong to this session are
+     * kept, so a stale or tampered value can only narrow the report, never
+     * error or leak another session's slots. An empty result after
+     * filtering falls back to null (every slot), same as an invalid date.
+     *
+     * @return int[]|null
+     */
+    private function filterTimeSlotIds(Request $request, ExamSession $examSession): ?array
+    {
+        $raw = $request->query('slots');
+
+        if (! $raw) {
+            return null;
+        }
+
+        $ids = array_filter(array_map('intval', explode(',', $raw)));
+
+        if (empty($ids)) {
+            return null;
+        }
+
+        $valid = $examSession->timeSlots()->whereIn('id', $ids)->pluck('id')->all();
+
+        return empty($valid) ? null : $valid;
     }
 
     /**

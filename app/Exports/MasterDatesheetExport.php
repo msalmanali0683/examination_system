@@ -10,12 +10,15 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 
 class MasterDatesheetExport implements FromView, WithTitle
 {
-    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null, private readonly bool $showInvigilators = true) {}
+    /**
+     * @param  int[]|null  $timeSlotIds
+     */
+    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null, private readonly bool $showInvigilators = true, private readonly ?array $timeSlotIds = null) {}
 
     public function view(): View
     {
         return view('reports.master-datesheet', [
-            'rowsByDate' => (new ReportDataBuilder)->datesheetRowsByDate($this->session, $this->date),
+            'rowsByDate' => (new ReportDataBuilder)->datesheetRowsByDate($this->session, $this->date, $this->timeSlotIds),
             'session' => $this->session,
             'showInvigilators' => $this->showInvigilators,
         ]);

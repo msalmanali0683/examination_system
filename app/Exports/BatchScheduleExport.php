@@ -10,12 +10,15 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 
 class BatchScheduleExport implements FromView, WithTitle
 {
-    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null, private readonly bool $showInvigilators = true) {}
+    /**
+     * @param  int[]|null  $timeSlotIds
+     */
+    public function __construct(private readonly ExamSession $session, private readonly ?string $date = null, private readonly bool $showInvigilators = true, private readonly ?array $timeSlotIds = null) {}
 
     public function view(): View
     {
         return view('reports.batch-schedule', [
-            'sections' => (new ReportDataBuilder)->batchScheduleRows($this->session, $this->date),
+            'sections' => (new ReportDataBuilder)->batchScheduleRows($this->session, $this->date, $this->timeSlotIds),
             'session' => $this->session,
             'showInvigilators' => $this->showInvigilators,
         ]);
