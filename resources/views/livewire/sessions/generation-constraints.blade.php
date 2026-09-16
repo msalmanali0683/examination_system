@@ -154,6 +154,18 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">These subject/section combinations had no teacher on the enrollment sheet. Assign one so the exclusion and duty-matches-sections rules above can account for them.</p>
         </div>
 
+        <div class="px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 flex flex-wrap items-center gap-2">
+            <span class="text-sm text-gray-600 dark:text-gray-300">All {{ $missingTeacherSections->count() }} row{{ $missingTeacherSections->count() === 1 ? '' : 's' }} below:</span>
+            <select wire:model="bulkMissingTeacherId" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <option value="">Select teacher&hellip;</option>
+                @foreach ($activeTeachers as $teacher)
+                    <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
+                @endforeach
+            </select>
+            <x-btn wire:click="assignMissingTeacherToAll" wire:confirm="Assign the selected teacher to all {{ $missingTeacherSections->count() }} pending subject/section pair(s)?" wire:loading.attr="disabled" variant="secondary">Assign to All</x-btn>
+            <x-btn wire:click="ignoreAllMissingTeachers" wire:confirm="Ignore all {{ $missingTeacherSections->count() }} pending subject/section pair(s)? They'll stay without a teacher and won't be listed here again." wire:loading.attr="disabled" variant="ghost">Ignore All</x-btn>
+        </div>
+
         <div class="p-4 sm:p-6">
             <div class="overflow-x-auto -mx-4 sm:-mx-6">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -189,6 +201,14 @@
             </div>
         </div>
     </x-card>
+@endif
+
+@if ($ignoredMissingTeacherCount > 0)
+    <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+        <x-icon name="info" class="h-3.5 w-3.5 shrink-0" />
+        {{ $ignoredMissingTeacherCount }} missing-teacher pair{{ $ignoredMissingTeacherCount === 1 ? '' : 's' }} dismissed.
+        <button type="button" wire:click="unignoreMissingTeachers" class="text-indigo-600 dark:text-indigo-400 hover:underline">Show again</button>
+    </p>
 @endif
 
 <x-card :padded="false">

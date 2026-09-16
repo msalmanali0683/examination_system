@@ -64,6 +64,14 @@ class GenerationConstraints extends Component
     public array $missingTeacherSelection = [];
 
     /**
+     * Teacher chosen for the "assign to all" bulk action on the Missing
+     * Teachers card — a single selection applied to every subject/section
+     * pair currently listed there, as an alternative to picking one row
+     * at a time.
+     */
+    public string $bulkMissingTeacherId = '';
+
+    /**
      * The subject+day currently open in the clash-detail modal, as a
      * plain array (subject label, day, and one entry per clashing
      * subject with the actual list of shared students) — null when the
@@ -524,6 +532,120 @@ class GenerationConstraints extends Component
         session()->flash('status', "Teacher assigned to {$section}.");
     }
 
+    /**
+     * Assigns one chosen teacher to every subject/section pair currently
+     * listed on the Missing Teachers card (skipping any already ignored),
+     * for when the real answer for all of them is the same person rather
+     * than picking row by row.
+     */
+    public function assignMissingTeacherToAll(): void
+    {
+        $this->authorize('manage_sessions');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $teacherId = $this->bulkMissingTeacherId;
+
+        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+            $this->flashError('Pick a teacher before assigning to all.');
+
+            return;
+        }
+
+        $pairs = $this->missingTeacherSections();
+
+        if ($pairs->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($pairs, $teacherId) {
+            foreach ($pairs as $pair) {
+                Enrollment::where('exam_session_id', $this->examSession->id)
+                    ->where('subject_id', $pair->subject_id)
+                    ->where('section', $pair->section)
+                    ->whereNull('teacher_id')
+                    ->update(['teacher_id' => $teacherId]);
+            }
+        });
+
+        $this->missingTeacherSelection = [];
+        $this->bulkMissingTeacherId = '';
+
+        session()->flash('status', "Assigned a teacher to all {$pairs->count()} pending subject/section pair(s).");
+    }
+
+    /**
+     * Dismisses every subject/section pair currently listed on the
+     * Missing Teachers card without assigning anyone — for cases where
+     * that's the real answer (e.g. an online/self-invigilated paper).
+     * Dismissed pairs stay without a teacher and won't be listed again,
+     * even after a later import, until unignored.
+     */
+    public function ignoreAllMissingTeachers(): void
+    {
+        $this->authorize('manage_sessions');
+
+        $pairs = $this->missingTeacherSections();
+
+        if ($pairs->isEmpty()) {
+            return;
+        }
+
+        $ignored = $this->examSession->ignored_missing_teacher_sections ?? [];
+
+        foreach ($pairs as $pair) {
+            $ignored[] = $this->missingTeacherKey($pair->subject_id, $pair->section);
+        }
+
+        $this->examSession->update(['ignored_missing_teacher_sections' => array_values(array_unique($ignored))]);
+        $this->missingTeacherSelection = [];
+
+        session()->flash('status', "Dismissed {$pairs->count()} pending subject/section pair(s) — they'll stay without a teacher.");
+    }
+
+    /**
+     * Brings back every subject/section pair dismissed via "Ignore All"
+     * so they show up on the Missing Teachers card again if still
+     * missing a teacher.
+     */
+    public function unignoreMissingTeachers(): void
+    {
+        $this->authorize('manage_sessions');
+
+        $this->examSession->update(['ignored_missing_teacher_sections' => []]);
+
+        session()->flash('status', 'Dismissed subject/section pairs are visible again.');
+    }
+
+    private function missingTeacherKey(int $subjectId, string $section): string
+    {
+        return "{$subjectId}|{$section}";
+    }
+
+    /**
+     * Every subject/section pair with at least one un-taught enrollment,
+     * excluding pairs explicitly dismissed via "Ignore All" — the single
+     * source of truth behind the Missing Teachers card and both of its
+     * bulk actions, so they always agree on exactly what's pending.
+     */
+    private function missingTeacherSections(): Collection
+    {
+        $ignored = $this->examSession->ignored_missing_teacher_sections ?? [];
+
+        return Enrollment::where('enrollments.exam_session_id', $this->examSession->id)
+            ->whereNull('enrollments.teacher_id')
+            ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
+            ->selectRaw('enrollments.subject_id, enrollments.section, subjects.code, subjects.title, count(*) as missing_count')
+            ->groupBy('enrollments.subject_id', 'enrollments.section', 'subjects.code', 'subjects.title')
+            ->orderBy('subjects.code')
+            ->orderBy('enrollments.section')
+            ->get()
+            ->reject(fn ($row) => in_array($this->missingTeacherKey($row->subject_id, $row->section), $ignored, true))
+            ->values();
+    }
+
     public function generateTimetable(): void
     {
         $this->authorize('generate_roster');
@@ -901,14 +1023,7 @@ class GenerationConstraints extends Component
             return [$subject->id => $slotIds];
         });
 
-        $missingTeacherSections = Enrollment::where('enrollments.exam_session_id', $sessionId)
-            ->whereNull('enrollments.teacher_id')
-            ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
-            ->selectRaw('enrollments.subject_id, enrollments.section, subjects.code, subjects.title, count(*) as missing_count')
-            ->groupBy('enrollments.subject_id', 'enrollments.section', 'subjects.code', 'subjects.title')
-            ->orderBy('subjects.code')
-            ->orderBy('enrollments.section')
-            ->get();
+        $missingTeacherSections = $this->missingTeacherSections();
 
         // Computing this runs a full seating simulation across every slot,
         // so it's only done when the admin asks for it (Check Capacity),
@@ -928,6 +1043,7 @@ class GenerationConstraints extends Component
             'clashingDaysBySubject' => $clashingDaysBySubject,
             'clashingSlotsBySubject' => $clashingSlotsBySubject,
             'missingTeacherSections' => $missingTeacherSections,
+            'ignoredMissingTeacherCount' => count($this->examSession->ignored_missing_teacher_sections ?? []),
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,
             'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),

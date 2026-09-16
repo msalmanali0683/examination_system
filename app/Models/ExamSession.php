@@ -38,6 +38,7 @@ class ExamSession extends Model
         'invigilators_per_room',
         'teacher_subject_exclusion',
         'respect_room_capacity',
+        'ignored_missing_teacher_sections',
         'locked_at',
     ];
 
@@ -46,6 +47,7 @@ class ExamSession extends Model
         'end_date' => 'date',
         'teacher_subject_exclusion' => 'boolean',
         'respect_room_capacity' => 'boolean',
+        'ignored_missing_teacher_sections' => 'array',
         'locked_at' => 'datetime',
     ];
 

@@ -164,6 +164,70 @@ class GenerationConstraintsTest extends TestCase
         ]);
     }
 
+    public function test_assign_to_all_gives_every_pending_pair_the_same_teacher(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+
+        $missingA = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1A', 'teacher_id' => null]);
+        $missingB = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2A', 'teacher_id' => null]);
+        $alreadyTaught = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1B', 'teacher_id' => Teacher::factory()->create()->id]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('bulkMissingTeacherId', (string) $teacher->id)
+            ->call('assignMissingTeacherToAll');
+
+        $this->assertSame($teacher->id, $missingA->fresh()->teacher_id);
+        $this->assertSame($teacher->id, $missingB->fresh()->teacher_id);
+        $this->assertNotEquals($teacher->id, $alreadyTaught->fresh()->teacher_id);
+    }
+
+    public function test_assign_to_all_without_a_selection_shows_an_error(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+        $missing = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('assignMissingTeacherToAll');
+
+        $this->assertNull($missing->fresh()->teacher_id);
+    }
+
+    public function test_ignore_all_dismisses_pending_pairs_until_shown_again(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+        $this->assertCount(1, $component->viewData('missingTeacherSections'));
+
+        $component->call('ignoreAllMissingTeachers');
+
+        // Dismissed — the card's data source is now empty even though the
+        // enrollment itself is still untaught.
+        $this->assertCount(0, $component->viewData('missingTeacherSections'));
+        $this->assertSame(1, $component->viewData('ignoredMissingTeacherCount'));
+        $this->assertDatabaseHas('enrollments', [
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => null,
+        ]);
+
+        $component->call('unignoreMissingTeachers');
+
+        $this->assertCount(1, $component->viewData('missingTeacherSections'));
+        $this->assertSame(0, $component->viewData('ignoredMissingTeacherCount'));
+    }
+
     public function test_toggling_duty_matches_sections_persists_and_reverting_clears_it(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
