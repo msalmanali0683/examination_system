@@ -678,8 +678,8 @@ class ReportDownloadsTest extends TestCase
      * The shared-hosting fallback: with a real (non-sync) queue
      * connection, dispatch() only persists a row to the jobs table —
      * nothing runs until something drains it (cron, or this). Proves
-     * GenerateReportFile::drainQueueNow() — what drainQueueAfterResponse()
-     * calls once the browser already has its response — actually clears a
+     * GenerateReportFile::drainQueueNow() — what the queue:work process
+     * spawnBackgroundDrain() launches actually runs — actually clears a
      * real pending job rather than relying on QUEUE_CONNECTION=sync
      * quietly making every other test in this file pass either way.
      */

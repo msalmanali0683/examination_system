@@ -76,19 +76,45 @@ class GenerateReportFile implements ShouldQueue
      * Shared hosting has no persistent queue worker daemon — the schedule
      * in routes/console.php drains the queue once a minute via cron, but
      * that depends on the host actually triggering `schedule:run`, which
-     * can lag by minutes after a fresh cron entry is saved (or fail
-     * silently). This is the belt-and-suspenders fix: right after
-     * dispatching a report job, the caller also calls this, which
-     * schedules an immediate drain for the moment after THIS request's
-     * response has already been sent to the browser — so the click still
-     * returns instantly, but the build starts within the same second
-     * instead of waiting for the next cron tick.
+     * can lag by minutes after a fresh cron entry is saved. This is the
+     * belt-and-suspenders fix: right after dispatching a report job, the
+     * caller also calls this, which spawns a genuinely separate, detached
+     * OS process to drain the queue immediately — proc_open() with a
+     * backgrounded shell command returns in a few milliseconds regardless
+     * of how long the spawned process takes.
+     *
+     * Deliberately NOT Laravel's dispatch(...)->afterResponse(): that only
+     * frees the browser early on servers that support
+     * fastcgi_finish_request(). This host's web SAPI (LiteSpeed's lsphp)
+     * does not, so afterResponse() silently blocked the whole request
+     * until the report finished building — confirmed live, and worse than
+     * not having this at all. proc_open() doesn't depend on that; verified
+     * against this host's actual web SAPI (not just CLI) before shipping.
      */
-    public static function drainQueueAfterResponse(): void
+    public static function spawnBackgroundDrain(): void
     {
-        dispatch(function () {
-            static::drainQueueNow();
-        })->afterResponse();
+        if (app()->runningUnitTests() || PHP_OS_FAMILY === 'Windows' || ! function_exists('proc_open')) {
+            return;
+        }
+
+        $logFile = storage_path('logs/queue-drain.log');
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['file', $logFile, 'a'],
+            2 => ['file', $logFile, 'a'],
+        ];
+
+        $command = 'php artisan queue:work --stop-when-empty --max-time=250 --tries=1 --sleep=0 >> '
+            .escapeshellarg($logFile).' 2>&1 &';
+
+        $process = @proc_open($command, $descriptors, $pipes, base_path());
+
+        if (! is_resource($process)) {
+            return;
+        }
+
+        fclose($pipes[0]);
+        proc_close($process);
     }
 
     /**

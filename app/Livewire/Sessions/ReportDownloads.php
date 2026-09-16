@@ -123,7 +123,7 @@ class ReportDownloads extends Component
         }
 
         if ($dispatched > 0) {
-            GenerateReportFile::drainQueueAfterResponse();
+            GenerateReportFile::spawnBackgroundDrain();
         }
 
         session()->flash('status', $dispatched > 0
