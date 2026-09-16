@@ -676,14 +676,21 @@ class GenerationConstraints extends Component
     {
         $this->authorize('manage_subjects');
 
-        if (! in_array((int) $this->mergeSurvivorId, $this->mergeSelected, true)) {
+        // Checkbox values arrive as strings (e.g. "1"), so mergeSelected
+        // is an array of strings — normalize before comparing against the
+        // (int)-cast survivor id, or a strict in_array() check here would
+        // wrongly reject a genuinely selected survivor every time.
+        $selectedIds = array_map('intval', $this->mergeSelected);
+        $survivorId = (int) $this->mergeSurvivorId;
+
+        if (! in_array($survivorId, $selectedIds, true)) {
             $this->flashError('Pick which subject should survive the merge.');
 
             return;
         }
 
-        $keep = Subject::find((int) $this->mergeSurvivorId);
-        $mergeAwayIds = array_values(array_diff($this->mergeSelected, [(int) $this->mergeSurvivorId]));
+        $keep = Subject::find($survivorId);
+        $mergeAwayIds = array_values(array_diff($selectedIds, [$survivorId]));
 
         if (! $keep || empty($mergeAwayIds)) {
             $this->flashError('Select at least two subjects to merge.');

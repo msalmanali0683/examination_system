@@ -53,7 +53,11 @@ class SubjectsIndexTest extends TestCase
 
         Livewire::actingAs($staff)
             ->test(Index::class)
-            ->set('selected', [$keep->id, $mergeAway->id])
+            // Checkbox values arrive as strings in real usage (unlike a
+            // plain PHP array of int ids) — regression coverage for a bug
+            // where a strict in_array() comparison against an (int)-cast
+            // survivor id wrongly rejected a genuinely selected subject.
+            ->set('selected', [(string) $keep->id, (string) $mergeAway->id])
             ->call('openMergeModal')
             ->assertSet('showMergeModal', true)
             ->assertDispatched('open-modal', 'merge-subjects')

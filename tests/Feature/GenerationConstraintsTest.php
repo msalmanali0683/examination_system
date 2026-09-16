@@ -814,7 +814,11 @@ class GenerationConstraintsTest extends TestCase
 
         Livewire::actingAs($staff)
             ->test(GenerationConstraints::class, ['examSession' => $session])
-            ->set('mergeSelected', [$keep->id, $mergeAway->id])
+            // Checkbox values arrive as strings in real usage (unlike a
+            // plain PHP array of int ids) — regression coverage for a bug
+            // where a strict in_array() comparison against an (int)-cast
+            // survivor id wrongly rejected a genuinely selected subject.
+            ->set('mergeSelected', [(string) $keep->id, (string) $mergeAway->id])
             ->call('openSubjectMergeModal')
             ->assertSet('showSubjectMergeModal', true)
             ->assertDispatched('open-modal', 'merge-subjects')
