@@ -259,6 +259,21 @@ class ReportDownloads extends Component
         $reportStatus = collect(self::REPORT_TYPES)->mapWithKeys(
             fn ($keys, $type) => [$type => $this->buildStatus($cache, $keys, $this->currentFilters($type))]
         );
+        $anyReportInProgress = $reportStatus->contains(fn ($status) => $status['state'] === 'in_progress');
+
+        // Self-healing retry: the background drain this session's reports
+        // rely on (see GenerateReportFile::spawnBackgroundDrain()) is a
+        // detached OS process that can occasionally fail to actually start
+        // on shared hosting (observed live — no exception, it just never
+        // runs) with no scheduler guaranteed to catch it either. Nothing
+        // here is lost by trying again: queue:work --stop-when-empty is a
+        // near-instant no-op once nothing's left to do, so re-attempting
+        // on every 3-second poll while something is still in progress
+        // costs almost nothing and gives repeated chances to recover from
+        // a silent failure instead of leaving a report stuck indefinitely.
+        if ($anyReportInProgress) {
+            GenerateReportFile::spawnBackgroundDrain();
+        }
 
         return view('livewire.sessions.report-downloads', [
             'hasSeating' => SeatAssignment::where('exam_session_id', $this->examSession->id)->exists(),
@@ -270,7 +285,7 @@ class ReportDownloads extends Component
                 ->pluck('date'),
             'slotsForDate' => $slotsForDate,
             'reportStatus' => $reportStatus,
-            'anyReportInProgress' => $reportStatus->contains(fn ($status) => $status['state'] === 'in_progress'),
+            'anyReportInProgress' => $anyReportInProgress,
         ]);
     }
 

@@ -110,11 +110,22 @@ class GenerateReportFile implements ShouldQueue
         $process = @proc_open($command, $descriptors, $pipes, base_path());
 
         if (! is_resource($process)) {
+            logger()->warning('GenerateReportFile::spawnBackgroundDrain() — proc_open() did not return a process resource.');
+
             return;
         }
 
         fclose($pipes[0]);
-        proc_close($process);
+        $exitCode = proc_close($process);
+
+        // A non-zero exit here is the wrapping shell itself failing (e.g.
+        // unable to fork at all) — the backgrounded job never even
+        // started. Not fatal: the next poll tick or the cron schedule
+        // gets another chance, but worth knowing about if it keeps
+        // happening.
+        if ($exitCode !== 0) {
+            logger()->warning("GenerateReportFile::spawnBackgroundDrain() — background shell exited with code {$exitCode}, the drain may not have started.");
+        }
     }
 
     /**
