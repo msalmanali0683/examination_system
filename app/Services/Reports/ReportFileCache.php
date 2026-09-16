@@ -4,16 +4,20 @@ namespace App\Services\Reports;
 
 use App\Models\ExamSession;
 use App\Models\ReportFile;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Generate-once-and-serve caching for report downloads: a large session's
- * PDF/Excel report can take long enough to build that regenerating it on
- * every single download risks a timeout. The first request for a given
- * report + exact filter combination builds it and saves it to disk;
- * every request after that serves the saved file until an admin
- * explicitly regenerates it (see ReportDownloads::regenerate()).
+ * PDF/Excel report can take long enough to build that generating it inline
+ * in the HTTP request risks a web server/browser timeout. The actual build
+ * now always runs on the queue (see App\Jobs\GenerateReportFile) — this
+ * class only tracks the "queued -> processing -> ready|failed" placeholder
+ * row (enqueue()/markProcessing()/markFailed()) and, once a build has
+ * actually run, the generate-if-missing/regenerate mechanics the job calls
+ * into via ReportFileGenerator.
  */
 class ReportFileCache
 {
@@ -25,6 +29,9 @@ class ReportFileCache
      * Returns the cached file for this report + filters if one exists on
      * disk, generating it via $write first if not. $write receives the
      * disk-relative path it must save the file to (on the "local" disk).
+     * Only ever called from inside the queue job — never from an HTTP
+     * request — since $write can take well over a minute for a large
+     * session.
      *
      * @param  array<string, mixed>  $filters
      */
@@ -32,6 +39,78 @@ class ReportFileCache
     {
         return $this->find($session, $reportKey, $filters)
             ?? $this->generate($session, $reportKey, $filters, $write);
+    }
+
+    /**
+     * Creates (or reuses) the "queued" placeholder row an HTTP request can
+     * check for instead of building the report itself. Returns the row
+     * plus whether the caller should actually dispatch a job: false when a
+     * build for this exact report + filters is already queued/processing
+     * (don't pile up duplicate jobs), or already ready on disk and
+     * $forceFresh wasn't requested. $forceFresh is used by the explicit
+     * "Regenerate" action, which should always kick off a fresh build even
+     * if a ready copy already exists.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{0: ReportFile, 1: bool}
+     */
+    public function enqueue(ExamSession $session, string $reportKey, array $filters, bool $forceFresh = false): array
+    {
+        $hash = $this->hash($filters);
+
+        return DB::transaction(function () use ($session, $reportKey, $filters, $hash, $forceFresh) {
+            $record = $this->query($session, $reportKey, $filters)->lockForUpdate()->first();
+
+            if ($record && in_array($record->status, [ReportFile::STATUS_QUEUED, ReportFile::STATUS_PROCESSING], true)) {
+                return [$record, false];
+            }
+
+            if (! $forceFresh && $record && $record->status === ReportFile::STATUS_READY && Storage::disk(self::DISK)->exists($record->disk_path)) {
+                return [$record, false];
+            }
+
+            $record = ReportFile::updateOrCreate(
+                ['exam_session_id' => $session->id, 'report_key' => $reportKey, 'filters_hash' => $hash],
+                ['filters' => $filters, 'status' => ReportFile::STATUS_QUEUED, 'error' => null, 'disk_path' => null, 'generated_at' => null]
+            );
+
+            return [$record, true];
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    public function markProcessing(ExamSession $session, string $reportKey, array $filters): void
+    {
+        $this->query($session, $reportKey, $filters)->update(['status' => ReportFile::STATUS_PROCESSING]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    public function markFailed(ExamSession $session, string $reportKey, array $filters, string $message): void
+    {
+        $this->query($session, $reportKey, $filters)->update([
+            'status' => ReportFile::STATUS_FAILED,
+            'error' => Str::limit($message, 500),
+        ]);
+    }
+
+    /**
+     * Every tracked row for these report keys + filters (queued,
+     * processing, ready or failed) — the basis for the status line next to
+     * a report's download buttons without triggering a build.
+     *
+     * @param  string[]  $reportKeys
+     * @param  array<string, mixed>  $filters
+     */
+    public function statuses(ExamSession $session, array $reportKeys, array $filters): Collection
+    {
+        return ReportFile::where('exam_session_id', $session->id)
+            ->whereIn('report_key', $reportKeys)
+            ->where('filters_hash', $this->hash($filters))
+            ->get();
     }
 
     /**
@@ -54,7 +133,7 @@ class ReportFileCache
     {
         $record = $this->query($session, $reportKey, $filters)->first();
 
-        if (! $record) {
+        if (! $record || $record->status !== ReportFile::STATUS_READY) {
             return null;
         }
 
@@ -72,26 +151,6 @@ class ReportFileCache
     }
 
     /**
-     * The most recent generated_at across any of the given report keys
-     * for this exact filter combination, or null if none of them are
-     * cached — used to show "generated 2 hours ago" / "not yet
-     * generated" next to a report's download buttons without triggering
-     * a build.
-     *
-     * @param  string[]  $reportKeys
-     * @param  array<string, mixed>  $filters
-     */
-    public function generatedAt(ExamSession $session, array $reportKeys, array $filters): ?Carbon
-    {
-        $max = ReportFile::where('exam_session_id', $session->id)
-            ->whereIn('report_key', $reportKeys)
-            ->where('filters_hash', $this->hash($filters))
-            ->max('generated_at');
-
-        return $max ? Carbon::parse($max) : null;
-    }
-
-    /**
      * @param  array<string, mixed>  $filters
      */
     public function forget(ExamSession $session, string $reportKey, array $filters): void
@@ -102,7 +161,12 @@ class ReportFileCache
             return;
         }
 
-        Storage::disk(self::DISK)->delete($record->disk_path);
+        // A "queued"/"processing" placeholder row (see enqueue()) has no
+        // disk_path yet — nothing to delete from disk in that case.
+        if ($record->disk_path) {
+            Storage::disk(self::DISK)->delete($record->disk_path);
+        }
+
         $record->delete();
     }
 
@@ -120,7 +184,7 @@ class ReportFileCache
 
         return ReportFile::updateOrCreate(
             ['exam_session_id' => $session->id, 'report_key' => $reportKey, 'filters_hash' => $hash],
-            ['filters' => $filters, 'disk_path' => $relativePath, 'generated_at' => now()]
+            ['filters' => $filters, 'disk_path' => $relativePath, 'generated_at' => now(), 'status' => ReportFile::STATUS_READY, 'error' => null]
         );
     }
 

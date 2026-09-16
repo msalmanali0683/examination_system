@@ -2,16 +2,19 @@
 
 namespace App\Livewire\Sessions;
 
+use App\Jobs\GenerateReportFile;
 use App\Mail\TeacherDutySheetMail;
 use App\Models\ActivityLog;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
+use App\Models\ReportFile;
 use App\Models\SeatAssignment;
 use App\Models\TimeSlot;
 use App\Services\Reports\ReportDataBuilder;
 use App\Services\Reports\ReportFileCache;
 use App\Services\Reports\ReportFileGenerator;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Component;
 
@@ -20,7 +23,7 @@ class ReportDownloads extends Component
     /**
      * Every report type this panel offers, mapped to the report_key(s)
      * it's stored under (see ReportFileCache) — the basis for both the
-     * "generated X ago" status line and the Regenerate button.
+     * status line and the Regenerate button.
      */
     private const REPORT_TYPES = [
         'seating-chart' => ['seating-chart.xlsx', 'seating-chart.pdf'],
@@ -29,6 +32,20 @@ class ReportDownloads extends Component
         'duty-roster' => ['duty-roster.xlsx', 'duty-roster.pdf'],
         'subject-wise-seating' => ['subject-wise-seating.xlsx', 'subject-wise-seating.pdf'],
         'batch-schedule' => ['batch-schedule.xlsx', 'batch-schedule.pdf'],
+    ];
+
+    /**
+     * Same shape as REPORT_TYPES, pairing each report_key with the
+     * ReportFileGenerator method that builds it — what Regenerate needs to
+     * dispatch the right background job for each file.
+     */
+    private const GENERATOR_METHODS = [
+        'seating-chart' => [['seating-chart.xlsx', 'seatingChartExcel'], ['seating-chart.pdf', 'seatingChartPdf']],
+        'datesheet' => [['datesheet.xlsx', 'datesheetExcel'], ['datesheet.pdf', 'datesheetPdf']],
+        'formatted-datesheet' => [['formatted-datesheet.xlsx', 'formattedDatesheetExcel']],
+        'duty-roster' => [['duty-roster.xlsx', 'dutySheetExcel'], ['duty-roster.pdf', 'dutySheetPdf']],
+        'subject-wise-seating' => [['subject-wise-seating.xlsx', 'subjectWiseSeatingExcel'], ['subject-wise-seating.pdf', 'subjectWiseSeatingPdf']],
+        'batch-schedule' => [['batch-schedule.xlsx', 'batchScheduleExcel'], ['batch-schedule.pdf', 'batchSchedulePdf']],
     ];
 
     public ExamSession $examSession;
@@ -69,42 +86,45 @@ class ReportDownloads extends Component
     }
 
     /**
-     * Deletes whatever's cached for this report (Excel and PDF together,
-     * both filter combination sensitive) and builds it fresh right away —
-     * every download link keeps working off the cached copy in the
-     * meantime, so this is the one deliberate "get a new version" action
-     * rather than something that happens implicitly.
+     * Queues a fresh build of this report (Excel and PDF together, both
+     * filter-combination sensitive) in the background — never runs inline,
+     * since a large session's report can take well over a minute. Every
+     * download link keeps serving the previously cached copy until the new
+     * one is ready; the status line below updates automatically via
+     * polling once it is.
      */
     public function regenerate(string $reportType): void
     {
         $this->authorize('view_reports');
 
-        $generator = new ReportFileGenerator;
-        $date = $this->filterDate !== '' ? $this->filterDate : null;
-        $slots = ! empty($this->filterSlotIds) ? $this->filterSlotIds : null;
+        $pairs = self::GENERATOR_METHODS[$reportType] ?? null;
 
-        if ($reportType === 'seating-chart') {
-            $generator->seatingChartExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
-            $generator->seatingChartPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
-        } elseif ($reportType === 'datesheet') {
-            $generator->datesheetExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
-            $generator->datesheetPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
-        } elseif ($reportType === 'formatted-datesheet') {
-            $generator->formattedDatesheetExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
-        } elseif ($reportType === 'duty-roster') {
-            $generator->dutySheetExcel($this->examSession, $date, $slots, $this->showRoomSubjectOnDuty, true);
-            $generator->dutySheetPdf($this->examSession, $date, $slots, $this->showRoomSubjectOnDuty, true);
-        } elseif ($reportType === 'subject-wise-seating') {
-            $generator->subjectWiseSeatingExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
-            $generator->subjectWiseSeatingPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
-        } elseif ($reportType === 'batch-schedule') {
-            $generator->batchScheduleExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
-            $generator->batchSchedulePdf($this->examSession, $date, $slots, $this->showInvigilators, true);
-        } else {
+        if (! $pairs) {
             return;
         }
 
-        session()->flash('status', 'Report regenerated — download links now serve the fresh version.');
+        $date = $this->filterDate !== '' ? $this->filterDate : null;
+        $slots = ! empty($this->filterSlotIds) ? $this->filterSlotIds : null;
+        $flag = $reportType === 'duty-roster' ? $this->showRoomSubjectOnDuty : $this->showInvigilators;
+        $flagKey = $reportType === 'duty-roster' ? 'showRoomSubject' : 'showInvigilators';
+
+        $cache = new ReportFileCache;
+        $generator = new ReportFileGenerator;
+        $dispatched = 0;
+
+        foreach ($pairs as [$reportKey, $method]) {
+            $filters = $generator->normalizeFilters($date, $slots, [$flagKey => $flag]);
+            [, $shouldDispatch] = $cache->enqueue($this->examSession, $reportKey, $filters, forceFresh: true);
+
+            if ($shouldDispatch) {
+                GenerateReportFile::dispatch($this->examSession->id, $reportKey, $filters, $method, $date, $slots, $flag, true);
+                $dispatched++;
+            }
+        }
+
+        session()->flash('status', $dispatched > 0
+            ? 'Regenerating in the background — this page will update automatically once the fresh version is ready.'
+            : 'Already regenerating — hang tight, this page will update automatically.');
     }
 
     /**
@@ -232,8 +252,8 @@ class ReportDownloads extends Component
             : collect();
 
         $cache = new ReportFileCache;
-        $reportGeneratedAt = collect(self::REPORT_TYPES)->mapWithKeys(
-            fn ($keys, $type) => [$type => $cache->generatedAt($this->examSession, $keys, $this->currentFilters($type))]
+        $reportStatus = collect(self::REPORT_TYPES)->mapWithKeys(
+            fn ($keys, $type) => [$type => $this->buildStatus($cache, $keys, $this->currentFilters($type))]
         );
 
         return view('livewire.sessions.report-downloads', [
@@ -245,7 +265,43 @@ class ReportDownloads extends Component
                 ->orderBy('date')
                 ->pluck('date'),
             'slotsForDate' => $slotsForDate,
-            'reportGeneratedAt' => $reportGeneratedAt,
+            'reportStatus' => $reportStatus,
+            'anyReportInProgress' => $reportStatus->contains(fn ($status) => $status['state'] === 'in_progress'),
         ]);
+    }
+
+    /**
+     * Reduces every tracked row for a report type (Excel and PDF can each
+     * be at a different point in their own lifecycle, since a single
+     * download-link click only builds the one format clicked) down to one
+     * status the view can show: "in_progress" wins if either format is
+     * still queued/building, otherwise the most recent successful build
+     * wins, otherwise a failure, otherwise "never generated".
+     *
+     * @param  string[]  $reportKeys
+     * @param  array<string, mixed>  $filters
+     * @return array{state: string, generatedAt: ?Carbon, error: ?string}
+     */
+    private function buildStatus(ReportFileCache $cache, array $reportKeys, array $filters): array
+    {
+        $rows = $cache->statuses($this->examSession, $reportKeys, $filters);
+
+        if ($rows->contains(fn ($row) => in_array($row->status, [ReportFile::STATUS_QUEUED, ReportFile::STATUS_PROCESSING], true))) {
+            return ['state' => 'in_progress', 'generatedAt' => null, 'error' => null];
+        }
+
+        $generatedAt = $rows->where('status', ReportFile::STATUS_READY)->max('generated_at');
+
+        if ($generatedAt) {
+            return ['state' => 'ready', 'generatedAt' => $generatedAt, 'error' => null];
+        }
+
+        $failed = $rows->firstWhere('status', ReportFile::STATUS_FAILED);
+
+        if ($failed) {
+            return ['state' => 'failed', 'generatedAt' => null, 'error' => $failed->error];
+        }
+
+        return ['state' => 'none', 'generatedAt' => null, 'error' => null];
     }
 }

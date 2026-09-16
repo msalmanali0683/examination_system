@@ -15,11 +15,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ReportFile extends Model
 {
+    /**
+     * Lifecycle of a row: QUEUED as soon as a request asks for a report
+     * that isn't cached yet (before any work has happened), PROCESSING
+     * once the background job actually picks it up, then either READY
+     * (disk_path/generated_at set) or FAILED (error set) — see
+     * ReportFileCache and App\Jobs\GenerateReportFile.
+     */
+    public const STATUS_QUEUED = 'queued';
+
+    public const STATUS_PROCESSING = 'processing';
+
+    public const STATUS_READY = 'ready';
+
+    public const STATUS_FAILED = 'failed';
+
     protected $fillable = [
         'exam_session_id',
         'report_key',
         'filters_hash',
         'filters',
+        'status',
+        'error',
         'disk_path',
         'generated_at',
     ];

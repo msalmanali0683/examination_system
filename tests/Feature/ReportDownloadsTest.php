@@ -6,6 +6,7 @@ use App\Exports\DutySheetExport;
 use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
+use App\Jobs\GenerateReportFile;
 use App\Livewire\Sessions\Index;
 use App\Livewire\Sessions\ReportDownloads;
 use App\Models\DutyAssignment;
@@ -20,7 +21,10 @@ use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\Reports\ReportDataBuilder;
+use App\Services\Reports\ReportFileCache;
+use App\Services\Reports\ReportFileGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -563,6 +567,125 @@ class ReportDownloadsTest extends TestCase
 
         $this->assertTrue($after['datesheet.xlsx']->gt($before['datesheet.xlsx']));
         $this->assertTrue($after['datesheet.pdf']->gt($before['datesheet.pdf']));
+    }
+
+    /**
+     * With a real (non-sync) queue, dispatching a job doesn't run it
+     * inline — this is the actual production shape (QUEUE_CONNECTION on
+     * the live server is "database"), unlike every test above which relies
+     * on phpunit.xml forcing QUEUE_CONNECTION=sync so a dispatched job
+     * still runs before the request returns.
+     */
+    public function test_a_report_thats_not_cached_yet_queues_a_background_job_and_redirects_instead_of_blocking(): void
+    {
+        Queue::fake();
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
+
+        $response->assertRedirect(route('sessions.show', $session));
+        $response->assertSessionHas('status');
+
+        Queue::assertPushed(GenerateReportFile::class, 1);
+        $this->assertDatabaseHas('report_files', [
+            'exam_session_id' => $session->id,
+            'report_key' => 'datesheet.pdf',
+            'status' => ReportFile::STATUS_QUEUED,
+        ]);
+    }
+
+    public function test_requesting_the_same_uncached_report_twice_only_queues_one_job(): void
+    {
+        Queue::fake();
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
+
+        Queue::assertPushed(GenerateReportFile::class, 1);
+    }
+
+    public function test_a_queued_jobs_handle_method_builds_the_report_and_marks_it_ready(): void
+    {
+        Queue::fake();
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
+
+        Queue::assertPushed(GenerateReportFile::class, function (GenerateReportFile $job) {
+            $job->handle();
+
+            return true;
+        });
+
+        $file = ReportFile::where('exam_session_id', $session->id)->where('report_key', 'datesheet.pdf')->first();
+        $this->assertSame(ReportFile::STATUS_READY, $file->status);
+        $this->assertNotNull($file->generated_at);
+        $this->assertTrue(Storage::disk('local')->exists($file->disk_path));
+    }
+
+    public function test_a_job_that_fails_marks_the_report_failed_with_the_error_instead_of_leaving_it_queued(): void
+    {
+        $session = ExamSession::factory()->create();
+        $filters = (new ReportFileGenerator)->normalizeFilters(null, null, ['showInvigilators' => true]);
+        (new ReportFileCache)->enqueue($session, 'datesheet.pdf', $filters);
+
+        // A method name that doesn't exist on ReportFileGenerator forces
+        // handle() through its catch branch deterministically, without
+        // needing to fabricate a real generation failure.
+        (new GenerateReportFile($session->id, 'datesheet.pdf', $filters, 'noSuchReportMethod', null, null, true, false))->handle();
+
+        $file = ReportFile::where('exam_session_id', $session->id)->where('report_key', 'datesheet.pdf')->first();
+        $this->assertSame(ReportFile::STATUS_FAILED, $file->status);
+        $this->assertNotNull($file->error);
+    }
+
+    public function test_the_reports_panel_shows_a_generating_indicator_while_a_build_is_in_flight(): void
+    {
+        Queue::fake();
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
+
+        Livewire::actingAs($staff)
+            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->assertSee('Generating');
+    }
+
+    public function test_the_reports_panel_shows_a_failed_state_with_a_retry_option(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+        $filters = (new ReportFileGenerator)->normalizeFilters(null, null, ['showInvigilators' => true]);
+        $cache = new ReportFileCache;
+
+        foreach (['datesheet.xlsx', 'datesheet.pdf'] as $reportKey) {
+            $cache->enqueue($session, $reportKey, $filters);
+            $cache->markFailed($session, $reportKey, $filters, 'Something broke');
+        }
+
+        Livewire::actingAs($staff)
+            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->assertSee('Generation failed')
+            ->assertSee('Retry');
+    }
+
+    public function test_regenerating_while_already_in_flight_does_not_dispatch_a_second_pair_of_jobs(): void
+    {
+        Queue::fake();
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session])->call('regenerate', 'datesheet');
+        Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session])->call('regenerate', 'datesheet');
+
+        // datesheet.xlsx + datesheet.pdf from the first call only — the
+        // second call sees both still queued/processing and skips them.
+        Queue::assertPushed(GenerateReportFile::class, 2);
     }
 
     public function test_deleting_a_session_removes_its_cached_report_files_from_disk(): void

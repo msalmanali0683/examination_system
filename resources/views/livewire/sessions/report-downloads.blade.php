@@ -1,4 +1,4 @@
-<div class="space-y-4">
+<div class="space-y-4" @if ($anyReportInProgress) wire:poll.3s @endif>
     @if (session('status'))
         <div class="p-3 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
             {{ session('status') }}
@@ -64,7 +64,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
-                <x-report-status type="seating-chart" :generated-at="$reportGeneratedAt['seating-chart']" />
+                <x-report-status type="seating-chart" :status="$reportStatus['seating-chart']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -87,7 +87,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
-                <x-report-status type="datesheet" :generated-at="$reportGeneratedAt['datesheet']" />
+                <x-report-status type="datesheet" :status="$reportStatus['datesheet']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -107,7 +107,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
                 </div>
-                <x-report-status type="formatted-datesheet" :generated-at="$reportGeneratedAt['formatted-datesheet']" />
+                <x-report-status type="formatted-datesheet" :status="$reportStatus['formatted-datesheet']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -138,7 +138,7 @@
                         <span wire:loading wire:target="emailAllDutySheets">Sending&hellip;</span>
                     </x-btn>
                 </div>
-                <x-report-status type="duty-roster" :generated-at="$reportGeneratedAt['duty-roster']" />
+                <x-report-status type="duty-roster" :status="$reportStatus['duty-roster']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate duties first.</p>
             @endif
@@ -161,7 +161,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
-                <x-report-status type="subject-wise-seating" :generated-at="$reportGeneratedAt['subject-wise-seating']" />
+                <x-report-status type="subject-wise-seating" :status="$reportStatus['subject-wise-seating']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -184,7 +184,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
-                <x-report-status type="batch-schedule" :generated-at="$reportGeneratedAt['batch-schedule']" />
+                <x-report-status type="batch-schedule" :status="$reportStatus['batch-schedule']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
