@@ -3,6 +3,13 @@
         Check the rooms available for this session. Override capacity only if fewer seats than usual should be used (e.g. social distancing, partial room booking).
     </p>
 
+    @if ($rooms->isNotEmpty())
+        <div class="flex items-center gap-3 mb-4">
+            <x-btn wire:click="selectAllRooms" variant="secondary" size="sm" icon="door">Select All</x-btn>
+            <x-btn wire:click="deselectAllRooms" wire:confirm="Remove every room from this session? Any capacity overrides you've set will be lost." variant="secondary" size="sm" icon="trash">Remove All</x-btn>
+        </div>
+    @endif
+
     @if ($rooms->isEmpty())
         <x-empty-state icon="door" title="No active rooms yet" description="Add rooms from the Rooms page first.">
             <x-slot name="actions">

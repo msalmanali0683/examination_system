@@ -12,12 +12,15 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
+use App\Models\SessionRoom;
+use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -123,6 +126,44 @@ class ExamSessionsTest extends TestCase
         ]);
     }
 
+    public function test_select_all_rooms_includes_every_active_room_and_leaves_existing_overrides(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $alreadyIncluded = Room::factory()->create(['capacity' => 50]);
+        $notYetIncluded = Room::factory()->create();
+        $inactiveRoom = Room::factory()->create(['is_active' => false]);
+
+        SessionRoom::create([
+            'exam_session_id' => $session->id, 'room_id' => $alreadyIncluded->id, 'is_active' => true, 'capacity_override' => 30,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(RoomSelection::class, ['examSession' => $session])
+            ->call('selectAllRooms');
+
+        $this->assertDatabaseHas('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $alreadyIncluded->id, 'capacity_override' => 30]);
+        $this->assertDatabaseHas('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $notYetIncluded->id]);
+        $this->assertDatabaseMissing('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $inactiveRoom->id]);
+    }
+
+    public function test_deselect_all_rooms_removes_every_room_from_the_session(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $roomA = Room::factory()->create();
+        $roomB = Room::factory()->create();
+
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomA->id, 'is_active' => true]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomB->id, 'is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(RoomSelection::class, ['examSession' => $session])
+            ->call('deselectAllRooms');
+
+        $this->assertDatabaseCount('session_rooms', 0);
+    }
+
     public function test_excluding_a_teacher_creates_a_constraint_row_and_reverting_removes_it(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
@@ -211,7 +252,7 @@ class ExamSessionsTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $teacher = Teacher::factory()->create(['is_active' => true]);
-        \App\Models\SessionTeacherConstraint::create([
+        SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
             'min_duties' => 4,
@@ -248,7 +289,7 @@ class ExamSessionsTest extends TestCase
                 'exam_session_id' => $session->id,
                 'teacher_id' => $teacher->id,
             ]);
-            $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+            $constraint = SessionTeacherConstraint::where('exam_session_id', $session->id)
                 ->where('teacher_id', $teacher->id)->first();
             $this->assertSame([6], $constraint->unavailable_days);
         }
@@ -264,7 +305,7 @@ class ExamSessionsTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $teacher = Teacher::factory()->create(['is_active' => true]);
-        \App\Models\SessionTeacherConstraint::create([
+        SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
             'unavailable_days' => [1], // already unavailable Monday
@@ -274,7 +315,7 @@ class ExamSessionsTest extends TestCase
             ->test(TeacherConstraints::class, ['examSession' => $session])
             ->call('toggleDayForAll', 6, false); // now also off Saturday
 
-        $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+        $constraint = SessionTeacherConstraint::where('exam_session_id', $session->id)
             ->where('teacher_id', $teacher->id)->first();
         $this->assertEqualsCanonicalizing([1, 6], $constraint->unavailable_days);
     }
@@ -290,12 +331,12 @@ class ExamSessionsTest extends TestCase
         // Mark Saturday (ISO 6) unavailable.
         $component->call('toggleDayAvailable', $teacher->id, 6);
 
-        $constraint = \App\Models\SessionTeacherConstraint::where('exam_session_id', $session->id)
+        $constraint = SessionTeacherConstraint::where('exam_session_id', $session->id)
             ->where('teacher_id', $teacher->id)
             ->first();
         $this->assertSame([6], $constraint->unavailable_days);
-        $this->assertFalse($constraint->isAvailableOn(\Carbon\Carbon::parse('2026-04-25'))); // a Saturday
-        $this->assertTrue($constraint->isAvailableOn(\Carbon\Carbon::parse('2026-04-20'))); // a Monday
+        $this->assertFalse($constraint->isAvailableOn(Carbon::parse('2026-04-25'))); // a Saturday
+        $this->assertTrue($constraint->isAvailableOn(Carbon::parse('2026-04-20'))); // a Monday
 
         // Toggling the same day back on should remove the row entirely
         // (no longer differs from the session default).
@@ -425,8 +466,8 @@ class ExamSessionsTest extends TestCase
         $student = Student::factory()->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        \App\Models\SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        \App\Models\SessionTeacherConstraint::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'is_excluded' => true]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        SessionTeacherConstraint::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'is_excluded' => true]);
         $enrollment = Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
         SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
         SeatAssignment::create(['exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1]);
