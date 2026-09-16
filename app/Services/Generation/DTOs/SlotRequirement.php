@@ -17,8 +17,14 @@ final class SlotRequirement
         public readonly bool $hasUnresolvedClash = false,
         /** @var string[] */
         public readonly array $clashDetails = [],
-    ) {
-    }
+        /**
+         * The total number of rooms the whole system has, regardless of
+         * session — defaults to "unknown" (never triggers
+         * exceedsSystemWideRooms()) for callers that don't have this
+         * figure, e.g. SlotCapacitySimulator's hypothetical slots.
+         */
+        public readonly int $roomsAvailableSystemWide = PHP_INT_MAX,
+    ) {}
 
     /**
      * Raw total capacity across active rooms, compared against the number
@@ -37,6 +43,18 @@ final class SlotRequirement
     public function roomsShortfall(): int
     {
         return max(0, $this->roomsNeeded - $this->roomsAvailable);
+    }
+
+    /**
+     * True when the shortfall can't be solved by simply activating more
+     * of the session's existing rooms — the system doesn't have that
+     * many rooms at all, so the fix is a different seating strategy
+     * (combine sections/subjects) or fewer clashes landing in this slot,
+     * not "activate one more room".
+     */
+    public function exceedsSystemWideRooms(): bool
+    {
+        return $this->roomsNeeded > $this->roomsAvailableSystemWide;
     }
 
     public function teachersShortfall(): int

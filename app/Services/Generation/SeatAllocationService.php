@@ -104,6 +104,70 @@ class SeatAllocationService
     }
 
     /**
+     * The number of rooms this slot would truly need to seat everyone,
+     * even beyond however many rooms actually exist in the system today
+     * — used when previewAgainstAllRooms() still leaves students unseated
+     * with every real room, so the capacity check can report an honest
+     * shortfall instead of a flat "one more room" guess. Simulated by
+     * cloning the pool's largest room profile as many times as it takes
+     * to seat everyone; nothing about these virtual rooms is persisted.
+     */
+    public function trueRoomsNeededForSlot(ExamSession $session, TimeSlot $slot, ?SeatingStrategy $strategyOverride = null): int
+    {
+        $strategy = $strategyOverride ?? $this->strategyFor($session->seating_strategy, $session->mixed_subjects_per_room);
+
+        $subjectIds = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->where('time_slot_id', $slot->id)
+            ->pluck('subject_id')
+            ->all();
+
+        if (empty($subjectIds)) {
+            return 0;
+        }
+
+        $pool = $this->allRoomsPool();
+        $largest = $pool->sortByDesc('capacity')->first();
+
+        if ($largest === null) {
+            return 0;
+        }
+
+        $result = $this->allocateForSlot($session, $slot, $subjectIds, $pool, $strategy);
+        $unseated = collect($result->warnings)->where('type', 'unseated')->count();
+
+        // Jump straight to a close estimate instead of growing one room
+        // at a time from scratch, then let the loop below correct for
+        // any bin-packing waste the estimate didn't account for.
+        $virtualRoomsAdded = (int) ceil($unseated / $largest['capacity']);
+
+        for ($i = 0; $i < $virtualRoomsAdded; $i++) {
+            $pool->push(['room_id' => -1 - $i, 'rows' => $largest['rows'], 'columns' => $largest['columns'], 'capacity' => $largest['capacity']]);
+        }
+
+        $result = $this->allocateForSlot($session, $slot, $subjectIds, $pool, $strategy);
+        $safety = 0;
+
+        while (collect($result->warnings)->where('type', 'unseated')->isNotEmpty() && $safety < 50) {
+            $virtualRoomsAdded++;
+            $pool->push(['room_id' => -1 - $virtualRoomsAdded, 'rows' => $largest['rows'], 'columns' => $largest['columns'], 'capacity' => $largest['capacity']]);
+            $result = $this->allocateForSlot($session, $slot, $subjectIds, $pool, $strategy);
+            $safety++;
+        }
+
+        return collect($result->placements)->pluck('roomId')->unique()->count();
+    }
+
+    /**
+     * Every room the system has, regardless of whether it's activated for
+     * any particular session — the ceiling used to tell "you have more
+     * rooms to activate" apart from "no more rooms exist anywhere".
+     */
+    public function totalSystemRoomsCount(): int
+    {
+        return $this->allRoomsPool()->count();
+    }
+
+    /**
      * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
      */
     private function activeSessionRoomPool(ExamSession $session): Collection

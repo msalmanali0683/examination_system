@@ -9,9 +9,11 @@ use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Services\Generation\RequirementCalculator;
+use App\Services\Generation\Strategies\MixedSeatingStrategy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,7 +38,7 @@ class RequirementCalculatorTest extends TestCase
 
     private function assignSubjectToSlot(ExamSession $session, Subject $subject, TimeSlot $slot): void
     {
-        \App\Models\SubjectSlotAssignment::create([
+        SubjectSlotAssignment::create([
             'exam_session_id' => $session->id,
             'subject_id' => $subject->id,
             'time_slot_id' => $slot->id,
@@ -150,6 +152,57 @@ class RequirementCalculatorTest extends TestCase
         $this->assertFalse($requirement->isMet());
     }
 
+    public function test_room_shortfall_reflects_the_true_minimum_when_even_every_system_room_falls_short(): void
+    {
+        // Regression: when every room in the system is already active for
+        // this session and it's still not enough, the old code just
+        // bumped roomsNeeded to roomsAvailable+1 — understating a bigger
+        // true shortfall and implying "activate one more room" when
+        // there wasn't a spare room anywhere to activate.
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 12);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->count(5)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertTrue($requirement->hasUnseatedStudents);
+        $this->assertSame(1, $requirement->roomsAvailable);
+        // True minimum: three 5-capacity rooms (5 + 5 + 2), not a flat "+1" guess.
+        $this->assertSame(3, $requirement->roomsNeeded);
+        $this->assertSame(2, $requirement->roomsShortfall());
+        $this->assertTrue($requirement->exceedsSystemWideRooms());
+        $this->assertFalse($requirement->isMet());
+    }
+
+    public function test_rooms_shortfall_is_not_treated_as_system_wide_when_more_rooms_exist_to_activate(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+
+        $activeRoom = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom->id, 'is_active' => true]);
+
+        // Exists in the system but not activated for this session.
+        Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->count(5)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertFalse($requirement->exceedsSystemWideRooms());
+    }
+
     public function test_excluding_a_teacher_reduces_available_count(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
@@ -240,7 +293,7 @@ class RequirementCalculatorTest extends TestCase
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 3);
 
-        \App\Models\SubjectSlotAssignment::create([
+        SubjectSlotAssignment::create([
             'exam_session_id' => $session->id,
             'subject_id' => $subject->id,
             'time_slot_id' => $slot->id,
@@ -289,7 +342,7 @@ class RequirementCalculatorTest extends TestCase
 
         $whatIfRequirement = (new RequirementCalculator)->calculate(
             $session,
-            new \App\Services\Generation\Strategies\MixedSeatingStrategy(4)
+            new MixedSeatingStrategy(4)
         )->first();
         $this->assertSame(1, $whatIfRequirement->roomsNeeded);
 

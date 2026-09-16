@@ -27,7 +27,11 @@
                         <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->roomsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->roomsShortfall() === 0])>
                             {{ $r->roomsNeeded }} / {{ $r->roomsAvailable }}
                             @if ($r->roomsShortfall() > 0)
-                                ({{ $r->roomsShortfall() }} more needed)
+                                @if ($r->exceedsSystemWideRooms())
+                                    (short by {{ $r->roomsShortfall() }} &mdash; no more rooms exist anywhere; try combining sections/subjects in this slot)
+                                @else
+                                    ({{ $r->roomsShortfall() }} more needed)
+                                @endif
                             @endif
                         </td>
                         <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->teachersShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->teachersShortfall() === 0])>

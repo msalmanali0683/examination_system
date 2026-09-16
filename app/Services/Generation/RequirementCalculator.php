@@ -18,9 +18,7 @@ use Illuminate\Support\Collection;
  */
 class RequirementCalculator
 {
-    public function __construct(private SeatAllocationService $seatAllocationService = new SeatAllocationService)
-    {
-    }
+    public function __construct(private SeatAllocationService $seatAllocationService = new SeatAllocationService) {}
 
     /**
      * $strategyOverride simulates a different seating strategy than the
@@ -38,6 +36,7 @@ class RequirementCalculator
         $activeSessionRooms = $session->sessionRooms()->where('is_active', true)->with('room')->get();
         $roomsAvailable = $activeSessionRooms->count();
         $seatsAvailable = $activeSessionRooms->sum(fn ($sr) => $sr->effectiveCapacity());
+        $roomsAvailableSystemWide = $this->seatAllocationService->totalSystemRoomsCount();
 
         // Every active teacher is available by default; a constraint row
         // only exists where the admin explicitly excluded them or marked
@@ -60,12 +59,13 @@ class RequirementCalculator
             ->groupBy('time_slot_id')
             ->map(fn ($rows) => $rows->pluck('conflict_note')->unique()->values()->all());
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $session) {
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $roomsAvailableSystemWide, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $session, $strategyOverride) {
             $slot = $active['slot'];
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
 
-            $roomsNeeded = $allRoomsPreview->get($slot->id)['roomsUsed'] ?? $active['roomsUsed'];
+            $allRoomsResult = $allRoomsPreview->get($slot->id);
+            $roomsNeeded = $allRoomsResult['roomsUsed'] ?? $active['roomsUsed'];
 
             // previewAgainstAllRooms() picks whichever rooms in the whole
             // system fit this slot most efficiently, which aren't
@@ -77,7 +77,19 @@ class RequirementCalculator
             // shortfall" while the real, active-room simulation says
             // otherwise.
             if ($unseated->isNotEmpty() && $roomsNeeded <= $roomsAvailable) {
-                $roomsNeeded = $roomsAvailable + 1;
+                $allRoomsUnseated = $allRoomsResult
+                    ? $allRoomsResult['result']->warnings->where('type', 'unseated')
+                    : collect();
+
+                // Even every room the system has still leaves students
+                // unseated, so roomsUsed above is capped at however many
+                // rooms exist — it can't be the true need. A flat "+1"
+                // guess understates a bigger shortfall and wrongly implies
+                // one more room would fix it even when none is left to
+                // activate; simulate the real minimum instead.
+                $roomsNeeded = $allRoomsUnseated->isNotEmpty()
+                    ? $this->seatAllocationService->trueRoomsNeededForSlot($session, $slot, $strategyOverride)
+                    : $roomsAvailable + 1;
             }
 
             $unavailableThisDay = $constrainedNotExcluded->filter(fn ($c) => ! $c->isAvailableOn($slot->date))->count();
@@ -96,6 +108,7 @@ class RequirementCalculator
                 seatsAvailable: $seatsAvailable,
                 hasUnresolvedClash: ! empty($clashDetails),
                 clashDetails: $clashDetails,
+                roomsAvailableSystemWide: $roomsAvailableSystemWide,
             );
         })->values();
     }
