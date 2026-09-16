@@ -240,7 +240,10 @@
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead>
                         <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                            <th class="py-2 pl-4 sm:pl-6 pr-4">Subject</th>
+                            @can('manage_subjects')
+                                <th class="py-2 pl-4 sm:pl-6 pr-2 w-8" title="Select subjects to merge"></th>
+                            @endcan
+                            <th class="py-2 pr-4 {{ auth()->user()->can('manage_subjects') ? '' : 'pl-4 sm:pl-6' }}">Subject</th>
                             <th class="py-2 pr-4">Semester</th>
                             <th class="py-2 pr-4">Students</th>
                             <th class="py-2 pr-4">Assigned Slot</th>
@@ -259,7 +262,12 @@
                                 $semesterColors = ['blue', 'green', 'indigo', 'yellow', 'gray'];
                             @endphp
                             <tr @class(['hover:bg-gray-50 dark:hover:bg-gray-900/30', 'opacity-50' => $excluded])>
-                                <td class="py-2.5 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">
+                                @can('manage_subjects')
+                                    <td class="py-2.5 pl-4 sm:pl-6 pr-2">
+                                        <input type="checkbox" wire:model.live="mergeSelected" value="{{ $subject->id }}" title="Select to merge with another subject below" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    </td>
+                                @endcan
+                                <td class="py-2.5 pr-4 text-gray-900 dark:text-gray-100 {{ auth()->user()->can('manage_subjects') ? '' : 'pl-4 sm:pl-6' }}">
                                     {{ $subject->code }} &mdash; {{ $subject->title }}
                                     @if ($sections->count() > 1)
                                         <div class="text-xs text-gray-400 font-normal mt-0.5">
@@ -326,9 +334,49 @@
                     </tbody>
                 </table>
             </div>
+
+            @can('manage_subjects')
+                @if (count($mergeSelected) > 0)
+                    <div class="mt-3 flex items-center gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                        <span class="text-sm text-indigo-700 dark:text-indigo-300">{{ count($mergeSelected) }} selected</span>
+                        <x-btn wire:click="openSubjectMergeModal" variant="dark" size="sm" icon="document">Merge Selected</x-btn>
+                        <button type="button" wire:click="$set('mergeSelected', [])" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
+                    </div>
+                @else
+                    <p class="mt-3 text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+                        <x-icon name="info" class="h-3.5 w-3.5 shrink-0" />
+                        Two codes that turn out to be the same real course? Check them above and merge them into one.
+                    </p>
+                @endif
+            @endcan
         @endif
     </div>
 </x-card>
+
+<x-modal name="merge-subjects" :show="$showSubjectMergeModal" focusable max-width="lg">
+    <div class="p-6">
+        <div class="flex items-start gap-3">
+            <x-icon name="document" class="h-6 w-6 text-indigo-600 shrink-0" />
+            <div>
+                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Merge Subjects</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pick which subject survives &mdash; every other selected subject is merged into it, catalog-wide. Enrollments and pinned slots in sessions that aren't finalized move onto the survivor; finalized sessions keep their original historical record untouched.</p>
+            </div>
+        </div>
+        <div class="mt-4 space-y-2">
+            @foreach (\App\Models\Subject::whereIn('id', $mergeSelected)->orderBy('code')->get() as $subject)
+                <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 cursor-pointer">
+                    <input type="radio" wire:model="mergeSurvivorId" value="{{ $subject->id }}" class="text-indigo-600 focus:ring-indigo-500">
+                    <span class="font-medium">{{ $subject->code }}</span>
+                    <span class="text-gray-500 dark:text-gray-400">&mdash; {{ $subject->title }}</span>
+                </label>
+            @endforeach
+        </div>
+        <div class="mt-6 flex justify-end gap-3">
+            <x-btn variant="secondary" wire:click="closeSubjectMergeModal" x-on:click="$dispatch('close')">Cancel</x-btn>
+            <x-btn wire:click="confirmSubjectMerge" wire:confirm="Merge these subjects? This cannot be undone." x-on:click="$dispatch('close')" variant="dark">Merge</x-btn>
+        </div>
+    </div>
+</x-modal>
 
 <x-card>
     <div class="flex items-center justify-between gap-4 flex-wrap">

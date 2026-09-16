@@ -19,6 +19,7 @@ use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SemesterExtractor;
 use App\Services\Generation\TimetableGenerator;
+use App\Services\SubjectMergeService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -70,6 +71,25 @@ class GenerationConstraints extends Component
      * at a time.
      */
     public string $bulkMissingTeacherId = '';
+
+    /**
+     * Subject IDs checked in the Pin Subjects to Slots table for merging
+     * (e.g. two different codes that turn out to be the same real
+     * course, like "EE07205|11" and "EES07104|11") — bound directly to
+     * each row's checkbox via wire:model.
+     *
+     * @var int[]
+     */
+    public array $mergeSelected = [];
+
+    public bool $showSubjectMergeModal = false;
+
+    /**
+     * Which of the checked subjects survives the merge, chosen in the
+     * modal — the rest are merged into it. Kept as a string since it's
+     * bound to a radio input.
+     */
+    public string $mergeSurvivorId = '';
 
     /**
      * The subject+day currently open in the clash-detail modal, as a
@@ -617,6 +637,85 @@ class GenerationConstraints extends Component
         $this->examSession->update(['ignored_missing_teacher_sections' => []]);
 
         session()->flash('status', 'Dismissed subject/section pairs are visible again.');
+    }
+
+    public function openSubjectMergeModal(): void
+    {
+        $this->authorize('manage_subjects');
+
+        if (count($this->mergeSelected) < 2) {
+            $this->flashError('Select at least two subjects to merge.');
+
+            return;
+        }
+
+        $this->mergeSurvivorId = (string) $this->mergeSelected[0];
+        $this->showSubjectMergeModal = true;
+    }
+
+    public function closeSubjectMergeModal(): void
+    {
+        $this->showSubjectMergeModal = false;
+        $this->mergeSurvivorId = '';
+    }
+
+    /**
+     * Merges every other checked subject into the chosen survivor —
+     * this is a catalog-wide change (see SubjectMergeService), not just
+     * for this session: enrollments and pinned slots move onto the
+     * survivor in every non-finalized session that has them, and future
+     * enrollment imports under a merged-away code resolve to the
+     * survivor too. Finalized sessions keep their original record.
+     */
+    public function confirmSubjectMerge(): void
+    {
+        $this->authorize('manage_subjects');
+
+        if (! in_array((int) $this->mergeSurvivorId, $this->mergeSelected, true)) {
+            $this->flashError('Pick which subject should survive the merge.');
+
+            return;
+        }
+
+        $keep = Subject::find((int) $this->mergeSurvivorId);
+        $mergeAwayIds = array_values(array_diff($this->mergeSelected, [(int) $this->mergeSurvivorId]));
+
+        if (! $keep || empty($mergeAwayIds)) {
+            $this->flashError('Select at least two subjects to merge.');
+
+            return;
+        }
+
+        $service = new SubjectMergeService;
+        $totals = ['enrollmentsMoved' => 0, 'enrollmentsDropped' => 0, 'slotAssignmentsMoved' => 0, 'slotAssignmentsDropped' => 0, 'sessionsSkipped' => 0];
+        $merged = 0;
+
+        foreach ($mergeAwayIds as $mergeAwayId) {
+            $mergeAway = Subject::find($mergeAwayId);
+
+            if (! $mergeAway || $mergeAway->isMerged()) {
+                continue;
+            }
+
+            $stats = $service->merge($keep, $mergeAway);
+
+            foreach ($stats as $key => $value) {
+                $totals[$key] += $value;
+            }
+
+            $merged++;
+        }
+
+        $this->mergeSelected = [];
+        $this->closeSubjectMergeModal();
+
+        session()->flash(
+            'status',
+            "Merged {$merged} subject(s) into {$keep->code} — {$totals['enrollmentsMoved']} enrollment(s) moved"
+                .($totals['enrollmentsDropped'] ? ", {$totals['enrollmentsDropped']} duplicate enrollment(s) dropped" : '')
+                .($totals['sessionsSkipped'] ? ", {$totals['sessionsSkipped']} finalized session(s) left untouched" : '')
+                .'. Regenerate the timetable if the merged students need reshuffling into one slot.'
+        );
     }
 
     private function missingTeacherKey(int $subjectId, string $section): string

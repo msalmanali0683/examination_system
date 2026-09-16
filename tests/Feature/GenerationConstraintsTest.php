@@ -801,6 +801,44 @@ class GenerationConstraintsTest extends TestCase
         $this->assertTrue($details['duties'][1]['locked']);
     }
 
+    public function test_merging_subjects_from_the_pin_table_moves_enrollments_and_flags_the_merged_one(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $keep = Subject::factory()->create(['code' => 'EE07205|11', 'title' => 'Digital Logic and Design']);
+        $mergeAway = Subject::factory()->create(['code' => 'EES07104|11', 'title' => 'Digital Logic Design']);
+        $student = Student::factory()->create();
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $mergeAway->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('mergeSelected', [$keep->id, $mergeAway->id])
+            ->call('openSubjectMergeModal')
+            ->assertSet('showSubjectMergeModal', true)
+            ->set('mergeSurvivorId', (string) $keep->id)
+            ->call('confirmSubjectMerge')
+            ->assertSet('showSubjectMergeModal', false)
+            ->assertSet('mergeSelected', []);
+
+        $this->assertSame($keep->id, $enrollment->fresh()->subject_id);
+        $this->assertSame($keep->id, $mergeAway->fresh()->merged_into_id);
+    }
+
+    public function test_opening_the_subject_merge_modal_with_fewer_than_two_selected_shows_an_error(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->set('mergeSelected', [$subject->id])
+            ->call('openSubjectMergeModal')
+            ->assertSet('showSubjectMergeModal', false);
+    }
+
     public function test_manually_pinning_a_subject_flags_a_same_day_clash_with_another_subject(): void
     {
         // Regression: Capacity Check showed "Ready" while Pin Subjects to
