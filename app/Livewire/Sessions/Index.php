@@ -136,6 +136,31 @@ class Index extends Component
         $this->reset(['duplicatingId', 'duplicateName', 'duplicateStartDate', 'duplicateEndDate']);
     }
 
+    /**
+     * Every child table (rooms, teacher constraints, time slots,
+     * enrollments, generated seating/duties) cascades on delete at the
+     * database level, so this can never leave orphaned rows or fail with
+     * a foreign-key error. A finalized session is the permanent
+     * historical record, so it's excluded the same way every other
+     * mutating action on it is (see GuardsFinalizedSession) — unlock it
+     * first if it genuinely needs to go.
+     */
+    public function deleteSession(int $sessionId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $session = ExamSession::findOrFail($sessionId);
+
+        if ($session->isFinalized()) {
+            session()->flash('error', 'Finalized sessions are the permanent historical record and can\'t be deleted — unlock it first if it really needs to go.');
+
+            return;
+        }
+
+        $session->delete();
+        session()->flash('status', 'Session deleted.');
+    }
+
     #[Layout('layouts.app')]
     public function render()
     {

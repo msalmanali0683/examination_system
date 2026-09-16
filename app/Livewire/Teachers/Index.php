@@ -32,6 +32,15 @@ class Index extends Component
 
     public string $search = '';
 
+    /**
+     * Teacher IDs checked for bulk actions — bound directly to each row's
+     * checkbox via wire:model, so Livewire keeps this in sync without a
+     * dedicated toggle method per row.
+     *
+     * @var int[]
+     */
+    public array $selected = [];
+
     public function mount(): void
     {
         $this->authorize('manage_teachers');
@@ -102,6 +111,46 @@ class Index extends Component
         $this->authorize('manage_teachers');
         Teacher::findOrFail($id)->delete();
         session()->flash('status', 'Teacher deleted.');
+    }
+
+    /**
+     * Selects or deselects every teacher currently visible on this page
+     * (not the whole search result set) — $ids comes straight from the
+     * paginated rows the view is already showing.
+     *
+     * @param  int[]  $ids
+     */
+    public function toggleSelectAllOnPage(array $ids): void
+    {
+        if (! empty($ids) && empty(array_diff($ids, $this->selected))) {
+            $this->selected = array_values(array_diff($this->selected, $ids));
+        } else {
+            $this->selected = array_values(array_unique(array_merge($this->selected, $ids)));
+        }
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+    }
+
+    /**
+     * A teacher's duty assignments and session-teacher-constraint rows
+     * cascade-delete at the database level, and their enrollment rows
+     * just lose the teacher reference (nullable column) — every one of
+     * those is a real FK constraint, not application logic, so this can
+     * never fail with a foreign-key error even when the teacher has
+     * duties in an active or finalized session.
+     */
+    public function bulkDelete(): void
+    {
+        $this->authorize('manage_teachers');
+
+        $count = Teacher::destroy($this->selected);
+
+        $this->selected = [];
+        $this->resetPage();
+        session()->flash('status', "{$count} teacher(s) deleted.");
     }
 
     public function cancel(): void

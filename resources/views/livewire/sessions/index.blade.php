@@ -8,6 +8,18 @@
     </x-page-header>
 </x-slot>
 
+@if (session('status'))
+    <div class="p-4 mb-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
+        {{ session('status') }}
+    </div>
+@endif
+
+@if (session('error'))
+    <div class="p-4 mb-4 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm">
+        {{ session('error') }}
+    </div>
+@endif
+
 <x-card>
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
@@ -86,6 +98,11 @@
                         <button type="button" wire:click="startDuplicate({{ $session->id }})" title="Duplicate this session's rooms and teacher constraints" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                             <x-icon name="document" class="h-4 w-4" />
                         </button>
+                        @if ($session->status !== 'finalized')
+                            <button type="button" wire:click="deleteSession({{ $session->id }})" wire:confirm="Delete &quot;{{ $session->name }}&quot;? This permanently removes its rooms, teacher constraints, time slots, enrollments, and generated seating/duty data. This cannot be undone." title="Delete this session" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                                <x-icon name="trash" class="h-4 w-4" />
+                            </button>
+                        @endif
                     </div>
                 </div>
             @endforeach

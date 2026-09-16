@@ -415,6 +415,56 @@ class ExamSessionsTest extends TestCase
         $this->assertDatabaseCount('enrollments', 1);
     }
 
+    public function test_deleting_a_session_removes_it_and_every_dependent_row(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $room = Room::factory()->create();
+        $teacher = Teacher::factory()->create();
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        \App\Models\SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        \App\Models\SessionTeacherConstraint::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'is_excluded' => true]);
+        $enrollment = Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+        SeatAssignment::create(['exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1]);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteSession', $session->id)
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseMissing('exam_sessions', ['id' => $session->id]);
+        $this->assertDatabaseCount('time_slots', 0);
+        $this->assertDatabaseCount('session_rooms', 0);
+        $this->assertDatabaseCount('session_teacher_constraints', 0);
+        $this->assertDatabaseCount('enrollments', 0);
+        $this->assertDatabaseCount('subject_slot_assignments', 0);
+        $this->assertDatabaseCount('seat_assignments', 0);
+        $this->assertDatabaseCount('duty_assignments', 0);
+
+        // Shared catalog data is untouched.
+        $this->assertDatabaseHas('rooms', ['id' => $room->id]);
+        $this->assertDatabaseHas('teachers', ['id' => $teacher->id]);
+        $this->assertDatabaseHas('subjects', ['id' => $subject->id]);
+        $this->assertDatabaseHas('students', ['id' => $student->id]);
+    }
+
+    public function test_deleting_a_finalized_session_is_blocked(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteSession', $session->id);
+
+        $this->assertDatabaseHas('exam_sessions', ['id' => $session->id]);
+    }
+
     public function test_user_without_manage_enrollments_permission_cannot_reset(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
