@@ -9,12 +9,28 @@ use App\Models\ExamSession;
 use App\Models\SeatAssignment;
 use App\Models\TimeSlot;
 use App\Services\Reports\ReportDataBuilder;
+use App\Services\Reports\ReportFileCache;
+use App\Services\Reports\ReportFileGenerator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Component;
 
 class ReportDownloads extends Component
 {
+    /**
+     * Every report type this panel offers, mapped to the report_key(s)
+     * it's stored under (see ReportFileCache) — the basis for both the
+     * "generated X ago" status line and the Regenerate button.
+     */
+    private const REPORT_TYPES = [
+        'seating-chart' => ['seating-chart.xlsx', 'seating-chart.pdf'],
+        'datesheet' => ['datesheet.xlsx', 'datesheet.pdf'],
+        'formatted-datesheet' => ['formatted-datesheet.xlsx'],
+        'duty-roster' => ['duty-roster.xlsx', 'duty-roster.pdf'],
+        'subject-wise-seating' => ['subject-wise-seating.xlsx', 'subject-wise-seating.pdf'],
+        'batch-schedule' => ['batch-schedule.xlsx', 'batch-schedule.pdf'],
+    ];
+
     public ExamSession $examSession;
 
     /**
@@ -50,6 +66,64 @@ class ReportDownloads extends Component
     public function updatedFilterDate(): void
     {
         $this->filterSlotIds = [];
+    }
+
+    /**
+     * Deletes whatever's cached for this report (Excel and PDF together,
+     * both filter combination sensitive) and builds it fresh right away —
+     * every download link keeps working off the cached copy in the
+     * meantime, so this is the one deliberate "get a new version" action
+     * rather than something that happens implicitly.
+     */
+    public function regenerate(string $reportType): void
+    {
+        $this->authorize('view_reports');
+
+        $generator = new ReportFileGenerator;
+        $date = $this->filterDate !== '' ? $this->filterDate : null;
+        $slots = ! empty($this->filterSlotIds) ? $this->filterSlotIds : null;
+
+        if ($reportType === 'seating-chart') {
+            $generator->seatingChartExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
+            $generator->seatingChartPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
+        } elseif ($reportType === 'datesheet') {
+            $generator->datesheetExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
+            $generator->datesheetPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
+        } elseif ($reportType === 'formatted-datesheet') {
+            $generator->formattedDatesheetExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
+        } elseif ($reportType === 'duty-roster') {
+            $generator->dutySheetExcel($this->examSession, $date, $slots, $this->showRoomSubjectOnDuty, true);
+            $generator->dutySheetPdf($this->examSession, $date, $slots, $this->showRoomSubjectOnDuty, true);
+        } elseif ($reportType === 'subject-wise-seating') {
+            $generator->subjectWiseSeatingExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
+            $generator->subjectWiseSeatingPdf($this->examSession, $date, $slots, $this->showInvigilators, true);
+        } elseif ($reportType === 'batch-schedule') {
+            $generator->batchScheduleExcel($this->examSession, $date, $slots, $this->showInvigilators, true);
+            $generator->batchSchedulePdf($this->examSession, $date, $slots, $this->showInvigilators, true);
+        } else {
+            return;
+        }
+
+        session()->flash('status', 'Report regenerated — download links now serve the fresh version.');
+    }
+
+    /**
+     * The exact filter shape ReportFileGenerator would use for this
+     * report type given the panel's current selections — the basis for
+     * asking the cache "is there already a generated copy of this?"
+     * without triggering a build.
+     *
+     * @return array<string, mixed>
+     */
+    private function currentFilters(string $reportType): array
+    {
+        $date = $this->filterDate !== '' ? $this->filterDate : null;
+        $slots = ! empty($this->filterSlotIds) ? $this->filterSlotIds : null;
+        $flag = $reportType === 'duty-roster'
+            ? ['showRoomSubject' => $this->showRoomSubjectOnDuty]
+            : ['showInvigilators' => $this->showInvigilators];
+
+        return (new ReportFileGenerator)->normalizeFilters($date, $slots, $flag);
     }
 
     public function emailAllDutySheets(): void
@@ -157,6 +231,11 @@ class ReportDownloads extends Component
                 ->get()
             : collect();
 
+        $cache = new ReportFileCache;
+        $reportGeneratedAt = collect(self::REPORT_TYPES)->mapWithKeys(
+            fn ($keys, $type) => [$type => $cache->generatedAt($this->examSession, $keys, $this->currentFilters($type))]
+        );
+
         return view('livewire.sessions.report-downloads', [
             'hasSeating' => SeatAssignment::where('exam_session_id', $this->examSession->id)->exists(),
             'hasDuties' => DutyAssignment::where('exam_session_id', $this->examSession->id)->exists(),
@@ -166,6 +245,7 @@ class ReportDownloads extends Component
                 ->orderBy('date')
                 ->pluck('date'),
             'slotsForDate' => $slotsForDate,
+            'reportGeneratedAt' => $reportGeneratedAt,
         ]);
     }
 }

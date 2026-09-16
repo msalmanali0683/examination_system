@@ -7,6 +7,7 @@ use App\Models\ExamSession;
 use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -156,6 +157,12 @@ class Index extends Component
 
             return;
         }
+
+        // report_files rows cascade with the session, but the generated
+        // Excel/PDF files themselves (see ReportFileCache) live on disk
+        // and aren't touched by that — clean them up here so a deleted
+        // session doesn't leave orphaned reports behind.
+        Storage::disk('local')->deleteDirectory("reports/{$session->id}");
 
         $session->delete();
         session()->flash('status', 'Session deleted.');

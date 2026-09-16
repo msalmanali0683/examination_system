@@ -6,10 +6,12 @@ use App\Exports\DutySheetExport;
 use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
+use App\Livewire\Sessions\Index;
 use App\Livewire\Sessions\ReportDownloads;
 use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\ReportFile;
 use App\Models\Room;
 use App\Models\SeatAssignment;
 use App\Models\Student;
@@ -19,12 +21,19 @@ use App\Models\TimeSlot;
 use App\Models\User;
 use App\Services\Reports\ReportDataBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class ReportDownloadsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
 
     private function seedSession(array $attributes = []): ExamSession
     {
@@ -498,5 +507,78 @@ class ReportDownloadsTest extends TestCase
             ->get(route('sessions.show', $session))
             ->assertOk()
             ->assertSee('Room-wise Seating Chart');
+    }
+
+    public function test_downloading_the_same_report_twice_serves_the_cached_file_without_regenerating(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session))->assertOk();
+
+        $this->assertDatabaseCount('report_files', 1);
+        $firstGeneratedAt = ReportFile::first()->generated_at;
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session))->assertOk();
+
+        // Still exactly one cached record, with the same generation
+        // timestamp — the second request served the same file rather
+        // than building (and re-recording) a fresh one.
+        $this->assertDatabaseCount('report_files', 1);
+        $this->assertTrue($firstGeneratedAt->eq(ReportFile::first()->generated_at));
+    }
+
+    public function test_different_filter_combinations_get_their_own_cached_file(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        [$session] = $this->seedTwoDateSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session))->assertOk();
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', [$session, 'date' => '2026-05-04']))->assertOk();
+
+        $this->assertDatabaseCount('report_files', 2);
+    }
+
+    public function test_regenerating_a_report_replaces_the_cached_file(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.xlsx', $session))->assertOk();
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session))->assertOk();
+        $this->assertDatabaseCount('report_files', 2);
+
+        $before = ReportFile::pluck('generated_at', 'report_key');
+
+        // Force the clock forward so a fresh generated_at is
+        // distinguishable from the original.
+        $this->travel(1)->minutes();
+
+        Livewire::actingAs($staff)
+            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->call('regenerate', 'datesheet');
+
+        $this->assertDatabaseCount('report_files', 2);
+        $after = ReportFile::pluck('generated_at', 'report_key');
+
+        $this->assertTrue($after['datesheet.xlsx']->gt($before['datesheet.xlsx']));
+        $this->assertTrue($after['datesheet.pdf']->gt($before['datesheet.pdf']));
+    }
+
+    public function test_deleting_a_session_removes_its_cached_report_files_from_disk(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session))->assertOk();
+        $path = ReportFile::first()->disk_path;
+        $this->assertTrue(Storage::disk('local')->exists($path));
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteSession', $session->id);
+
+        $this->assertDatabaseMissing('report_files', ['exam_session_id' => $session->id]);
+        $this->assertFalse(Storage::disk('local')->exists($path));
     }
 }

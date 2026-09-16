@@ -64,6 +64,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
+                <x-report-status type="seating-chart" :generated-at="$reportGeneratedAt['seating-chart']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -86,6 +87,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
+                <x-report-status type="datesheet" :generated-at="$reportGeneratedAt['datesheet']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -105,6 +107,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
                     </a>
                 </div>
+                <x-report-status type="formatted-datesheet" :generated-at="$reportGeneratedAt['formatted-datesheet']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -135,6 +138,7 @@
                         <span wire:loading wire:target="emailAllDutySheets">Sending&hellip;</span>
                     </x-btn>
                 </div>
+                <x-report-status type="duty-roster" :generated-at="$reportGeneratedAt['duty-roster']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate duties first.</p>
             @endif
@@ -157,6 +161,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
+                <x-report-status type="subject-wise-seating" :generated-at="$reportGeneratedAt['subject-wise-seating']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif
@@ -179,6 +184,7 @@
                         <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
                     </a>
                 </div>
+                <x-report-status type="batch-schedule" :generated-at="$reportGeneratedAt['batch-schedule']" />
             @else
                 <p class="text-xs text-gray-400 italic">Generate seating first.</p>
             @endif

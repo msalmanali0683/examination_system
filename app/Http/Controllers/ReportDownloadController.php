@@ -2,67 +2,57 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\BatchScheduleExport;
-use App\Exports\DutySheetExport;
-use App\Exports\FormattedDatesheetExport;
-use App\Exports\MasterDatesheetExport;
-use App\Exports\SeatingChartExport;
-use App\Exports\SubjectWiseSeatingExport;
 use App\Models\ExamSession;
-use App\Services\Reports\ReportDataBuilder;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Models\ReportFile;
+use App\Services\Reports\ReportFileGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use Symfony\Component\HttpFoundation\Response;
 
 class ReportDownloadController extends Controller
 {
+    public function __construct(private readonly ReportFileGenerator $generator = new ReportFileGenerator) {}
+
     public function seatingChartExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
-        $showInvigilators = $this->showInvigilators($request);
 
-        return Excel::download(new SeatingChartExport($examSession, $date, $showInvigilators, $timeSlotIds), $this->filename($examSession, 'Seating-Chart', 'xlsx', $date));
+        return $this->serve($examSession, 'Seating-Chart', 'xlsx', $date, $this->generator->seatingChartExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
-    public function seatingChartPdf(Request $request, ExamSession $examSession): Response
+    public function seatingChartPdf(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $charts = (new ReportDataBuilder)->seatingCharts($examSession, $date, $timeSlotIds);
-
-        return Pdf::loadView('reports.seating-chart-pdf', ['charts' => $charts, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
-            ->setPaper('a4', 'landscape')
-            ->download($this->filename($examSession, 'Seating-Chart', 'pdf', $date));
+        return $this->serve($examSession, 'Seating-Chart', 'pdf', $date, $this->generator->seatingChartPdf(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
     public function datesheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new MasterDatesheetExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Datesheet', 'xlsx', $date));
+        return $this->serve($examSession, 'Datesheet', 'xlsx', $date, $this->generator->datesheetExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
-    public function datesheetPdf(Request $request, ExamSession $examSession): Response
+    public function datesheetPdf(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $rowsByDate = (new ReportDataBuilder)->datesheetRowsByDate($examSession, $date, $timeSlotIds);
-
-        return Pdf::loadView('reports.master-datesheet-pdf', ['rowsByDate' => $rowsByDate, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
-            ->setPaper('a4', 'landscape')
-            ->download($this->filename($examSession, 'Datesheet', 'pdf', $date));
+        return $this->serve($examSession, 'Datesheet', 'pdf', $date, $this->generator->datesheetPdf(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
     /**
@@ -77,75 +67,83 @@ class ReportDownloadController extends Controller
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new FormattedDatesheetExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Formatted-Datesheet', 'xlsx', $date));
+        return $this->serve($examSession, 'Formatted-Datesheet', 'xlsx', $date, $this->generator->formattedDatesheetExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
     public function dutySheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new DutySheetExport($examSession, $date, $this->showRoomSubject($request), $timeSlotIds), $this->filename($examSession, 'Duty-Roster', 'xlsx', $date));
+        return $this->serve($examSession, 'Duty-Roster', 'xlsx', $date, $this->generator->dutySheetExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showRoomSubject($request)
+        ));
     }
 
-    public function dutySheetPdf(Request $request, ExamSession $examSession): Response
+    public function dutySheetPdf(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $teacherGroups = (new ReportDataBuilder)->dutyRowsByTeacher($examSession, $date, $timeSlotIds);
-
-        return Pdf::loadView('reports.duty-sheet-pdf', ['teacherGroups' => $teacherGroups, 'session' => $examSession, 'showRoomSubject' => $this->showRoomSubject($request)])
-            ->setPaper('a4', 'portrait')
-            ->download($this->filename($examSession, 'Duty-Roster', 'pdf', $date));
+        return $this->serve($examSession, 'Duty-Roster', 'pdf', $date, $this->generator->dutySheetPdf(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showRoomSubject($request)
+        ));
     }
 
     public function subjectWiseSeatingExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new SubjectWiseSeatingExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Subject-wise-Seating', 'xlsx', $date));
+        return $this->serve($examSession, 'Subject-wise-Seating', 'xlsx', $date, $this->generator->subjectWiseSeatingExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
-    public function subjectWiseSeatingPdf(Request $request, ExamSession $examSession): Response
+    public function subjectWiseSeatingPdf(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $subjects = (new ReportDataBuilder)->subjectWiseSeatingRows($examSession, $date, $timeSlotIds);
-
-        return Pdf::loadView('reports.subject-wise-seating-pdf', ['subjects' => $subjects, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
-            ->setPaper('a4', 'portrait')
-            ->download($this->filename($examSession, 'Subject-wise-Seating', 'pdf', $date));
+        return $this->serve($examSession, 'Subject-wise-Seating', 'pdf', $date, $this->generator->subjectWiseSeatingPdf(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
     public function batchScheduleExcel(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        return Excel::download(new BatchScheduleExport($examSession, $date, $this->showInvigilators($request), $timeSlotIds), $this->filename($examSession, 'Batch-Schedule', 'xlsx', $date));
+        return $this->serve($examSession, 'Batch-Schedule', 'xlsx', $date, $this->generator->batchScheduleExcel(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
     }
 
-    public function batchSchedulePdf(Request $request, ExamSession $examSession): Response
+    public function batchSchedulePdf(Request $request, ExamSession $examSession): BinaryFileResponse
     {
         Gate::authorize('view_reports');
         $date = $this->filterDate($request, $examSession);
-        $timeSlotIds = $this->filterTimeSlotIds($request, $examSession);
 
-        $sections = (new ReportDataBuilder)->batchScheduleRows($examSession, $date, $timeSlotIds);
+        return $this->serve($examSession, 'Batch-Schedule', 'pdf', $date, $this->generator->batchSchedulePdf(
+            $examSession, $date, $this->filterTimeSlotIds($request, $examSession), $this->showInvigilators($request)
+        ));
+    }
 
-        return Pdf::loadView('reports.batch-schedule-pdf', ['sections' => $sections, 'session' => $examSession, 'showInvigilators' => $this->showInvigilators($request)])
-            ->setPaper('a4', 'portrait')
-            ->download($this->filename($examSession, 'Batch-Schedule', 'pdf', $date));
+    /**
+     * Streams an already-generated (or just-now-generated) report file
+     * straight from disk under a human-friendly download name — the file
+     * itself lives under a hashed internal path (see ReportFileCache).
+     */
+    private function serve(ExamSession $examSession, string $report, string $extension, ?string $date, ReportFile $file): BinaryFileResponse
+    {
+        return response()->download(
+            Storage::disk('local')->path($file->disk_path),
+            $this->filename($examSession, $report, $extension, $date)
+        );
     }
 
     /**
