@@ -817,10 +817,17 @@ class GenerationConstraintsTest extends TestCase
             ->set('mergeSelected', [$keep->id, $mergeAway->id])
             ->call('openSubjectMergeModal')
             ->assertSet('showSubjectMergeModal', true)
+            ->assertDispatched('open-modal', 'merge-subjects')
             ->set('mergeSurvivorId', (string) $keep->id)
             ->call('confirmSubjectMerge')
             ->assertSet('showSubjectMergeModal', false)
-            ->assertSet('mergeSelected', []);
+            ->assertSet('mergeSelected', [])
+            // The modal must close via this server-dispatched event, not
+            // a same-click x-on:click on the Merge button — that would
+            // fire immediately regardless of whether wire:confirm's
+            // dialog was accepted, closing the modal even when the
+            // merge never actually ran.
+            ->assertDispatched('close-modal', 'merge-subjects');
 
         $this->assertSame($keep->id, $enrollment->fresh()->subject_id);
         $this->assertSame($keep->id, $mergeAway->fresh()->merged_into_id);

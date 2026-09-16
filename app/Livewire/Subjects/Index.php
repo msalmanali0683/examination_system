@@ -80,6 +80,10 @@ class Index extends Component
 
         $this->survivorId = (string) $this->selected[0];
         $this->showMergeModal = true;
+        // Alpine's own "show" state, once initialized, isn't re-read from
+        // :show="$showMergeModal" on a later Livewire morph — open via
+        // this explicit event instead, same as every other modal.
+        $this->dispatch('open-modal', 'merge-subjects');
     }
 
     public function closeMergeModal(): void
@@ -135,6 +139,13 @@ class Index extends Component
 
         $this->selected = [];
         $this->closeMergeModal();
+        // wire:confirm on the Merge button means the modal can't rely on
+        // a same-click x-on:click to close itself — that would fire
+        // immediately regardless of whether the confirm dialog was
+        // accepted, closing the modal even when the merge never ran (or
+        // before it finished). Dispatching close-modal here only happens
+        // once the merge has actually completed.
+        $this->dispatch('close-modal', 'merge-subjects');
         $this->resetPage();
 
         session()->flash(

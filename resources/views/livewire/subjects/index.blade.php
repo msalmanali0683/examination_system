@@ -35,7 +35,10 @@
         </div>
         <div class="mt-6 flex justify-end gap-3">
             <x-btn variant="secondary" wire:click="closeMergeModal" x-on:click="$dispatch('close')">Cancel</x-btn>
-            <x-btn wire:click="confirmMerge" wire:confirm="Merge these subjects? This cannot be undone." x-on:click="$dispatch('close')" variant="dark">Merge</x-btn>
+            <x-btn wire:click="confirmMerge" wire:confirm="Merge these subjects? This cannot be undone." wire:loading.attr="disabled" variant="dark">
+                <span wire:loading.remove wire:target="confirmMerge">Merge</span>
+                <span wire:loading wire:target="confirmMerge">Merging&hellip;</span>
+            </x-btn>
         </div>
     </div>
 </x-modal>

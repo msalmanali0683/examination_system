@@ -651,6 +651,11 @@ class GenerationConstraints extends Component
 
         $this->mergeSurvivorId = (string) $this->mergeSelected[0];
         $this->showSubjectMergeModal = true;
+        // Alpine's own "show" state, once initialized, isn't re-read from
+        // :show="$showSubjectMergeModal" on a later Livewire morph — every
+        // other modal on this page opens via this same explicit event
+        // rather than relying on the prop alone (see showClashDetails()).
+        $this->dispatch('open-modal', 'merge-subjects');
     }
 
     public function closeSubjectMergeModal(): void
@@ -708,6 +713,13 @@ class GenerationConstraints extends Component
 
         $this->mergeSelected = [];
         $this->closeSubjectMergeModal();
+        // wire:confirm on the Merge button means the modal can't rely on
+        // a same-click x-on:click to close itself — that would fire
+        // immediately regardless of whether the confirm dialog was
+        // accepted, closing the modal even when the merge never ran (or
+        // before it finished). Dispatching close-modal here only happens
+        // once the merge has actually completed.
+        $this->dispatch('close-modal', 'merge-subjects');
 
         session()->flash(
             'status',

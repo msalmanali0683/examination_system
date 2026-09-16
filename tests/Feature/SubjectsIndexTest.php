@@ -56,10 +56,17 @@ class SubjectsIndexTest extends TestCase
             ->set('selected', [$keep->id, $mergeAway->id])
             ->call('openMergeModal')
             ->assertSet('showMergeModal', true)
+            ->assertDispatched('open-modal', 'merge-subjects')
             ->set('survivorId', (string) $keep->id)
             ->call('confirmMerge')
             ->assertSet('showMergeModal', false)
-            ->assertSet('selected', []);
+            ->assertSet('selected', [])
+            // The modal must close via this server-dispatched event, not
+            // a same-click x-on:click on the Merge button — that would
+            // fire immediately regardless of whether wire:confirm's
+            // dialog was accepted, closing the modal even when the
+            // merge never actually ran.
+            ->assertDispatched('close-modal', 'merge-subjects');
 
         $this->assertSame($keep->id, $enrollment->fresh()->subject_id);
         $this->assertSame($keep->id, $mergeAway->fresh()->merged_into_id);
