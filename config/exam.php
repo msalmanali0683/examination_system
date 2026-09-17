@@ -23,7 +23,7 @@ return [
     |
     */
     'university_name' => env('EXAM_UNIVERSITY_NAME', 'The University of Lahore'),
-    'department_name' => env('EXAM_DEPARTMENT_NAME', 'Department of Software Engineering'),
+    'department_name' => env('EXAM_DEPARTMENT_NAME', 'Department of Artificial Intelligence'),
 
     /*
     |--------------------------------------------------------------------------
