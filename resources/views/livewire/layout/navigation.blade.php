@@ -74,6 +74,14 @@ new class extends Component
             </a>
         @endcan
 
+        @can('manage_enrollments')
+            <a href="{{ route('students.index') }}" wire:navigate
+               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('students.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+                <x-icon name="user-group" class="h-5 w-5 shrink-0 {{ request()->routeIs('students.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
+                {{ __('Students') }}
+            </a>
+        @endcan
+
         @can('manage_users')
             <a href="{{ route('users.index') }}" wire:navigate
                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('users.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">

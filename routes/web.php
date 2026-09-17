@@ -10,6 +10,7 @@ use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\Index as SessionsIndex;
 use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\Show as SessionsShow;
+use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Subjects\Index as SubjectsIndex;
 use App\Livewire\Teachers\Import as TeachersImport;
 use App\Livewire\Teachers\Index as TeachersIndex;
@@ -49,6 +50,10 @@ Route::get('teachers/import', TeachersImport::class)
 Route::get('subjects', SubjectsIndex::class)
     ->middleware(['auth'])
     ->name('subjects.index');
+
+Route::get('students', StudentsIndex::class)
+    ->middleware(['auth'])
+    ->name('students.index');
 
 Route::get('sessions', SessionsIndex::class)
     ->middleware(['auth'])

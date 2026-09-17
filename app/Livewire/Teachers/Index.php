@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Teachers;
 
+use App\Models\DutyAssignment;
 use App\Models\Teacher;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -106,11 +107,36 @@ class Index extends Component
         $teacher->update(['is_active' => ! $teacher->is_active]);
     }
 
+    /**
+     * A teacher's duty assignments cascade-delete at the database level
+     * (see duty_assignments.teacher_id), which would silently erase a
+     * finalized session's duty roster — the one thing a finalized
+     * session is supposed to never lose (see
+     * ExamSession::deleteSession()). Blocked the same way that guard
+     * blocks deleting the session itself; a non-finalized session's
+     * duties can always be regenerated, so only finalized use blocks
+     * this.
+     */
     public function deleteTeacher(int $id): void
     {
         $this->authorize('manage_teachers');
-        Teacher::findOrFail($id)->delete();
+        $teacher = Teacher::findOrFail($id);
+
+        if ($this->hasFinalizedDuties($teacher)) {
+            session()->flash('error', "{$teacher->name} has duty assignments in a finalized session and can't be deleted — unlock that session first if it really needs to change.");
+
+            return;
+        }
+
+        $teacher->delete();
         session()->flash('status', 'Teacher deleted.');
+    }
+
+    private function hasFinalizedDuties(Teacher $teacher): bool
+    {
+        return DutyAssignment::where('teacher_id', $teacher->id)
+            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
+            ->exists();
     }
 
     /**
@@ -139,18 +165,26 @@ class Index extends Component
      * cascade-delete at the database level, and their enrollment rows
      * just lose the teacher reference (nullable column) — every one of
      * those is a real FK constraint, not application logic, so this can
-     * never fail with a foreign-key error even when the teacher has
-     * duties in an active or finalized session.
+     * never fail with a foreign-key error. But a teacher with duties in
+     * a finalized session is skipped (see hasFinalizedDuties()) rather
+     * than deleted, so a bulk action can never silently erase a
+     * finalized session's duty roster.
      */
     public function bulkDelete(): void
     {
         $this->authorize('manage_teachers');
 
-        $count = Teacher::destroy($this->selected);
+        $selected = Teacher::whereIn('id', $this->selected)->get();
+        $blocked = $selected->filter(fn (Teacher $teacher) => $this->hasFinalizedDuties($teacher));
+        $toDelete = $selected->reject(fn (Teacher $teacher) => $blocked->contains($teacher));
+
+        $count = Teacher::destroy($toDelete->pluck('id'));
 
         $this->selected = [];
         $this->resetPage();
-        session()->flash('status', "{$count} teacher(s) deleted.");
+
+        session()->flash($blocked->isEmpty() ? 'status' : 'error', "{$count} teacher(s) deleted."
+            .($blocked->isEmpty() ? '' : " {$blocked->count()} skipped — they have duty assignments in a finalized session."));
     }
 
     public function cancel(): void

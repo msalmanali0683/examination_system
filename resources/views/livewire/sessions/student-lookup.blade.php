@@ -1,4 +1,16 @@
 <div class="space-y-4">
+    @if (session('status'))
+        <div class="p-3 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
+            {{ session('status') }}
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="p-3 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm">
+            {{ session('error') }}
+        </div>
+    @endif
+
     <div class="relative max-w-sm">
         <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input type="text" wire:model.live.debounce.300ms="query" placeholder="Roll number or student name&hellip;"
@@ -30,6 +42,9 @@
                                     <th class="py-2 px-4">Room</th>
                                     <th class="py-2 px-4">Seat</th>
                                     <th class="py-2 px-4">Invigilator(s)</th>
+                                    @can('manage_enrollments')
+                                        <th class="py-2 px-4"></th>
+                                    @endcan
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -53,6 +68,13 @@
                                             @endif
                                         </td>
                                         <td class="py-2 px-4 text-gray-500 dark:text-gray-400">{{ $enrollment->invigilators ?: '—' }}</td>
+                                        @can('manage_enrollments')
+                                            <td class="py-2 px-4 text-right">
+                                                <button type="button" wire:click="removeEnrollment({{ $enrollment->id }})"
+                                                    wire:confirm="Remove {{ $group->student->name }}'s enrollment in {{ $enrollment->subject->code }}? This also removes their seat for it if one was assigned."
+                                                    class="text-sm font-medium text-red-600 hover:underline">Remove</button>
+                                            </td>
+                                        @endcan
                                     </tr>
                                 @endforeach
                             </tbody>

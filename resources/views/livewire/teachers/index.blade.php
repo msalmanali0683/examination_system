@@ -18,6 +18,12 @@
     </div>
 @endif
 
+@if (session('error'))
+    <div class="p-4 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm">
+        {{ session('error') }}
+    </div>
+@endif
+
 <x-card>
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">

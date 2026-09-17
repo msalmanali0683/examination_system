@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Rooms;
 
+use App\Models\DutyAssignment;
 use App\Models\Room;
 use App\Models\SeatAssignment;
 use Illuminate\Validation\Rule;
@@ -108,11 +109,38 @@ class Index extends Component
         $room->update(['is_active' => ! $room->is_active]);
     }
 
+    /**
+     * Deleting a room cascades to every seat/duty assignment that ever
+     * used it (both tables' room_id are cascadeOnDelete()), which would
+     * silently erase a finalized session's seating chart or duty roster
+     * — the one thing a finalized session is supposed to never lose (see
+     * ExamSession::deleteSession()). Blocked the same way that guard
+     * blocks deleting the session itself; a non-finalized session's data
+     * can always be regenerated, so only finalized use blocks this.
+     */
     public function deleteRoom(int $id): void
     {
         $this->authorize('manage_rooms');
-        Room::findOrFail($id)->delete();
+        $room = Room::findOrFail($id);
+
+        if ($this->usedInFinalizedSession($room)) {
+            session()->flash('error', "{$room->name} has seat or duty assignments in a finalized session and can't be deleted — unlock that session first if it really needs to change.");
+
+            return;
+        }
+
+        $room->delete();
         session()->flash('status', 'Room deleted.');
+    }
+
+    private function usedInFinalizedSession(Room $room): bool
+    {
+        return SeatAssignment::where('room_id', $room->id)
+            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
+            ->exists()
+            || DutyAssignment::where('room_id', $room->id)
+                ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
+                ->exists();
     }
 
     public function cancel(): void

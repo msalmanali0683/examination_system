@@ -84,4 +84,85 @@ class StudentLookupTest extends TestCase
             ->set('query', 'nonexistent-roll-no')
             ->assertSee('No matching students');
     }
+
+    /**
+     * The only other way to remove a wrong enrollment was wiping every
+     * enrollment for the whole session (Show::resetEnrollments()) and
+     * re-importing — this proves a single bad row can be removed on its
+     * own, cascading to its own seat assignment but leaving the rest of
+     * the session untouched.
+     */
+    public function test_removing_an_enrollment_deletes_it_and_its_seat_assignment(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        $seat = SeatAssignment::create([
+            'exam_session_id' => $session->id,
+            'enrollment_id' => $enrollment->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+            'row_number' => 1,
+            'column_number' => 1,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(StudentLookup::class, ['examSession' => $session])
+            ->call('removeEnrollment', $enrollment->id)
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseMissing('enrollments', ['id' => $enrollment->id]);
+        $this->assertDatabaseMissing('seat_assignments', ['id' => $seat->id]);
+    }
+
+    public function test_removing_an_enrollment_on_a_finalized_session_is_blocked(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(StudentLookup::class, ['examSession' => $session])
+            ->call('removeEnrollment', $enrollment->id)
+            ->assertSee('finalized and read-only');
+
+        $this->assertDatabaseHas('enrollments', ['id' => $enrollment->id]);
+    }
+
+    public function test_removing_an_enrollment_without_manage_enrollments_permission_is_forbidden(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $staff->permissionOverrides()->create(['permission' => 'manage_enrollments', 'granted' => false]);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(StudentLookup::class, ['examSession' => $session])
+            ->call('removeEnrollment', $enrollment->id)
+            ->assertForbidden();
+    }
 }

@@ -147,7 +147,14 @@ class TeachersManagementTest extends TestCase
         $this->assertDatabaseHas('enrollments', ['id' => $enrollment->id, 'teacher_id' => null]);
     }
 
-    public function test_deleting_a_teacher_tied_to_a_finalized_session_still_causes_no_error(): void
+    /**
+     * A finalized session is the permanent historical record — deleting
+     * the teacher would cascade-delete their duty_assignments row (see
+     * duty_assignments.teacher_id's cascadeOnDelete()), silently erasing
+     * part of that record. This is blocked the same way deleting the
+     * session itself is blocked while finalized.
+     */
+    public function test_deleting_a_teacher_tied_to_a_finalized_session_is_blocked(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $teacher = Teacher::factory()->create();
@@ -155,7 +162,7 @@ class TeachersManagementTest extends TestCase
         $room = Room::factory()->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        DutyAssignment::create([
+        $duty = DutyAssignment::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
             'time_slot_id' => $slot->id,
@@ -165,8 +172,41 @@ class TeachersManagementTest extends TestCase
         Livewire::actingAs($staff)
             ->test(Index::class)
             ->call('deleteTeacher', $teacher->id)
-            ->assertHasNoErrors();
+            ->assertSee("can't be deleted");
 
-        $this->assertDatabaseMissing('teachers', ['id' => $teacher->id]);
+        $this->assertDatabaseHas('teachers', ['id' => $teacher->id]);
+        $this->assertDatabaseHas('duty_assignments', ['id' => $duty->id]);
+    }
+
+    /**
+     * A bulk delete mixing a safe teacher with one that has finalized
+     * duties should delete the safe one and skip the protected one,
+     * rather than either failing the whole batch or silently wiping the
+     * finalized record.
+     */
+    public function test_bulk_delete_skips_teachers_with_finalized_duties_but_deletes_the_rest(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $safeTeacher = Teacher::factory()->create();
+        $protectedTeacher = Teacher::factory()->create();
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        DutyAssignment::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $protectedTeacher->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->set('selected', [$safeTeacher->id, $protectedTeacher->id])
+            ->call('bulkDelete')
+            ->assertSee('skipped');
+
+        $this->assertDatabaseMissing('teachers', ['id' => $safeTeacher->id]);
+        $this->assertDatabaseHas('teachers', ['id' => $protectedTeacher->id]);
     }
 }
