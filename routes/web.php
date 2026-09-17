@@ -80,6 +80,8 @@ Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('ses
     Route::get('datesheet.xlsx', [ReportDownloadController::class, 'datesheetExcel'])->name('datesheet.xlsx');
     Route::get('datesheet.pdf', [ReportDownloadController::class, 'datesheetPdf'])->name('datesheet.pdf');
     Route::get('formatted-datesheet.xlsx', [ReportDownloadController::class, 'formattedDatesheetExcel'])->name('formatted-datesheet.xlsx');
+    Route::get('simple-datesheet.xlsx', [ReportDownloadController::class, 'simpleDatesheetExcel'])->name('simple-datesheet.xlsx');
+    Route::get('simple-datesheet.pdf', [ReportDownloadController::class, 'simpleDatesheetPdf'])->name('simple-datesheet.pdf');
     Route::get('duty-roster.xlsx', [ReportDownloadController::class, 'dutySheetExcel'])->name('duty-roster.xlsx');
     Route::get('duty-roster.pdf', [ReportDownloadController::class, 'dutySheetPdf'])->name('duty-roster.pdf');
     Route::get('subject-wise-seating.xlsx', [ReportDownloadController::class, 'subjectWiseSeatingExcel'])->name('subject-wise-seating.xlsx');

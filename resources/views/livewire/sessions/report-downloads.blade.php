@@ -115,6 +115,29 @@
 
         <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4">
             <div class="flex items-center gap-2 mb-1">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300">
+                    <x-icon name="calendar" class="h-4 w-4" />
+                </span>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Simple Datesheet</h4>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Just date, day, subject and time slot &mdash; a clean at-a-glance schedule with no room or invigilator detail, grouped by day.</p>
+            @if ($hasSeating)
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('sessions.reports.simple-datesheet.xlsx', $reportQuery) }}">
+                        <x-btn variant="secondary" size="sm" icon="download">Excel</x-btn>
+                    </a>
+                    <a href="{{ route('sessions.reports.simple-datesheet.pdf', $reportQuery) }}">
+                        <x-btn variant="secondary" size="sm" icon="download">PDF</x-btn>
+                    </a>
+                </div>
+                <x-report-status type="simple-datesheet" :status="$reportStatus['simple-datesheet']" />
+            @else
+                <p class="text-xs text-gray-400 italic">Generate seating first.</p>
+            @endif
+        </div>
+
+        <div class="rounded-xl ring-1 ring-gray-200 dark:ring-gray-700/60 p-4">
+            <div class="flex items-center gap-2 mb-1">
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/40 text-green-600 dark:text-green-300">
                     <x-icon name="clipboard" class="h-4 w-4" />
                 </span>

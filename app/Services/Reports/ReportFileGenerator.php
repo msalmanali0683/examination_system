@@ -7,6 +7,7 @@ use App\Exports\DutySheetExport;
 use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
+use App\Exports\SimpleDatesheetExport;
 use App\Exports\SubjectWiseSeatingExport;
 use App\Models\ExamSession;
 use App\Models\ReportFile;
@@ -71,6 +72,33 @@ class ReportFileGenerator
     {
         return $this->run($session, 'formatted-datesheet.xlsx', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
             fn ($path) => Excel::store(new FormattedDatesheetExport($session, $date, $showInvigilators, $timeSlotIds), $path, self::DISK)
+        );
+    }
+
+    /**
+     * showInvigilators is unused here — the Simple Datesheet has no
+     * invigilator column — but is still accepted and folded into the
+     * cache key filters, matching every other non-duty-roster report, so
+     * the shared "Print invigilator names" checkbox produces the same
+     * filters shape the enqueue()/regenerate() calls expect.
+     */
+    public function simpleDatesheetExcel(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'simple-datesheet.xlsx', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            fn ($path) => Excel::store(new SimpleDatesheetExport($session, $date, $timeSlotIds), $path, self::DISK)
+        );
+    }
+
+    public function simpleDatesheetPdf(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'simple-datesheet.pdf', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            function ($path) use ($session, $date, $timeSlotIds) {
+                $rowsByDate = (new ReportDataBuilder)->simpleDatesheetRowsByDate($session, $date, $timeSlotIds);
+
+                Pdf::loadView('reports.simple-datesheet-pdf', ['rowsByDate' => $rowsByDate, 'session' => $session])
+                    ->setPaper('a4', 'portrait')
+                    ->save($path, self::DISK);
+            }
         );
     }
 

@@ -6,6 +6,7 @@ use App\Exports\DutySheetExport;
 use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
+use App\Exports\SimpleDatesheetExport;
 use App\Jobs\GenerateReportFile;
 use App\Livewire\Sessions\Index;
 use App\Livewire\Sessions\ReportDownloads;
@@ -205,6 +206,67 @@ class ReportDownloadsTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_simple_datesheet_excel_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.simple-datesheet.xlsx', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_simple_datesheet_pdf_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.simple-datesheet.pdf', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
+    /**
+     * One subject split across two rooms in the same slot should still
+     * print once — the whole point of this report over the Master
+     * Datesheet is no per-room duplication.
+     */
+    public function test_simple_datesheet_lists_a_subject_once_per_slot_even_when_split_across_rooms(): void
+    {
+        $session = ExamSession::factory()->create();
+        $roomA = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $roomB = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '12:00']);
+        $subject = Subject::factory()->create(['title' => 'Programming Fundamentals']);
+
+        foreach ([$roomA, $roomB] as $room) {
+            $student = Student::factory()->create();
+            $enrollment = Enrollment::factory()->create([
+                'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'BSAI 2A',
+            ]);
+            SeatAssignment::create([
+                'exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id,
+                'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1,
+            ]);
+        }
+
+        $rowsByDate = (new ReportDataBuilder)->simpleDatesheetRowsByDate($session);
+
+        $this->assertCount(1, $rowsByDate);
+        $rows = $rowsByDate->get('2026-04-20');
+        $this->assertCount(1, $rows);
+        $row = $rows->first();
+        $this->assertSame('Programming Fundamentals', $row->title);
+        $this->assertSame('Monday', $row->day);
+        $this->assertSame('09:00 - 12:00', $row->slot);
+
+        $html = (new SimpleDatesheetExport($session))->view()->render();
+        $this->assertStringContainsString('Programming Fundamentals', $html);
+        $this->assertStringContainsString('09:00 - 12:00', $html);
     }
 
     public function test_formatted_datesheet_lists_every_room_a_subject_used_side_by_side(): void
@@ -510,7 +572,8 @@ class ReportDownloadsTest extends TestCase
         $this->actingAs($staff)
             ->get(route('sessions.show', $session))
             ->assertOk()
-            ->assertSee('Room-wise Seating Chart');
+            ->assertSee('Room-wise Seating Chart')
+            ->assertSee('Simple Datesheet');
     }
 
     public function test_downloading_the_same_report_twice_serves_the_cached_file_without_regenerating(): void

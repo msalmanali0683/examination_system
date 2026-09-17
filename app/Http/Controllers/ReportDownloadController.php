@@ -58,6 +58,28 @@ class ReportDownloadController extends Controller
     }
 
     /**
+     * A minimal, student-facing datesheet: date, day, subject and slot
+     * only — no room, section or invigilator detail.
+     */
+    public function simpleDatesheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'simple-datesheet.xlsx', 'simpleDatesheetExcel', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Simple-Datesheet', 'xlsx');
+    }
+
+    public function simpleDatesheetPdf(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'simple-datesheet.pdf', 'simpleDatesheetPdf', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Simple-Datesheet', 'pdf');
+    }
+
+    /**
      * Same underlying data as the Master Datesheet, laid out wide instead
      * of flat — one row per subject per slot, with up to several
      * {room, count, invigilator} triples on that row — matching the

@@ -122,6 +122,37 @@ class ReportDataBuilder
     }
 
     /**
+     * A minimal, student-facing datesheet: just date, day, the subject's
+     * full title and its slot, deduplicated so a subject split across
+     * several rooms/sections in the same slot still prints once — no room,
+     * section or invigilator detail. Grouped by date like
+     * datesheetRowsByDate().
+     *
+     * @param  int[]|null  $timeSlotIds
+     */
+    public function simpleDatesheetRowsByDate(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): Collection
+    {
+        $rows = $this->seatingCharts($session, $date, $timeSlotIds)
+            ->flatMap(fn ($chart) => $chart->subjectsSections->map(fn ($ss) => (object) [
+                'subjectId' => $ss->subject->id,
+                'title' => $ss->subject->title,
+                'timeSlot' => $chart->timeSlot,
+            ]))
+            ->unique(fn ($row) => $row->subjectId.'-'.$row->timeSlot->id)
+            ->map(fn ($row) => (object) [
+                'title' => $row->title,
+                'date' => $row->timeSlot->date,
+                'day' => $row->timeSlot->date->format('l'),
+                'startTime' => $row->timeSlot->start_time,
+                'slot' => substr($row->timeSlot->start_time, 0, 5).' - '.substr($row->timeSlot->end_time, 0, 5),
+            ]);
+
+        return $rows
+            ->sortBy(fn ($row) => $row->date->format('Y-m-d').$row->startTime.$row->title)
+            ->groupBy(fn ($row) => $row->date->format('Y-m-d'));
+    }
+
+    /**
      * One group per teacher with their duties in date/time order.
      *
      * @param  int[]|null  $timeSlotIds
