@@ -185,12 +185,26 @@
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $row->section }}</td>
                                 <td class="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{{ $row->missing_count }} student{{ $row->missing_count === 1 ? '' : 's' }}</td>
                                 <td class="py-2.5 pr-4 sm:pr-6">
+                                    @php $suggested = $suggestedTeachersBySubject->get($row->subject_id, collect()); @endphp
                                     <div class="flex items-center gap-2">
                                         <select wire:model="missingTeacherSelection.{{ $row->subject_id }}.{{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                                             <option value="">Select teacher&hellip;</option>
-                                            @foreach ($activeTeachers as $teacher)
-                                                <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
-                                            @endforeach
+                                            @if ($suggested->isNotEmpty())
+                                                <optgroup label="Already teaches {{ $row->code }}">
+                                                    @foreach ($suggested as $teacher)
+                                                        <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
+                                                    @endforeach
+                                                </optgroup>
+                                                <optgroup label="All Teachers">
+                                                    @foreach ($activeTeachers as $teacher)
+                                                        <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @else
+                                                @foreach ($activeTeachers as $teacher)
+                                                    <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
+                                                @endforeach
+                                            @endif
                                         </select>
                                         <x-btn wire:click="assignMissingTeacher({{ $row->subject_id }}, {{ Illuminate\Support\Js::from($row->section) }})" wire:loading.attr="disabled" variant="secondary">Assign</x-btn>
                                     </div>

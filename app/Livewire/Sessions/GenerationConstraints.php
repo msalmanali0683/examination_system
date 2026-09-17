@@ -743,6 +743,42 @@ class GenerationConstraints extends Component
     }
 
     /**
+     * Active teacher(s) already on record for each subject — any
+     * enrollment with that subject_id and a non-null teacher_id, across
+     * every session, not just this one — so the Missing Teachers card can
+     * suggest "whoever already teaches this" instead of making staff
+     * search an alphabetical list of every teacher for a name they might
+     * not even know. Ordered by how often each teacher is linked to the
+     * subject, since the most common pairing is the most likely answer.
+     *
+     * @param  int[]  $subjectIds
+     * @return Collection<int, Collection<int, Teacher>> subject_id => teachers
+     */
+    private function teachersForSubjects(array $subjectIds): Collection
+    {
+        if (empty($subjectIds)) {
+            return collect();
+        }
+
+        $usage = Enrollment::whereIn('subject_id', $subjectIds)
+            ->whereNotNull('teacher_id')
+            ->selectRaw('subject_id, teacher_id, count(*) as uses')
+            ->groupBy('subject_id', 'teacher_id')
+            ->get();
+
+        $teachers = Teacher::whereIn('id', $usage->pluck('teacher_id')->unique())
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('id');
+
+        return $usage->groupBy('subject_id')
+            ->map(fn ($rows) => $rows->sortByDesc('uses')
+                ->map(fn ($row) => $teachers->get($row->teacher_id))
+                ->filter()
+                ->values());
+    }
+
+    /**
      * Every subject/section pair with at least one un-taught enrollment,
      * excluding pairs explicitly dismissed via "Ignore All" — the single
      * source of truth behind the Missing Teachers card and both of its
@@ -1142,6 +1178,7 @@ class GenerationConstraints extends Component
         });
 
         $missingTeacherSections = $this->missingTeacherSections();
+        $suggestedTeachersBySubject = $this->teachersForSubjects($missingTeacherSections->pluck('subject_id')->unique()->all());
 
         // Computing this runs a full seating simulation across every slot,
         // so it's only done when the admin asks for it (Check Capacity),
@@ -1161,6 +1198,7 @@ class GenerationConstraints extends Component
             'clashingDaysBySubject' => $clashingDaysBySubject,
             'clashingSlotsBySubject' => $clashingSlotsBySubject,
             'missingTeacherSections' => $missingTeacherSections,
+            'suggestedTeachersBySubject' => $suggestedTeachersBySubject,
             'ignoredMissingTeacherCount' => count($this->examSession->ignored_missing_teacher_sections ?? []),
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,

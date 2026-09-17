@@ -154,6 +154,46 @@ class GenerationConstraintsTest extends TestCase
         $this->assertNotEquals($teacher->id, $withTeacher->fresh()->teacher_id);
     }
 
+    /**
+     * The Missing Teachers card suggests whoever already teaches the
+     * subject (any enrollment for that subject_id with a teacher set,
+     * across every session) instead of leaving staff to search a full
+     * alphabetical teacher list for a name they might not know. The more
+     * frequently used teacher should be suggested first.
+     */
+    public function test_missing_teacher_sections_suggest_teachers_already_linked_to_that_subject(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $subject = Subject::factory()->create();
+        $frequentTeacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Dr Frequent']);
+        $rareTeacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Dr Rare']);
+        $unrelatedTeacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Dr Unrelated']);
+        $inactiveTeacher = Teacher::factory()->create(['is_active' => false, 'name' => 'Dr Inactive']);
+
+        // Two sections this same session already taught by $frequentTeacher...
+        Enrollment::factory()->create(['subject_id' => $subject->id, 'section' => 'A', 'teacher_id' => $frequentTeacher->id]);
+        Enrollment::factory()->create(['subject_id' => $subject->id, 'section' => 'B', 'teacher_id' => $frequentTeacher->id]);
+        // ...one from a past session taught by $rareTeacher...
+        Enrollment::factory()->create(['subject_id' => $subject->id, 'section' => 'C', 'teacher_id' => $rareTeacher->id]);
+        // ...one from a past session, now taught by someone no longer active...
+        Enrollment::factory()->create(['subject_id' => $subject->id, 'section' => 'D', 'teacher_id' => $inactiveTeacher->id]);
+        // ...and an unrelated subject taught by $unrelatedTeacher, which
+        // must never show up as a suggestion for THIS subject.
+        Enrollment::factory()->create(['subject_id' => Subject::factory()->create()->id, 'teacher_id' => $unrelatedTeacher->id]);
+
+        $session = ExamSession::factory()->create();
+        $missing = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'E', 'teacher_id' => null,
+        ]);
+
+        $component = Livewire::actingAs($staff)->test(GenerationConstraints::class, ['examSession' => $session]);
+
+        $suggested = $component->viewData('suggestedTeachersBySubject')->get($subject->id);
+
+        $this->assertNotNull($suggested);
+        $this->assertSame(['Dr Frequent', 'Dr Rare'], $suggested->pluck('name')->all());
+    }
+
     public function test_assigning_a_missing_teacher_without_a_selection_shows_an_error(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
