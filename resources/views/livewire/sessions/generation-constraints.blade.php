@@ -1,5 +1,11 @@
 <x-slot name="header">
-    <x-page-header title="Generation Constraints" :subtitle="$examSession->name" icon="lightning" :back="route('sessions.show', $examSession)" />
+    <x-page-header title="Generation Constraints" :subtitle="$examSession->name" icon="lightning" :back="route('sessions.show', $examSession)">
+        <x-slot name="actions">
+            <a href="{{ route('sessions.section-teachers', $examSession) }}" wire:navigate>
+                <x-btn variant="secondary" icon="user-group">Section Teachers</x-btn>
+            </a>
+        </x-slot>
+    </x-page-header>
 </x-slot>
 
 <div class="space-y-6">

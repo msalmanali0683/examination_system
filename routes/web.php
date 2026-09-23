@@ -13,6 +13,7 @@ use App\Livewire\Sessions\Index as SessionsIndex;
 use App\Livewire\Sessions\MissingTeachersImport;
 use App\Livewire\Sessions\ReportShow;
 use App\Livewire\Sessions\SeatingChart;
+use App\Livewire\Sessions\SectionTeachers;
 use App\Livewire\Sessions\Show as SessionsShow;
 use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Subjects\Index as SubjectsIndex;
@@ -87,6 +88,10 @@ Route::get('sessions/{examSession}/missing-teachers/template.csv', [MissingTeach
 Route::get('sessions/{examSession}/missing-teachers/ignored', IgnoredMissingTeachers::class)
     ->middleware(['auth'])
     ->name('sessions.missing-teachers.ignored');
+
+Route::get('sessions/{examSession}/section-teachers', SectionTeachers::class)
+    ->middleware(['auth'])
+    ->name('sessions.section-teachers');
 
 Route::get('sessions/{examSession}/seating', SeatingChart::class)
     ->middleware(['auth'])
