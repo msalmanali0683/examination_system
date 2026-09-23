@@ -953,7 +953,7 @@ class GenerationConstraints extends Component
         }
 
         if (! (new RequirementCalculator)->isFullyMet($this->examSession)) {
-            $this->flashError('Not enough active rooms or available teachers for one or more slots — see the Capacity Check below before generating.');
+            $this->flashError('Not enough active rooms for one or more slots, or an unresolved clash remains — see the Capacity Check below before generating.');
 
             return;
         }

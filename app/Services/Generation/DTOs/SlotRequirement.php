@@ -62,8 +62,19 @@ final class SlotRequirement
         return max(0, $this->teachersNeeded - $this->teachersAvailable);
     }
 
+    /**
+     * Deliberately excludes teachersShortfall(): seating itself doesn't
+     * need teachers at all, only rooms and students. Duty assignment is
+     * the stage that actually needs teachers, and it already runs after
+     * seating and copes with a shortfall gracefully (whatever teachers
+     * exist get assigned, the rest surfaces as a warning) rather than
+     * refusing to run — seating shouldn't hold itself to a stricter
+     * standard than the stage that actually depends on the number. The
+     * teachers column stays fully visible for planning; it just no
+     * longer blocks generation.
+     */
     public function isMet(): bool
     {
-        return ! $this->hasUnseatedStudents && $this->roomsShortfall() === 0 && $this->teachersShortfall() === 0 && ! $this->hasUnresolvedClash;
+        return ! $this->hasUnseatedStudents && $this->roomsShortfall() === 0 && ! $this->hasUnresolvedClash;
     }
 }

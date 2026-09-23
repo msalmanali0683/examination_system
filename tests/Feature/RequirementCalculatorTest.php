@@ -68,6 +68,36 @@ class RequirementCalculatorTest extends TestCase
         $this->assertSame(0, $result->first()->seatsShortfall());
     }
 
+    /**
+     * Seating itself doesn't need teachers — only duty assignment does,
+     * and that stage (which runs after seating) already copes with a
+     * shortfall via warnings instead of refusing to run. A slot with
+     * plenty of room but too few teachers must still count as met, so
+     * Generate Seating isn't blocked by a number that has nothing to do
+     * with seating.
+     */
+    public function test_a_teacher_shortfall_alone_does_not_prevent_a_slot_from_being_met(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        // Only one teacher exists for the whole system, but the slot
+        // needs invigilators_per_room (2) — a genuine teacher shortfall.
+        Teacher::factory()->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertGreaterThan(0, $requirement->teachersShortfall());
+        $this->assertTrue($requirement->isMet());
+        $this->assertTrue((new RequirementCalculator)->isFullyMet($session));
+    }
+
     public function test_seats_available_sums_capacity_across_every_active_room(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);

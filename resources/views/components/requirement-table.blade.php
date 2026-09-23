@@ -43,7 +43,7 @@
                         <td class="py-2 pr-4 sm:pr-6">
                             @if ($r->isMet())
                                 <x-badge color="green">Ready</x-badge>
-                            @elseif ($r->hasUnseatedStudents || $r->roomsShortfall() > 0 || $r->teachersShortfall() > 0)
+                            @elseif ($r->hasUnseatedStudents || $r->roomsShortfall() > 0)
                                 <x-badge color="red">Short</x-badge>
                             @else
                                 <x-badge color="yellow">Clash</x-badge>
