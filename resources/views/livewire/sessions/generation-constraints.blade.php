@@ -150,9 +150,14 @@
 
 @if ($missingTeacherSections->isNotEmpty())
     <x-card :padded="false">
-        <div class="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700">
-            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Missing Teachers</h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">These subject/section combinations had no teacher on the enrollment sheet. Assign one so the exclusion and duty-matches-sections rules above can account for them.</p>
+        <div class="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 flex items-start justify-between gap-4">
+            <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Missing Teachers</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">These subject/section combinations had no teacher on the enrollment sheet. Assign one so the exclusion and duty-matches-sections rules above can account for them.</p>
+            </div>
+            <a href="{{ route('sessions.missing-teachers.import', $examSession) }}" wire:navigate class="shrink-0">
+                <x-btn variant="secondary" size="sm" icon="upload">Import from Excel</x-btn>
+            </a>
         </div>
 
         <div class="px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 flex flex-wrap items-center gap-2">

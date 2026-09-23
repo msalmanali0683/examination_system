@@ -20,6 +20,7 @@ use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SemesterExtractor;
 use App\Services\Generation\TimetableGenerator;
+use App\Services\MissingTeacherSections;
 use App\Services\SubjectMergeService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -740,7 +741,7 @@ class GenerationConstraints extends Component
 
     private function missingTeacherKey(int $subjectId, string $section): string
     {
-        return "{$subjectId}|{$section}";
+        return MissingTeacherSections::key($subjectId, $section);
     }
 
     /**
@@ -779,26 +780,9 @@ class GenerationConstraints extends Component
                 ->values());
     }
 
-    /**
-     * Every subject/section pair with at least one un-taught enrollment,
-     * excluding pairs explicitly dismissed via "Ignore All" — the single
-     * source of truth behind the Missing Teachers card and both of its
-     * bulk actions, so they always agree on exactly what's pending.
-     */
     private function missingTeacherSections(): Collection
     {
-        $ignored = $this->examSession->ignored_missing_teacher_sections ?? [];
-
-        return Enrollment::where('enrollments.exam_session_id', $this->examSession->id)
-            ->whereNull('enrollments.teacher_id')
-            ->join('subjects', 'subjects.id', '=', 'enrollments.subject_id')
-            ->selectRaw('enrollments.subject_id, enrollments.section, subjects.code, subjects.title, count(*) as missing_count')
-            ->groupBy('enrollments.subject_id', 'enrollments.section', 'subjects.code', 'subjects.title')
-            ->orderBy('subjects.code')
-            ->orderBy('enrollments.section')
-            ->get()
-            ->reject(fn ($row) => in_array($this->missingTeacherKey($row->subject_id, $row->section), $ignored, true))
-            ->values();
+        return MissingTeacherSections::find($this->examSession);
     }
 
     public function generateTimetable(): void

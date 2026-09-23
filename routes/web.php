@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MissingTeacherTemplateController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Livewire\Dashboard;
 use App\Livewire\Rooms\Import as RoomsImport;
@@ -8,6 +9,7 @@ use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\Index as SessionsIndex;
+use App\Livewire\Sessions\MissingTeachersImport;
 use App\Livewire\Sessions\ReportShow;
 use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\Show as SessionsShow;
@@ -72,6 +74,14 @@ Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
 Route::get('sessions/{examSession}/generate', GenerationConstraints::class)
     ->middleware(['auth'])
     ->name('sessions.generate');
+
+Route::get('sessions/{examSession}/missing-teachers/import', MissingTeachersImport::class)
+    ->middleware(['auth'])
+    ->name('sessions.missing-teachers.import');
+
+Route::get('sessions/{examSession}/missing-teachers/template.csv', [MissingTeacherTemplateController::class, 'download'])
+    ->middleware(['auth'])
+    ->name('sessions.missing-teachers.template');
 
 Route::get('sessions/{examSession}/seating', SeatingChart::class)
     ->middleware(['auth'])
