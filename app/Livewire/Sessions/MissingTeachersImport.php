@@ -20,6 +20,11 @@ use Livewire\Component;
  * assigning them one row at a time. Only ever sets teacher_id where it's
  * currently null — it can never overwrite an already-taught enrollment,
  * same as assignMissingTeacherToAll() in GenerationConstraints.
+ *
+ * A row only ever resolves against pendingPairs() — the exact same set
+ * the Review step's counts describe — so what the review screen promises
+ * ("N rows will be assigned", "N skipped: no pending pair") is always
+ * exactly what commitImport() actually does, never a superset of it.
  */
 class MissingTeachersImport extends Component
 {
@@ -33,6 +38,15 @@ class MissingTeachersImport extends Component
     ];
 
     public ExamSession $examSession;
+
+    /**
+     * When true, only subject/section pairs on this session's ignored
+     * list are eligible — the Ignored Missing Teachers page's own import
+     * link, so uploading there can't silently resolve a pair still
+     * pending on the main Missing Teachers card (and vice versa). Set
+     * once from the `ignored=1` query string in mount().
+     */
+    public bool $scopeIgnored = false;
 
     /** @var array<string, string|int|null> target field => source column index */
     public array $mapping = [];
@@ -74,6 +88,20 @@ class MissingTeachersImport extends Component
     {
         $this->authorize('manage_sessions');
         $this->examSession = $examSession;
+        $this->scopeIgnored = request()->boolean('ignored');
+    }
+
+    /**
+     * The subject/section pairs this upload is allowed to touch —
+     * everything still pending, or (on the Ignored page) only the ones
+     * explicitly dismissed. Shared by buildReport() and commitImport()
+     * so they can never disagree about what a row resolves against.
+     */
+    private function pendingPairs(): Collection
+    {
+        return $this->scopeIgnored
+            ? MissingTeacherSections::findIgnored($this->examSession)
+            : MissingTeacherSections::find($this->examSession);
     }
 
     public function targetFields(): array
@@ -167,6 +195,9 @@ class MissingTeachersImport extends Component
 
         $subjects = Subject::all(['id', 'code', 'title']);
         $teachers = Teacher::where('is_active', true)->get(['id', 'name']);
+        $allowedPairs = $this->pendingPairs()
+            ->map(fn ($row) => MissingTeacherSections::key($row->subject_id, strtolower(trim($row->section))))
+            ->flip();
         $pairsResolved = 0;
         $enrollmentsUpdated = 0;
 
@@ -181,9 +212,15 @@ class MissingTeachersImport extends Component
                 continue;
             }
 
+            $section = strtolower(trim($data['section']));
+
+            if (! $allowedPairs->has(MissingTeacherSections::key($data['subjectId'], $section))) {
+                continue;
+            }
+
             $updated = Enrollment::where('exam_session_id', $this->examSession->id)
                 ->where('subject_id', $data['subjectId'])
-                ->whereRaw('lower(trim(section)) = ?', [strtolower(trim($data['section']))])
+                ->whereRaw('lower(trim(section)) = ?', [$section])
                 ->whereNull('teacher_id')
                 ->update(['teacher_id' => $data['teacherId']]);
 
@@ -332,7 +369,7 @@ class MissingTeachersImport extends Component
     {
         $subjects = Subject::all(['id', 'code', 'title']);
         $teachers = Teacher::where('is_active', true)->get(['id', 'name']);
-        $missingPairs = MissingTeacherSections::find($this->examSession)
+        $missingPairs = $this->pendingPairs()
             ->map(fn ($row) => MissingTeacherSections::key($row->subject_id, strtolower(trim($row->section))))
             ->flip();
 
@@ -380,7 +417,9 @@ class MissingTeachersImport extends Component
 
             if (! $missingPairs->has(MissingTeacherSections::key($subjectId, strtolower(trim($section))))) {
                 $noSuchPair++;
-                $errors[] = ['row' => $excelRow, 'message' => "No pending (un-taught) enrollment found for that course/section — either it already has a teacher, or the section text doesn't match this session's data."];
+                $errors[] = ['row' => $excelRow, 'message' => $this->scopeIgnored
+                    ? "That course/section isn't on this session's ignored list — either it already has a teacher, it's still pending on the main Missing Teachers card, or the section text doesn't match."
+                    : "No pending (un-taught) enrollment found for that course/section — either it already has a teacher, it's been dismissed via Ignore All, or the section text doesn't match this session's data."];
 
                 continue;
             }

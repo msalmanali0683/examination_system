@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\MissingTeacherSections;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -205,6 +206,83 @@ class MissingTeachersImportTest extends TestCase
         $this->assertNull($missing->fresh()->teacher_id);
     }
 
+    public function test_a_row_matching_an_ignored_pair_is_not_touched_by_the_general_import(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
+        ]);
+        $session->update(['ignored_missing_teacher_sections' => [
+            MissingTeacherSections::key($subject->id, 'BSAI 1A'),
+        ]]);
+
+        $component = Livewire::actingAs($staff)
+            ->test(MissingTeachersImport::class, ['examSession' => $session])
+            ->set('file', $this->csv("Teacher Name,Course Code,Section\nHuria Ali,CS101,BSAI 1A\n"))
+            ->call('confirmMapping');
+
+        $report = $component->get('report');
+        $this->assertSame(0, $report['valid']);
+        $this->assertSame(1, $report['noSuchPair']);
+
+        $component->call('commitImport');
+        $this->assertNull($enrollment->fresh()->teacher_id);
+    }
+
+    public function test_scoped_to_ignored_only_resolves_ignored_pairs_not_pending_ones(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $ignoredSubject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $pendingSubject = Subject::factory()->create(['code' => 'CS202', 'title' => 'Data Structures']);
+        $teacher = Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+
+        $ignoredEnrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'subject_id' => $ignoredSubject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
+        ]);
+        $pendingEnrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'subject_id' => $pendingSubject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
+        ]);
+        $session->update(['ignored_missing_teacher_sections' => [
+            MissingTeacherSections::key($ignoredSubject->id, 'BSAI 1A'),
+        ]]);
+
+        $component = Livewire::actingAs($staff)
+            ->test(MissingTeachersImport::class, ['examSession' => $session])
+            ->set('scopeIgnored', true)
+            ->set('file', $this->csv("Teacher Name,Course Code,Section\nHuria Ali,CS101,BSAI 1A\nHuria Ali,CS202,BSAI 1A\n"))
+            ->call('confirmMapping');
+
+        $report = $component->get('report');
+        $this->assertSame(1, $report['valid']);
+        $this->assertSame(1, $report['noSuchPair']);
+
+        $component->call('commitImport');
+
+        $this->assertSame($teacher->id, $ignoredEnrollment->fresh()->teacher_id);
+        $this->assertNull($pendingEnrollment->fresh()->teacher_id);
+    }
+
+    public function test_the_ignored_query_string_switches_the_wizard_into_ignored_scope(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        $this->actingAs($staff)
+            ->get(route('sessions.missing-teachers.import', ['examSession' => $session, 'ignored' => 1]))
+            ->assertOk()
+            ->assertSee('Import Ignored Missing Teachers');
+
+        $this->actingAs($staff)
+            ->get(route('sessions.missing-teachers.import', $session))
+            ->assertOk()
+            ->assertSee('Import Missing Teachers')
+            ->assertDontSee('Import Ignored Missing Teachers');
+    }
+
     public function test_template_download_lists_pending_pairs_with_blank_teacher_column(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
@@ -219,5 +297,25 @@ class MissingTeachersImportTest extends TestCase
         $rows = array_map('str_getcsv', explode("\n", trim($content)));
         $this->assertSame(['Teacher Name', 'Course Code', 'Course Title', 'Section'], $rows[0]);
         $this->assertSame(['', 'CS101', 'Intro to Programming', 'BSAI 1A'], $rows[1]);
+    }
+
+    public function test_template_download_with_ignored_flag_lists_only_ignored_pairs(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $ignoredSubject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $pendingSubject = Subject::factory()->create(['code' => 'CS202', 'title' => 'Data Structures']);
+        $this->enroll($session, $ignoredSubject, 'BSAI 1A');
+        $this->enroll($session, $pendingSubject, 'BSAI 1A');
+        $session->update(['ignored_missing_teacher_sections' => [
+            MissingTeacherSections::key($ignoredSubject->id, 'BSAI 1A'),
+        ]]);
+
+        $response = $this->actingAs($staff)->get(route('sessions.missing-teachers.template', ['examSession' => $session, 'ignored' => 1]));
+
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('CS101', $content);
+        $this->assertStringNotContainsString('CS202', $content);
     }
 }

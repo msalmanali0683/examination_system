@@ -1,5 +1,10 @@
 <x-slot name="header">
-    <x-page-header title="Import Missing Teachers" subtitle="Upload a spreadsheet of teacher/course/section rows to fill in un-taught pairs." icon="upload" :back="route('sessions.generate', $examSession)" />
+    <x-page-header
+        :title="$scopeIgnored ? 'Import Ignored Missing Teachers' : 'Import Missing Teachers'"
+        :subtitle="$scopeIgnored ? 'Upload a spreadsheet to fill in pairs dismissed on the Missing Teachers card.' : 'Upload a spreadsheet of teacher/course/section rows to fill in un-taught pairs.'"
+        icon="upload"
+        :back="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.generate', $examSession)"
+    />
 </x-slot>
 
 <x-card class="max-w-3xl mx-auto">
@@ -40,8 +45,8 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload an Excel or CSV file with a teacher name, course and section per row. The first row must be column headers.</p>
 
             <div class="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-between gap-4">
-                <p class="text-sm text-indigo-700 dark:text-indigo-300">Not sure of the format? Download a template pre-filled with this session's pending pairs — just fill in Teacher Name.</p>
-                <a href="{{ route('sessions.missing-teachers.template', $examSession) }}">
+                <p class="text-sm text-indigo-700 dark:text-indigo-300">Not sure of the format? Download a template pre-filled with this session's {{ $scopeIgnored ? 'ignored' : 'pending' }} pairs — just fill in Teacher Name.</p>
+                <a href="{{ route('sessions.missing-teachers.template', ['examSession' => $examSession, 'ignored' => $scopeIgnored ? 1 : null]) }}">
                     <x-btn variant="secondary" size="sm" icon="download">Download Template</x-btn>
                 </a>
             </div>
@@ -215,7 +220,9 @@
                 {{ $pairsResolved }} subject/section pair(s) resolved, covering {{ $enrollmentsUpdated }} enrollment(s).
             </p>
             <div class="mt-6 flex items-center justify-center gap-3">
-                <x-btn :href="route('sessions.generate', $examSession)" wire:navigate icon="check">Back to Generate</x-btn>
+                <x-btn :href="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.generate', $examSession)" wire:navigate icon="check">
+                    {{ $scopeIgnored ? 'Back to Ignored List' : 'Back to Generate' }}
+                </x-btn>
                 <x-btn variant="ghost" wire:click="startOver">Import Another File</x-btn>
             </div>
         </div>

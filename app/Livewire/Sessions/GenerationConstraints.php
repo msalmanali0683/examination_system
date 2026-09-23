@@ -744,40 +744,9 @@ class GenerationConstraints extends Component
         return MissingTeacherSections::key($subjectId, $section);
     }
 
-    /**
-     * Active teacher(s) already on record for each subject — any
-     * enrollment with that subject_id and a non-null teacher_id, across
-     * every session, not just this one — so the Missing Teachers card can
-     * suggest "whoever already teaches this" instead of making staff
-     * search an alphabetical list of every teacher for a name they might
-     * not even know. Ordered by how often each teacher is linked to the
-     * subject, since the most common pairing is the most likely answer.
-     *
-     * @param  int[]  $subjectIds
-     * @return Collection<int, Collection<int, Teacher>> subject_id => teachers
-     */
     private function teachersForSubjects(array $subjectIds): Collection
     {
-        if (empty($subjectIds)) {
-            return collect();
-        }
-
-        $usage = Enrollment::whereIn('subject_id', $subjectIds)
-            ->whereNotNull('teacher_id')
-            ->selectRaw('subject_id, teacher_id, count(*) as uses')
-            ->groupBy('subject_id', 'teacher_id')
-            ->get();
-
-        $teachers = Teacher::whereIn('id', $usage->pluck('teacher_id')->unique())
-            ->where('is_active', true)
-            ->get()
-            ->keyBy('id');
-
-        return $usage->groupBy('subject_id')
-            ->map(fn ($rows) => $rows->sortByDesc('uses')
-                ->map(fn ($row) => $teachers->get($row->teacher_id))
-                ->filter()
-                ->values());
+        return MissingTeacherSections::suggestedTeachers($subjectIds);
     }
 
     private function missingTeacherSections(): Collection

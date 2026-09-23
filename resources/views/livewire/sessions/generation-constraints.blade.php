@@ -227,7 +227,9 @@
     <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
         <x-icon name="info" class="h-3.5 w-3.5 shrink-0" />
         {{ $ignoredMissingTeacherCount }} missing-teacher pair{{ $ignoredMissingTeacherCount === 1 ? '' : 's' }} dismissed.
-        <button type="button" wire:click="unignoreMissingTeachers" class="text-indigo-600 dark:text-indigo-400 hover:underline">Show again</button>
+        <a href="{{ route('sessions.missing-teachers.ignored', $examSession) }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:underline">Work through them</a>
+        &middot;
+        <button type="button" wire:click="unignoreMissingTeachers" class="text-indigo-600 dark:text-indigo-400 hover:underline">Show all again</button>
     </p>
 @endif
 

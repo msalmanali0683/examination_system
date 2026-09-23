@@ -8,6 +8,7 @@ use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
+use App\Livewire\Sessions\IgnoredMissingTeachers;
 use App\Livewire\Sessions\Index as SessionsIndex;
 use App\Livewire\Sessions\MissingTeachersImport;
 use App\Livewire\Sessions\ReportShow;
@@ -82,6 +83,10 @@ Route::get('sessions/{examSession}/missing-teachers/import', MissingTeachersImpo
 Route::get('sessions/{examSession}/missing-teachers/template.csv', [MissingTeacherTemplateController::class, 'download'])
     ->middleware(['auth'])
     ->name('sessions.missing-teachers.template');
+
+Route::get('sessions/{examSession}/missing-teachers/ignored', IgnoredMissingTeachers::class)
+    ->middleware(['auth'])
+    ->name('sessions.missing-teachers.ignored');
 
 Route::get('sessions/{examSession}/seating', SeatingChart::class)
     ->middleware(['auth'])
