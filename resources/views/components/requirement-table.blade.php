@@ -48,10 +48,20 @@
                             @else
                                 <x-badge color="yellow">Clash</x-badge>
                             @endif
+                            @if ($r->hasUnresolvedAlert)
+                                <x-badge color="blue">Alert</x-badge>
+                            @endif
                             @if (! empty($r->clashDetails))
                                 <div class="mt-1 space-y-0.5 max-w-xs">
                                     @foreach ($r->clashDetails as $detail)
                                         <p class="text-xs text-yellow-700 dark:text-yellow-400">{{ $detail }}</p>
+                                    @endforeach
+                                </div>
+                            @endif
+                            @if (! empty($r->alertDetails))
+                                <div class="mt-1 space-y-0.5 max-w-xs">
+                                    @foreach ($r->alertDetails as $detail)
+                                        <p class="text-xs text-blue-700 dark:text-blue-400">{{ $detail }}</p>
                                     @endforeach
                                 </div>
                             @endif

@@ -14,9 +14,26 @@ final class SlotRequirement
         public readonly int $teachersAvailable,
         public readonly bool $hasUnseatedStudents,
         public readonly int $seatsAvailable = 0,
+        /**
+         * A genuine, blocking problem: either a real double-booking (two
+         * subjects sharing a student ended up in the exact same time
+         * slot, which is actually impossible for that student to sit),
+         * or a subject that doesn't fit alone in any slot's active room
+         * capacity. This is what blocks Generate Seating.
+         */
         public readonly bool $hasUnresolvedClash = false,
         /** @var string[] */
         public readonly array $clashDetails = [],
+        /**
+         * Two papers from the same semester sharing a day (but never
+         * the same slot) — a student just sits two exams that day, which
+         * is inconvenient but not impossible. Seating runs per-slot, so
+         * this has no effect on it either way; it's surfaced for
+         * planning only and never blocks generation.
+         */
+        public readonly bool $hasUnresolvedAlert = false,
+        /** @var string[] */
+        public readonly array $alertDetails = [],
         /**
          * The total number of rooms the whole system has, regardless of
          * session — defaults to "unknown" (never triggers
@@ -63,15 +80,13 @@ final class SlotRequirement
     }
 
     /**
-     * Deliberately excludes teachersShortfall(): seating itself doesn't
-     * need teachers at all, only rooms and students. Duty assignment is
-     * the stage that actually needs teachers, and it already runs after
-     * seating and copes with a shortfall gracefully (whatever teachers
-     * exist get assigned, the rest surfaces as a warning) rather than
-     * refusing to run — seating shouldn't hold itself to a stricter
-     * standard than the stage that actually depends on the number. The
-     * teachers column stays fully visible for planning; it just no
-     * longer blocks generation.
+     * Deliberately excludes teachersShortfall() and hasUnresolvedAlert():
+     * neither actually affects whether seating can be generated. Seating
+     * only needs rooms and students; a teacher shortfall is a duty-stage
+     * concern (which already copes with it via a warning, not a refusal
+     * to run), and a same-day (not same-slot) alert has zero effect on
+     * a per-slot process either way. Both stay fully visible for
+     * planning — they just don't gate this specific check.
      */
     public function isMet(): bool
     {

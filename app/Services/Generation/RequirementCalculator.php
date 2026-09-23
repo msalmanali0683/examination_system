@@ -46,20 +46,26 @@ class RequirementCalculator
         $excludedCount = $constraints->where('is_excluded', true)->count();
         $constrainedNotExcluded = $constraints->where('is_excluded', false);
 
-        // A slot can have plenty of room/teacher capacity and still not be
-        // ready: the real timetable generator records a conflict_note on a
-        // subject when it couldn't find a clash-free day for it and placed
-        // it anyway (see TimetableGenerator's capacity-shortfall/clash
-        // conflicts). Capacity Check must surface that too, or it can show
-        // "Ready" for a slot that Pin Subjects to Slots is warning about.
-        $clashDetailsBySlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
+        // A slot can have plenty of room/teacher capacity and still have
+        // something worth surfacing: the real timetable generator records
+        // a conflict_note on a subject when it couldn't find an ideal spot
+        // for it and placed it anyway (see TimetableGenerator). Only a
+        // purely same-day (never same-slot) note is downgraded to a
+        // non-blocking alert — see ConflictNoteClassifier for why.
+        $notesBySlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
             ->whereNotNull('time_slot_id')
             ->whereNotNull('conflict_note')
             ->get(['time_slot_id', 'conflict_note'])
-            ->groupBy('time_slot_id')
-            ->map(fn ($rows) => $rows->pluck('conflict_note')->unique()->values()->all());
+            ->groupBy('time_slot_id');
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $roomsAvailableSystemWide, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $session, $strategyOverride) {
+        $clashDetailsBySlot = $notesBySlot->map(
+            fn ($rows) => $rows->pluck('conflict_note')->filter(ConflictNoteClassifier::isBlockingClash(...))->unique()->values()->all()
+        );
+        $alertDetailsBySlot = $notesBySlot->map(
+            fn ($rows) => $rows->pluck('conflict_note')->reject(ConflictNoteClassifier::isBlockingClash(...))->unique()->values()->all()
+        );
+
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $roomsAvailableSystemWide, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $alertDetailsBySlot, $session, $strategyOverride) {
             $slot = $active['slot'];
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
@@ -95,6 +101,7 @@ class RequirementCalculator
             $unavailableThisDay = $constrainedNotExcluded->filter(fn ($c) => ! $c->isAvailableOn($slot->date))->count();
             $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay;
             $clashDetails = $clashDetailsBySlot->get($slot->id, []);
+            $alertDetails = $alertDetailsBySlot->get($slot->id, []);
 
             return new SlotRequirement(
                 timeSlotId: $slot->id,
@@ -108,6 +115,8 @@ class RequirementCalculator
                 seatsAvailable: $seatsAvailable,
                 hasUnresolvedClash: ! empty($clashDetails),
                 clashDetails: $clashDetails,
+                hasUnresolvedAlert: ! empty($alertDetails),
+                alertDetails: $alertDetails,
                 roomsAvailableSystemWide: $roomsAvailableSystemWide,
             );
         })->values();

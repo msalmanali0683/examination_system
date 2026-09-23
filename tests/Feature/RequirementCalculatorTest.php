@@ -347,6 +347,78 @@ class RequirementCalculatorTest extends TestCase
         );
     }
 
+    /**
+     * A same-day (not same-slot) note means two papers from the same
+     * semester just share a calendar day — inconvenient, but seating runs
+     * per-slot so it has zero effect on whether this slot can be seated.
+     * It must surface as a non-blocking alert, distinct from a genuine
+     * clash, and never prevent Generate Seating.
+     */
+    public function test_a_same_day_alert_does_not_prevent_a_slot_from_being_met(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 3);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'conflict_note' => 'CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.',
+        ]);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertFalse($requirement->hasUnresolvedClash);
+        $this->assertSame([], $requirement->clashDetails);
+        $this->assertTrue($requirement->hasUnresolvedAlert);
+        $this->assertSame(
+            ['CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.'],
+            $requirement->alertDetails
+        );
+        $this->assertTrue($requirement->isMet());
+        $this->assertTrue((new RequirementCalculator)->isFullyMet($session));
+    }
+
+    /**
+     * recordClashNoteForSameDay() can append both a same-day phrase and a
+     * real exact-same-slot phrase to one subject's note (it pins into a
+     * slot that both shares a day with one subject and exactly clashes
+     * with another). The combined note must still count as a blocking
+     * clash — "mentions same day" alone can't be the alert test, or a
+     * real double-booking would silently stop blocking generation.
+     */
+    public function test_a_note_combining_a_same_day_mention_and_a_real_clash_still_blocks(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 3);
+
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'conflict_note' => 'Shares students with CS101 on the same day — placed anyway. Shares students with CS303 in the exact same time slot — placed anyway.',
+        ]);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertTrue($requirement->hasUnresolvedClash);
+        $this->assertFalse($requirement->isMet());
+    }
+
     public function test_a_strategy_override_simulates_a_different_strategy_without_touching_the_sessions_saved_one(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);

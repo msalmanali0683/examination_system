@@ -14,6 +14,7 @@ use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Services\Generation\ConflictGraphBuilder;
+use App\Services\Generation\ConflictNoteClassifier;
 use App\Services\Generation\DutyAllocationService;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
@@ -1202,7 +1203,12 @@ class GenerationConstraints extends Component
             'ignoredMissingTeacherCount' => count($this->examSession->ignored_missing_teacher_sections ?? []),
             'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
             'timeSlots' => $timeSlots,
-            'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null),
+            // A same-day (not same-slot) note is informational only — it
+            // never blocks generation — so it's shown separately from a
+            // genuine unresolved clash (see ConflictNoteClassifier, also
+            // used by RequirementCalculator::calculate()).
+            'conflicted' => $assignments->filter(fn ($a) => $a->conflict_note !== null && ConflictNoteClassifier::isBlockingClash($a->conflict_note)),
+            'alerts' => $assignments->filter(fn ($a) => $a->conflict_note !== null && ! ConflictNoteClassifier::isBlockingClash($a->conflict_note)),
             'requirements' => $requirements,
             'dutyFairness' => $this->dutyFairness($sessionId),
         ]);

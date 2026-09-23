@@ -304,7 +304,8 @@
                                     @elseif ($assignment?->timeSlot)
                                         {{ $assignment->timeSlot->date->format('d M') }} {{ substr($assignment->timeSlot->start_time, 0, 5) }}
                                         @if ($assignment->conflict_note)
-                                            <button type="button" wire:click="showClashDetails({{ $subject->id }})" title="Click to see the students causing this clash" class="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 underline decoration-dotted">&#9888;</button>
+                                            @php $isBlockingClash = \App\Services\Generation\ConflictNoteClassifier::isBlockingClash($assignment->conflict_note); @endphp
+                                            <button type="button" wire:click="showClashDetails({{ $subject->id }})" title="Click to see the students causing this {{ $isBlockingClash ? 'clash' : 'alert' }}" @class(['underline decoration-dotted', 'text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300' => $isBlockingClash, 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300' => ! $isBlockingClash])>&#9888;</button>
                                         @endif
                                     @else
                                         <span class="text-gray-400">Not yet generated</span>
@@ -320,11 +321,10 @@
                                                     $used = $seatsUsedPerSlot->get($slot->id, 0);
                                                     $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
                                                     $wouldClashExactSlot = $clashingSlotsBySubject->get($subject->id, collect())->contains($slot->id);
-                                                    $wouldClashSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($slot->id);
-                                                    $wouldClash = $wouldClashExactSlot || $wouldClashSameDay;
-                                                    $clashLabel = $wouldClashExactSlot ? ' &mdash; &#9888; clash (same slot)' : ($wouldClashSameDay ? ' &mdash; &#9888; clash (same day)' : '');
+                                                    $wouldAlertSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($slot->id);
+                                                    $clashLabel = $wouldClashExactSlot ? ' &mdash; &#9888; clash (same slot)' : ($wouldAlertSameDay ? ' &mdash; &#9888; alert (same day)' : '');
                                                 @endphp
-                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClash])>
+                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClashExactSlot, 'color: #b45309' => $wouldAlertSameDay && ! ($projected > $seatsAvailableTotal)])>
                                                     {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $clashLabel !!}
                                                 </option>
                                             @endforeach
@@ -507,6 +507,23 @@
         <ul class="mt-4 space-y-2">
             @foreach ($conflicted as $assignment)
                 <li class="text-sm text-yellow-700 dark:text-yellow-400 flex items-start gap-2">
+                    <x-icon name="warning" class="h-4 w-4 mt-0.5 shrink-0" />
+                    <button type="button" wire:click="showClashDetails({{ $assignment->subject_id }})" class="text-left hover:underline decoration-dotted">{{ $assignment->conflict_note }}</button>
+                </li>
+            @endforeach
+        </ul>
+    </x-card>
+@endif
+
+@if ($alerts->isNotEmpty())
+    <x-card>
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Same-Day Alerts</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            These subjects share a calendar day with another paper from the same semester, just never the same time slot — informational only, and never blocks Generate Seating.
+        </p>
+        <ul class="mt-4 space-y-2">
+            @foreach ($alerts as $assignment)
+                <li class="text-sm text-blue-700 dark:text-blue-400 flex items-start gap-2">
                     <x-icon name="warning" class="h-4 w-4 mt-0.5 shrink-0" />
                     <button type="button" wire:click="showClashDetails({{ $assignment->subject_id }})" class="text-left hover:underline decoration-dotted">{{ $assignment->conflict_note }}</button>
                 </li>

@@ -682,9 +682,11 @@ class GenerationConstraintsTest extends TestCase
 
         // Subject B's dropdown still offers 20 Apr 11:30 (adjacent to
         // subject A's 09:00, not the day's max separation), marked as a
-        // clash, and still offers the clash-free 21 Apr unmarked.
-        $this->assertStringContainsString('clash (same day)', $optionsForB['20 Apr 11:30'] ?? '');
+        // non-blocking alert, and still offers the clash-free 21 Apr
+        // unmarked.
+        $this->assertStringContainsString('alert (same day)', $optionsForB['20 Apr 11:30'] ?? '');
         $this->assertStringNotContainsString('clash', $optionsForB['21 Apr 09:00'] ?? '');
+        $this->assertStringNotContainsString('alert', $optionsForB['21 Apr 09:00'] ?? '');
     }
 
     public function test_pin_dropdown_does_not_flag_the_days_max_separation_slot(): void
@@ -1224,6 +1226,42 @@ class GenerationConstraintsTest extends TestCase
         // Only one teacher exists at all, but the slot needs
         // invigilators_per_room (2) — a genuine, unfixable-here shortfall.
         Teacher::factory()->create(['is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->call('generateSeating');
+
+        $this->assertDatabaseCount('seat_assignments', 1);
+    }
+
+    /**
+     * A same-day (not same-slot) alert means two papers from the same
+     * semester share a calendar day — seating runs per-slot, so it has no
+     * effect on whether this slot can be seated. It must never block
+     * Generate Seating, same as a teacher shortfall above.
+     */
+    public function test_generate_seating_proceeds_despite_a_same_day_alert(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'conflict_note' => 'CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.',
+        ]);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(GenerationConstraints::class, ['examSession' => $session])
