@@ -265,7 +265,248 @@ class TimetableGenerator
             $dayOccupants[$bestDay][] = $subjectId;
         }
 
+        $conflicts = $this->maximizeSameDaySeparation(
+            $placed, $slotOccupants, $daySlots, $positionInDay, $conflictGraph,
+            $conflicts, $sameSemester, $roomsFit, array_keys($pinned),
+        );
+
         return new TimetableResult($placed, $conflicts);
+    }
+
+    /**
+     * Runs once after the main greedy pass: for any same-semester pair
+     * sharing a day but not yet at that day's maximum possible separation
+     * (see the class doc-comment), relocates one or both to the day's
+     * first and last slot specifically — the department's required way
+     * to handle an unavoidable same-day pairing, since it maximizes the
+     * gap between the two papers a student sits that day.
+     *
+     * Only ever performed when it's unambiguously safe: the destination
+     * is empty, or held by exactly one other subject that can swap into
+     * the vacated slot without creating a new shared-student clash or
+     * (when $roomsFit is given) breaking room fit on either end. A
+     * pinned subject is never relocated and never displaced — pins are
+     * fixed obstacles everywhere else in this class, and this pass
+     * doesn't get an exception. Whenever safety can't be established for
+     * a pair, it's left exactly as the greedy pass placed it, conflict
+     * note and all — this is a best-effort upgrade, never a new problem.
+     *
+     * @param  array<int, int>  $placed
+     * @param  array<int, int[]>  $slotOccupants
+     * @param  array<string, int[]>  $daySlots
+     * @param  array<int, int>  $positionInDay
+     * @param  array<int, array<int, int>>  $conflictGraph
+     * @param  int[]  $pinnedIds
+     */
+    private function maximizeSameDaySeparation(
+        array &$placed,
+        array &$slotOccupants,
+        array $daySlots,
+        array $positionInDay,
+        array $conflictGraph,
+        Collection $conflicts,
+        callable $sameSemester,
+        ?callable $roomsFit,
+        array $pinnedIds,
+    ): Collection {
+        $resolvedPairs = [];
+
+        foreach ($daySlots as $slotIds) {
+            $dayMaxGap = count($slotIds) - 1;
+
+            if ($dayMaxGap < 1) {
+                continue;
+            }
+
+            $firstSlotId = $slotIds[0];
+            $lastSlotId = $slotIds[count($slotIds) - 1];
+
+            $occupantIds = array_values(array_unique(array_merge(
+                ...array_map(fn ($slotId) => $slotOccupants[$slotId] ?? [], $slotIds)
+            )));
+
+            foreach ($occupantIds as $subjectA) {
+                foreach ($occupantIds as $subjectB) {
+                    if ($subjectA >= $subjectB) {
+                        continue;
+                    }
+
+                    if (($conflictGraph[$subjectA][$subjectB] ?? 0) === 0 || ! $sameSemester($subjectA, $subjectB)) {
+                        continue;
+                    }
+
+                    $slotA = $placed[$subjectA];
+                    $slotB = $placed[$subjectB];
+
+                    if ($slotA === $slotB) {
+                        continue; // exact-slot clash, not this pass's concern
+                    }
+
+                    if (abs($positionInDay[$slotA] - $positionInDay[$slotB]) === $dayMaxGap) {
+                        continue; // already ideal
+                    }
+
+                    $aPinned = in_array($subjectA, $pinnedIds, true);
+                    $bPinned = in_array($subjectB, $pinnedIds, true);
+
+                    if ($aPinned && $bPinned) {
+                        continue; // neither can move
+                    }
+
+                    // A pin fixes that subject's own slot — the pair can
+                    // only reach the day's true first-to-last gap if the
+                    // OTHER subject is still free to take whichever
+                    // extreme the pinned one isn't already sitting in. A
+                    // pin stuck in the middle of the day makes that gap
+                    // unreachable no matter where its partner goes, so
+                    // there's nothing safe to attempt — this is left
+                    // exactly as the greedy pass placed it, same as
+                    // before this method existed.
+                    if ($aPinned && $positionInDay[$slotA] !== 0 && $positionInDay[$slotA] !== $dayMaxGap) {
+                        continue;
+                    }
+
+                    if ($bPinned && $positionInDay[$slotB] !== 0 && $positionInDay[$slotB] !== $dayMaxGap) {
+                        continue;
+                    }
+
+                    $targets = $aPinned
+                        ? [$subjectB => ($positionInDay[$slotA] === 0 ? $lastSlotId : $firstSlotId)]
+                        : ($bPinned
+                            ? [$subjectA => ($positionInDay[$slotB] === 0 ? $lastSlotId : $firstSlotId)]
+                            : $this->extremeAssignment($subjectA, $subjectB, $firstSlotId, $lastSlotId, $placed));
+
+                    $moved = true;
+
+                    foreach ($targets as $subjectId => $targetSlotId) {
+                        $moved = $moved && $this->relocateToTarget($subjectId, $targetSlotId, $placed, $slotOccupants, $conflictGraph, $roomsFit, $pinnedIds);
+                    }
+
+                    if ($moved) {
+                        $resolvedPairs[] = [$subjectA, $subjectB];
+                    }
+                }
+            }
+        }
+
+        if (empty($resolvedPairs)) {
+            return $conflicts;
+        }
+
+        return $conflicts->reject(function (ConflictReportRow $row) use ($resolvedPairs) {
+            foreach ($resolvedPairs as [$a, $b]) {
+                if (($row->subjectId === $a && $row->conflictingSubjectId === $b)
+                    || ($row->subjectId === $b && $row->conflictingSubjectId === $a)) {
+                    return true;
+                }
+            }
+
+            return false;
+        })->values();
+    }
+
+    /**
+     * Neither subject in the pair is pinned: assigns each to whichever
+     * extreme it's already closest to (so a subject already sitting at
+     * one end doesn't need to move at all), defaulting A→first/B→last
+     * when neither is already at an extreme.
+     *
+     * @param  array<int, int>  $placed
+     * @return array<int, int> subject_id => target slot id
+     */
+    private function extremeAssignment(int $subjectA, int $subjectB, int $firstSlotId, int $lastSlotId, array $placed): array
+    {
+        if ($placed[$subjectA] === $lastSlotId || $placed[$subjectB] === $firstSlotId) {
+            return [$subjectA => $lastSlotId, $subjectB => $firstSlotId];
+        }
+
+        return [$subjectA => $firstSlotId, $subjectB => $lastSlotId];
+    }
+
+    /**
+     * Moves $subjectId into $targetSlotId if it's unambiguously safe: a
+     * no-op if it's already there, a plain move if the slot is empty, or
+     * a swap with the slot's single occupant if that occupant isn't
+     * pinned and swapping creates no new shared-student clash and (when
+     * $roomsFit is given) still fits both ends. Leaves everything
+     * untouched and returns false the moment any of that isn't true —
+     * including if $subjectId itself is pinned, which should never
+     * happen given the callers above, but is checked here too since this
+     * method is the one thing that actually mutates placement.
+     *
+     * @param  array<int, int>  $placed
+     * @param  array<int, int[]>  $slotOccupants
+     * @param  array<int, array<int, int>>  $conflictGraph
+     * @param  int[]  $pinnedIds
+     */
+    private function relocateToTarget(
+        int $subjectId,
+        int $targetSlotId,
+        array &$placed,
+        array &$slotOccupants,
+        array $conflictGraph,
+        ?callable $roomsFit,
+        array $pinnedIds,
+    ): bool {
+        if (in_array($subjectId, $pinnedIds, true)) {
+            return false;
+        }
+
+        $currentSlotId = $placed[$subjectId];
+
+        if ($currentSlotId === $targetSlotId) {
+            return true;
+        }
+
+        $targetOccupants = array_values(array_diff($slotOccupants[$targetSlotId] ?? [], [$subjectId]));
+
+        if (empty($targetOccupants)) {
+            if ($roomsFit !== null && ! $roomsFit([$subjectId])) {
+                return false;
+            }
+
+            $this->moveSubject($subjectId, $currentSlotId, $targetSlotId, $placed, $slotOccupants);
+
+            return true;
+        }
+
+        if (count($targetOccupants) > 1) {
+            return false; // too many occupants to safely reason about a swap
+        }
+
+        $displaced = $targetOccupants[0];
+
+        if (in_array($displaced, $pinnedIds, true) || ($conflictGraph[$subjectId][$displaced] ?? 0) > 0) {
+            return false;
+        }
+
+        $currentOccupantsWithoutSubject = array_values(array_diff($slotOccupants[$currentSlotId] ?? [], [$subjectId]));
+
+        foreach ($currentOccupantsWithoutSubject as $existing) {
+            if (($conflictGraph[$displaced][$existing] ?? 0) > 0) {
+                return false;
+            }
+        }
+
+        if ($roomsFit !== null && (! $roomsFit([$subjectId]) || ! $roomsFit([...$currentOccupantsWithoutSubject, $displaced]))) {
+            return false;
+        }
+
+        $this->moveSubject($subjectId, $currentSlotId, $targetSlotId, $placed, $slotOccupants);
+        $this->moveSubject($displaced, $targetSlotId, $currentSlotId, $placed, $slotOccupants);
+
+        return true;
+    }
+
+    /**
+     * @param  array<int, int>  $placed
+     * @param  array<int, int[]>  $slotOccupants
+     */
+    private function moveSubject(int $subjectId, int $fromSlotId, int $toSlotId, array &$placed, array &$slotOccupants): void
+    {
+        $slotOccupants[$fromSlotId] = array_values(array_diff($slotOccupants[$fromSlotId] ?? [], [$subjectId]));
+        $slotOccupants[$toSlotId][] = $subjectId;
+        $placed[$subjectId] = $toSlotId;
     }
 
     /**

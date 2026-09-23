@@ -375,6 +375,99 @@ class TimetableGeneratorTest extends TestCase
         $this->assertStringContainsString('share 3 student', $result->conflicts->first()->message);
     }
 
+    /**
+     * Reproduces the real pattern seen live: subject 1 is pinned to the
+     * day's first slot. Subject 2 (same semester, shares students with
+     * 1) would ideally land in the day's last slot to reach max
+     * separation, but at placement time that slot doesn't have room for
+     * both it and subject 3, so the greedy pass settles for a smaller
+     * gap instead (matching how a real room-capacity constraint made
+     * the original greedy pass choose a middle slot on live data). The
+     * repair pass then swaps subject 2 into the last slot and subject 3
+     * out to the vacated one — safe because they don't clash and both
+     * ends still fit room-wise — clearing the conflict entirely.
+     */
+    public function test_a_same_day_pair_gets_swapped_into_first_and_last_slot_when_the_ideal_slot_frees_up_safely(): void
+    {
+        $graph = [
+            1 => [2 => 50, 3 => 100],
+            2 => [1 => 50],
+            3 => [1 => 100],
+        ];
+        $slotDays = [100 => 'day1', 101 => 'day1', 102 => 'day1', 103 => 'day1'];
+        // 1 and 2 are the same semester and must be separated; 3, 9 and
+        // 10 are a different semester entirely, so sharing the day with
+        // them (or the exact slot) is never a problem on its own.
+        $semesters = [1 => [1], 2 => [1], 3 => [2], 9 => [2], 10 => [2]];
+
+        // Only subjects 2 and 3 together exceed this slot's room
+        // capacity — the one thing standing between subject 2 and the
+        // day's last slot at placement time.
+        $roomsFit = fn (array $ids) => ! (in_array(2, $ids, true) && in_array(3, $ids, true));
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2, 3, 9, 10],
+            pinned: [1 => 100, 9 => 101, 10 => 102],
+            timeSlotIds: [100, 101, 102, 103],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2, 3, 9, 10]),
+            slotDays: $slotDays,
+            roomsFit: $roomsFit,
+            semesterBySubject: $semesters,
+        );
+
+        $this->assertSame(100, $result->assignments[1]);
+        $this->assertSame(103, $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty(), $result->conflicts->isEmpty() ? '' : $result->conflicts->first()->message);
+    }
+
+    /**
+     * Same shape as the previous test — subject 2 could swap into the
+     * day's last slot with subject 3 — except subject 3 also shares
+     * students with subject 10, who's pinned at the slot subject 3 would
+     * have to vacate to. Swapping them would trade one clash for another
+     * new one, so the repair pass must recognise that and leave the
+     * original placement and its conflict note completely untouched
+     * rather than force an unsafe move (matching the real live case
+     * where a large subject's only scheduling-clash-free slot also
+     * failed on room capacity — a different reason, same outcome: no
+     * safe move exists, so none is made).
+     */
+    public function test_a_same_day_pair_is_left_unchanged_when_no_safe_swap_exists(): void
+    {
+        $graph = [
+            1 => [2 => 50, 3 => 100],
+            2 => [1 => 50],
+            3 => [1 => 100, 10 => 5],
+            10 => [3 => 5],
+        ];
+        $slotDays = [100 => 'day1', 101 => 'day1', 102 => 'day1', 103 => 'day1'];
+        $semesters = [1 => [1], 2 => [1], 3 => [2], 9 => [2], 10 => [2]];
+
+        // Only subjects 2 and 3 together exceed this slot's room
+        // capacity — the same constraint as the previous test. It's the
+        // shared-student clash with subject 10 below that actually
+        // blocks the swap here.
+        $roomsFit = fn (array $ids) => ! (in_array(2, $ids, true) && in_array(3, $ids, true));
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2, 3, 9, 10],
+            pinned: [1 => 100, 9 => 101, 10 => 102],
+            timeSlotIds: [100, 101, 102, 103],
+            conflictGraph: $graph,
+            subjectLabels: $this->labels([1, 2, 3, 9, 10]),
+            slotDays: $slotDays,
+            roomsFit: $roomsFit,
+            semesterBySubject: $semesters,
+        );
+
+        // Subject 2 stays wherever the greedy pass put it (not the ideal
+        // last slot, since swapping there was never safe) and the
+        // conflict it recorded stays reported.
+        $this->assertNotSame(103, $result->assignments[2]);
+        $this->assertTrue($result->conflicts->contains(fn ($c) => $c->subjectId === 2 && $c->conflictingSubjectId === 1));
+    }
+
     public function test_subjects_with_no_semester_data_still_default_to_never_sharing_a_day(): void
     {
         // No $semesterBySubject entries at all for either subject — must
