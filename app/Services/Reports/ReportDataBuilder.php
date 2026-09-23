@@ -132,7 +132,18 @@ class ReportDataBuilder
      */
     public function simpleDatesheetRowsByDate(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): Collection
     {
-        $rows = $this->seatingCharts($session, $date, $timeSlotIds)
+        $charts = $this->seatingCharts($session, $date, $timeSlotIds);
+
+        // Same "every semester this subject touches" label used by
+        // formattedDatesheetRows() (see SemesterExtractor::label()), so
+        // the two datesheet reports never disagree on a subject's
+        // semester.
+        $sectionsBySubject = $charts
+            ->flatMap(fn ($chart) => $chart->subjectsSections)
+            ->groupBy(fn ($ss) => $ss->subject->id)
+            ->map(fn ($rows) => $rows->pluck('section'));
+
+        $rows = $charts
             ->flatMap(fn ($chart) => $chart->subjectsSections->map(fn ($ss) => (object) [
                 'subjectId' => $ss->subject->id,
                 'title' => $ss->subject->title,
@@ -141,6 +152,7 @@ class ReportDataBuilder
             ->unique(fn ($row) => $row->subjectId.'-'.$row->timeSlot->id)
             ->map(fn ($row) => (object) [
                 'title' => $row->title,
+                'semester' => SemesterExtractor::label($sectionsBySubject->get($row->subjectId, collect())),
                 'date' => $row->timeSlot->date,
                 'day' => $row->timeSlot->date->format('l'),
                 'startTime' => $row->timeSlot->start_time,

@@ -374,11 +374,13 @@ class ReportDownloadsTest extends TestCase
         $this->assertCount(1, $rows);
         $row = $rows->first();
         $this->assertSame('Programming Fundamentals', $row->title);
+        $this->assertSame('2nd', $row->semester);
         $this->assertSame('Monday', $row->day);
         $this->assertSame('09:00 - 12:00', $row->slot);
 
         $html = (new SimpleDatesheetExport($session))->view()->render();
         $this->assertStringContainsString('Programming Fundamentals', $html);
+        $this->assertStringContainsString('2nd', $html);
         $this->assertStringContainsString('09:00 - 12:00', $html);
     }
 
