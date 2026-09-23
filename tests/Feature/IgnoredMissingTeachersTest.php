@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\IgnoredMissingTeachers;
+use App\Livewire\Sessions\MissingTeachers;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Student;
@@ -125,7 +125,7 @@ class IgnoredMissingTeachersTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_ignored_list_page_stays_consistent_with_the_main_card_after_ignore_all(): void
+    public function test_ignored_list_page_stays_consistent_with_the_main_list_after_ignore_all(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
@@ -133,7 +133,7 @@ class IgnoredMissingTeachersTest extends TestCase
         $this->enroll($session, $subject, 'BSAI 1A');
 
         Livewire::actingAs($staff)
-            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->test(MissingTeachers::class, ['examSession' => $session])
             ->call('ignoreAllMissingTeachers');
 
         $ignoredSections = Livewire::actingAs($staff)

@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Livewire\Sessions\DutyBoard;
 use App\Models\DutyAssignment;
+use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
+use App\Models\SeatAssignment;
 use App\Models\SessionTeacherConstraint;
+use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
@@ -139,5 +143,93 @@ class DutyBoardTest extends TestCase
             ->test(DutyBoard::class, ['examSession' => $session])
             ->call('reassignDuty', $duty->id, $newTeacher->id)
             ->assertForbidden();
+    }
+
+    public function test_generate_duties_is_blocked_until_seating_exists(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(DutyBoard::class, ['examSession' => $session])
+            ->call('regenerate');
+
+        $this->assertDatabaseCount('duty_assignments', 0);
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_generate_duties_creates_assignments_and_marks_the_session_generated(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'draft', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SeatAssignment::create([
+            'exam_session_id' => $session->id,
+            'enrollment_id' => $enrollment->id,
+            'time_slot_id' => $slot->id,
+            'room_id' => $room->id,
+            'row_number' => 1,
+            'column_number' => 1,
+        ]);
+        Teacher::factory()->create(['is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(DutyBoard::class, ['examSession' => $session])
+            ->call('regenerate');
+
+        $this->assertDatabaseCount('duty_assignments', 1);
+        $this->assertSame('generated', $session->fresh()->status);
+    }
+
+    public function test_show_teacher_duties_lists_every_duty_in_order_with_lock_state(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create(['name' => 'Dr Naveed']);
+        $roomA = Room::factory()->create(['name' => 'Room A']);
+        $roomB = Room::factory()->create(['name' => 'Room B']);
+        $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
+        $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '13:00', 'end_time' => '15:00']);
+
+        // Deliberately created out of chronological order — the modal
+        // must still list them earliest first.
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $afternoon->id, 'room_id' => $roomB->id, 'is_locked' => true]);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $morning->id, 'room_id' => $roomA->id, 'is_locked' => false]);
+
+        $component = Livewire::actingAs($staff)->test(DutyBoard::class, ['examSession' => $session]);
+        $component->call('showTeacherDuties', $teacher->id);
+
+        $details = $component->get('teacherDutyDetails');
+        $this->assertSame('Dr Naveed', $details['teacherName']);
+        $this->assertCount(2, $details['duties']);
+        $this->assertSame('20 Apr 2026', $details['duties'][0]['date']);
+        $this->assertSame('Room A', $details['duties'][0]['room']);
+        $this->assertFalse($details['duties'][0]['locked']);
+        $this->assertSame('21 Apr 2026', $details['duties'][1]['date']);
+        $this->assertSame('Room B', $details['duties'][1]['room']);
+        $this->assertTrue($details['duties'][1]['locked']);
+    }
+
+    public function test_duty_fairness_table_reflects_min_max_and_status(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $this->duty($session, $slot, $room, $teacher);
+
+        $component = Livewire::actingAs($staff)->test(DutyBoard::class, ['examSession' => $session]);
+
+        $fairness = $component->viewData('dutyFairness')->firstWhere('teacher.id', $teacher->id);
+        $this->assertSame(1, $fairness->count);
     }
 }

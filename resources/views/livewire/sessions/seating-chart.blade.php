@@ -18,7 +18,17 @@
 <x-finalized-banner :session="$examSession" />
 
 @if ($slots->isEmpty())
-    <x-empty-state icon="grid" title="No seating generated yet" description="Run seat generation from the Generation Constraints page first." />
+    <x-card>
+        <x-empty-state icon="grid" title="No seating generated yet" description="Generate the timetable and make sure Capacity Check is clear first, then generate seating here." />
+        <div class="mt-4 flex justify-center gap-3">
+            <x-btn :href="route('sessions.timetable', $examSession)" wire:navigate variant="secondary" icon="calendar">Timetable</x-btn>
+            <x-btn :href="route('sessions.show', ['examSession' => $examSession, 'tab' => 'capacity'])" wire:navigate variant="secondary" icon="search">Capacity Check</x-btn>
+            <x-btn wire:click="regenerate" wire:loading.attr="disabled" icon="refresh">
+                <span wire:loading.remove wire:target="regenerate">Generate Seating</span>
+                <span wire:loading wire:target="regenerate">Generating&hellip;</span>
+            </x-btn>
+        </div>
+    </x-card>
 @else
     <x-card>
         <div class="flex items-center justify-between gap-4 flex-wrap">

@@ -3,12 +3,15 @@
 namespace App\Livewire\Sessions;
 
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Services\Generation\DutyAllocationService;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -19,6 +22,14 @@ class DutyBoard extends Component
     public ExamSession $examSession;
 
     public ?int $activeSlotId = null;
+
+    /**
+     * The teacher currently open in the duty-list modal, as a plain array
+     * (teacher name and one entry per duty with its day/time/room/lock
+     * state) — null when the modal is closed. Computed fresh on click so
+     * it always reflects the session's current duties.
+     */
+    public ?array $teacherDutyDetails = null;
 
     public function mount(ExamSession $examSession): void
     {
@@ -124,6 +135,14 @@ class DutyBoard extends Component
         }
     }
 
+    /**
+     * Handles both the very first generation (nothing assigned yet,
+     * shown as the empty state's own button) and every later
+     * regeneration (locked duties always left untouched) — one action
+     * either way, mirroring SeatingChart::regenerate(). Duties are the
+     * last stage of the pipeline (timetable -> seating -> duties), so a
+     * successful run marks the session's overall status "generated".
+     */
     public function regenerate(): void
     {
         $this->authorize('generate_roster');
@@ -132,14 +151,105 @@ class DutyBoard extends Component
             return;
         }
 
+        if (! $this->examSession->seatAssignments()->exists()) {
+            session()->flash('error', 'Generate seating first — duties are assigned to the rooms actually in use each slot.');
+
+            return;
+        }
+
         $result = (new DutyAllocationService)->generate($this->examSession);
+
+        if ($this->activeSlotId === null) {
+            $this->activeSlotId = TimeSlot::where('exam_session_id', $this->examSession->id)
+                ->whereHas('dutyAssignments')
+                ->orderBy('date')
+                ->orderBy('start_time')
+                ->value('id');
+        }
+
+        $this->examSession->update(['status' => 'generated']);
+
+        ActivityLog::record($this->examSession, 'duties.generated', $result->warnings->isEmpty()
+            ? 'Generated duties for every slot.'
+            : "Generated duties with {$result->warnings->count()} warning(s).");
 
         session()->flash(
             $result->warnings->isEmpty() ? 'status' : 'error',
             $result->warnings->isEmpty()
-                ? 'Duties regenerated — locked duties were left untouched.'
-                : "Duties regenerated with {$result->warnings->count()} warning(s) — locked duties were left untouched."
+                ? 'Duties generated — locked duties were left untouched.'
+                : "Duties generated with {$result->warnings->count()} warning(s) — locked duties were left untouched."
         );
+    }
+
+    /**
+     * Opens the duty-list modal for a teacher's row in the Duty Fairness
+     * table — every duty this teacher has in this session, in order, so
+     * the admin can see exactly where a low/high count comes from
+     * without leaving the page.
+     */
+    public function showTeacherDuties(int $teacherId): void
+    {
+        $this->authorize('manage_sessions');
+
+        $teacher = Teacher::find($teacherId);
+
+        if (! $teacher) {
+            return;
+        }
+
+        $duties = DutyAssignment::where('duty_assignments.exam_session_id', $this->examSession->id)
+            ->where('duty_assignments.teacher_id', $teacherId)
+            ->with('room')
+            ->join('time_slots', 'time_slots.id', '=', 'duty_assignments.time_slot_id')
+            ->orderBy('time_slots.date')
+            ->orderBy('time_slots.start_time')
+            ->select('duty_assignments.*', 'time_slots.date as slot_date', 'time_slots.start_time as slot_start', 'time_slots.end_time as slot_end')
+            ->get();
+
+        $this->teacherDutyDetails = [
+            'teacherName' => $teacher->name,
+            'duties' => $duties->map(fn ($duty) => [
+                'date' => Carbon::parse($duty->slot_date)->format('d M Y'),
+                'time' => substr($duty->slot_start, 0, 5).' – '.substr($duty->slot_end, 0, 5),
+                'room' => $duty->room->name,
+                'locked' => $duty->is_locked,
+            ])->all(),
+        ];
+
+        $this->dispatch('open-modal', 'teacher-duty-details');
+    }
+
+    /**
+     * A cheap aggregate (no simulation), safe to compute on every render.
+     */
+    private function dutyFairness(): Collection
+    {
+        $counts = DutyAssignment::where('exam_session_id', $this->examSession->id)
+            ->selectRaw('teacher_id, count(*) as c')
+            ->groupBy('teacher_id')
+            ->pluck('c', 'teacher_id');
+
+        $constraints = SessionTeacherConstraint::where('exam_session_id', $this->examSession->id)->get()->keyBy('teacher_id');
+
+        return Teacher::where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(function (Teacher $teacher) use ($counts, $constraints) {
+                $constraint = $constraints->get($teacher->id);
+                $excluded = $constraint?->is_excluded ?? false;
+                $min = $constraint?->effectiveMinDuties() ?? config('exam.default_min_duties');
+                $max = $constraint?->effectiveMaxDuties() ?? config('exam.default_max_duties');
+                $count = $counts->get($teacher->id, 0);
+
+                return (object) [
+                    'teacher' => $teacher,
+                    'count' => $count,
+                    'min' => $min,
+                    'max' => $max,
+                    'excluded' => $excluded,
+                    'met' => $excluded || $count >= $min,
+                ];
+            });
     }
 
     #[Layout('layouts.app')]
@@ -201,6 +311,7 @@ class DutyBoard extends Component
         return view('livewire.sessions.duty-board', [
             'slots' => $slots,
             'rooms' => $rooms,
+            'dutyFairness' => $this->dutyFairness(),
         ]);
     }
 }

@@ -10,7 +10,7 @@ use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
 use App\Livewire\Sessions\TimeSlots;
-use App\Models\ActivityLog;
+use App\Livewire\Sessions\Timetable;
 use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
@@ -150,7 +150,7 @@ class FinalizeSessionTest extends TestCase
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id]);
 
         Livewire::actingAs($staff)
-            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->test(Timetable::class, ['examSession' => $session])
             ->call('generateTimetable');
 
         $this->assertDatabaseCount('subject_slot_assignments', 0);

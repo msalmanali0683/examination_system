@@ -15,7 +15,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 /**
- * Fills in the Missing Teachers card's un-taught subject/section pairs from
+ * Fills in the Missing Teachers list's un-taught subject/section pairs from
  * an uploaded spreadsheet (teacher name, course, section) instead of
  * assigning them one row at a time. Only ever sets teacher_id where it's
  * currently null — it can never overwrite an already-taught enrollment,
@@ -43,7 +43,7 @@ class MissingTeachersImport extends Component
      * When true, only subject/section pairs on this session's ignored
      * list are eligible — the Ignored Missing Teachers page's own import
      * link, so uploading there can't silently resolve a pair still
-     * pending on the main Missing Teachers card (and vice versa). Set
+     * pending on the main Missing Teachers list (and vice versa). Set
      * once from the `ignored=1` query string in mount().
      */
     public bool $scopeIgnored = false;
@@ -418,7 +418,7 @@ class MissingTeachersImport extends Component
             if (! $missingPairs->has(MissingTeacherSections::key($subjectId, strtolower(trim($section))))) {
                 $noSuchPair++;
                 $errors[] = ['row' => $excelRow, 'message' => $this->scopeIgnored
-                    ? "That course/section isn't on this session's ignored list — either it already has a teacher, it's still pending on the main Missing Teachers card, or the section text doesn't match."
+                    ? "That course/section isn't on this session's ignored list — either it already has a teacher, it's still pending on the main Missing Teachers list, or the section text doesn't match."
                     : "No pending (un-taught) enrollment found for that course/section — either it already has a teacher, it's been dismissed via Ignore All, or the section text doesn't match this session's data."];
 
                 continue;

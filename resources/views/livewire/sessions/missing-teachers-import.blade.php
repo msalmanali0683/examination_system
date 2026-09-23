@@ -1,9 +1,9 @@
 <x-slot name="header">
     <x-page-header
         :title="$scopeIgnored ? 'Import Ignored Missing Teachers' : 'Import Missing Teachers'"
-        :subtitle="$scopeIgnored ? 'Upload a spreadsheet to fill in pairs dismissed on the Missing Teachers card.' : 'Upload a spreadsheet of teacher/course/section rows to fill in un-taught pairs.'"
+        :subtitle="$scopeIgnored ? 'Upload a spreadsheet to fill in pairs dismissed on the Missing Teachers list.' : 'Upload a spreadsheet of teacher/course/section rows to fill in un-taught pairs.'"
         icon="upload"
-        :back="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.generate', $examSession)"
+        :back="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.missing-teachers', $examSession)"
     />
 </x-slot>
 
@@ -220,8 +220,8 @@
                 {{ $pairsResolved }} subject/section pair(s) resolved, covering {{ $enrollmentsUpdated }} enrollment(s).
             </p>
             <div class="mt-6 flex items-center justify-center gap-3">
-                <x-btn :href="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.generate', $examSession)" wire:navigate icon="check">
-                    {{ $scopeIgnored ? 'Back to Ignored List' : 'Back to Generate' }}
+                <x-btn :href="route($scopeIgnored ? 'sessions.missing-teachers.ignored' : 'sessions.missing-teachers', $examSession)" wire:navigate icon="check">
+                    {{ $scopeIgnored ? 'Back to Ignored List' : 'Back to Missing Teachers' }}
                 </x-btn>
                 <x-btn variant="ghost" wire:click="startOver">Import Another File</x-btn>
             </div>

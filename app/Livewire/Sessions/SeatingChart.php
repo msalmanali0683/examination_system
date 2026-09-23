@@ -3,10 +3,12 @@
 namespace App\Livewire\Sessions;
 
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
 use App\Models\TimeSlot;
+use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -119,6 +121,15 @@ class SeatingChart extends Component
         }
     }
 
+    /**
+     * Handles both the very first generation (nothing seated yet, shown
+     * as the empty state's own button) and every later regeneration
+     * (locked seats always left untouched) — one action either way,
+     * since SeatAllocationService::generate() is already safe to call
+     * repeatedly. The pre-flight checks (timetable exists, capacity is
+     * met) only matter the first time; once seats exist those questions
+     * are already answered by the fact seating succeeded before.
+     */
     public function regenerate(): void
     {
         $this->authorize('generate_roster');
@@ -127,13 +138,39 @@ class SeatingChart extends Component
             return;
         }
 
+        $hasSlots = $this->examSession->subjectSlotAssignments()->whereNotNull('time_slot_id')->exists();
+
+        if (! $hasSlots) {
+            session()->flash('error', 'Generate the timetable first — seating needs subjects assigned to slots.');
+
+            return;
+        }
+
+        if (! (new RequirementCalculator)->isFullyMet($this->examSession)) {
+            session()->flash('error', 'Not enough active rooms for one or more slots, or an unresolved clash remains — see the Capacity Check page before generating.');
+
+            return;
+        }
+
         $result = (new SeatAllocationService)->generate($this->examSession);
+
+        if ($this->activeSlotId === null) {
+            $this->activeSlotId = TimeSlot::where('exam_session_id', $this->examSession->id)
+                ->whereHas('seatAssignments')
+                ->orderBy('date')
+                ->orderBy('start_time')
+                ->value('id');
+        }
+
+        ActivityLog::record($this->examSession, 'seating.generated', $result->warnings->isEmpty()
+            ? 'Generated seating for every slot.'
+            : "Generated seating with {$result->warnings->count()} warning(s).");
 
         session()->flash(
             $result->warnings->isEmpty() ? 'status' : 'error',
             $result->warnings->isEmpty()
-                ? 'Seating regenerated — locked seats were left untouched.'
-                : "Seating regenerated with {$result->warnings->count()} warning(s) — locked seats were left untouched."
+                ? 'Seating generated — locked seats were left untouched.'
+                : "Seating generated with {$result->warnings->count()} warning(s) — locked seats were left untouched."
         );
     }
 

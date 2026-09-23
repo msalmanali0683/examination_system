@@ -10,11 +10,13 @@ use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\IgnoredMissingTeachers;
 use App\Livewire\Sessions\Index as SessionsIndex;
+use App\Livewire\Sessions\MissingTeachers;
 use App\Livewire\Sessions\MissingTeachersImport;
 use App\Livewire\Sessions\ReportShow;
 use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\SectionTeachers;
 use App\Livewire\Sessions\Show as SessionsShow;
+use App\Livewire\Sessions\Timetable;
 use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Subjects\Index as SubjectsIndex;
 use App\Livewire\Teachers\Import as TeachersImport;
@@ -76,6 +78,14 @@ Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
 Route::get('sessions/{examSession}/generate', GenerationConstraints::class)
     ->middleware(['auth'])
     ->name('sessions.generate');
+
+Route::get('sessions/{examSession}/timetable', Timetable::class)
+    ->middleware(['auth'])
+    ->name('sessions.timetable');
+
+Route::get('sessions/{examSession}/missing-teachers', MissingTeachers::class)
+    ->middleware(['auth'])
+    ->name('sessions.missing-teachers');
 
 Route::get('sessions/{examSession}/missing-teachers/import', MissingTeachersImport::class)
     ->middleware(['auth'])

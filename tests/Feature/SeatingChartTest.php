@@ -10,6 +10,8 @@ use App\Models\SeatAssignment;
 use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\SubjectSlotAssignment;
+use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -180,5 +182,104 @@ class SeatingChartTest extends TestCase
             ->test(SeatingChart::class, ['examSession' => $session])
             ->call('moveSeat', $seat->enrollment_id, $room->id, 2, 2)
             ->assertForbidden();
+    }
+
+    public function test_generate_seating_is_blocked_when_capacity_requirement_is_not_met(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
+        // No active rooms in session at all — guarantees a shortfall.
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(SeatingChart::class, ['examSession' => $session])
+            ->call('regenerate');
+
+        $this->assertDatabaseCount('seat_assignments', 0);
+    }
+
+    /**
+     * A teacher shortfall alone must never block generating seating —
+     * only rooms/seats matter at that stage. Duty assignment (which does
+     * need teachers) runs afterwards and already copes with a shortfall
+     * via warnings instead of refusing to run.
+     */
+    public function test_generate_seating_proceeds_despite_a_teacher_shortfall(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+        ]);
+
+        // Only one teacher exists at all, but the slot needs
+        // invigilators_per_room (2) — a genuine, unfixable-here shortfall.
+        Teacher::factory()->create(['is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(SeatingChart::class, ['examSession' => $session])
+            ->call('regenerate');
+
+        $this->assertDatabaseCount('seat_assignments', 1);
+    }
+
+    /**
+     * A same-day (not same-slot) alert means two papers from the same
+     * semester share a calendar day — seating runs per-slot, so it has no
+     * effect on whether this slot can be seated. It must never block
+     * generation, same as a teacher shortfall above.
+     */
+    public function test_generate_seating_proceeds_despite_a_same_day_alert(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+        ]);
+        SubjectSlotAssignment::create([
+            'exam_session_id' => $session->id,
+            'subject_id' => $subject->id,
+            'time_slot_id' => $slot->id,
+            'conflict_note' => 'CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.',
+        ]);
+
+        Teacher::factory()->count(3)->create(['is_active' => true]);
+
+        Livewire::actingAs($staff)
+            ->test(SeatingChart::class, ['examSession' => $session])
+            ->call('regenerate');
+
+        $this->assertDatabaseCount('seat_assignments', 1);
     }
 }

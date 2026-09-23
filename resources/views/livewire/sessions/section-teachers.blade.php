@@ -15,6 +15,8 @@
     </div>
 @endif
 
+<x-finalized-banner :session="$examSession" />
+
 <x-card :padded="false">
     <div class="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700">
         <div class="relative w-full max-w-xs">

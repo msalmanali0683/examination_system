@@ -71,7 +71,7 @@ class IgnoredMissingTeachers extends Component
     }
 
     /**
-     * Moves just this one pair back to the main Missing Teachers card,
+     * Moves just this one pair back to the main Missing Teachers list,
      * without restoring every other ignored pair too — the individual
      * counterpart to GenerationConstraints::unignoreMissingTeachers().
      */
@@ -81,11 +81,11 @@ class IgnoredMissingTeachers extends Component
 
         $this->dropFromIgnored($subjectId, $section);
 
-        session()->flash('status', "{$section} moved back to the Missing Teachers card.");
+        session()->flash('status', "{$section} moved back to the Missing Teachers list.");
     }
 
     /**
-     * Restores every ignored pair back to the main Missing Teachers card
+     * Restores every ignored pair back to the main Missing Teachers list
      * at once — same effect as GenerationConstraints::unignoreMissingTeachers(),
      * exposed here too since this page is where the ignored list is
      * actually being reviewed.
@@ -96,7 +96,7 @@ class IgnoredMissingTeachers extends Component
 
         $this->examSession->update(['ignored_missing_teacher_sections' => []]);
 
-        session()->flash('status', 'All ignored pairs moved back to the Missing Teachers card.');
+        session()->flash('status', 'All ignored pairs moved back to the Missing Teachers list.');
     }
 
     private function dropFromIgnored(int $subjectId, string $section): void
