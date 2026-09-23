@@ -58,14 +58,29 @@
         <x-per-page-selector />
     </div>
 
+    @if (count($selected) > 0)
+        <div class="flex items-center gap-3 mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+            <span class="text-sm text-red-700 dark:text-red-300">{{ count($selected) }} selected</span>
+            <x-btn wire:click="bulkDelete" wire:confirm="Delete {{ count($selected) }} student(s)? This also removes every enrollment (and any seat assigned to them) for every session they're in, unless one of those sessions is finalized. This cannot be undone." variant="danger" size="sm" icon="trash">Delete Selected</x-btn>
+            <button type="button" wire:click="clearSelection" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
+        </div>
+    @endif
+
     @if ($students->isEmpty())
         <x-empty-state icon="user-group" title="No students yet" description="Students are created automatically the first time you import enrollments, or add one manually." />
     @else
+        @php
+            $pageIds = $students->pluck('id')->all();
+            $allOnPageSelected = ! empty($pageIds) && empty(array_diff($pageIds, $selected));
+        @endphp
         <div class="overflow-x-auto -mx-4 sm:-mx-6">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead>
                     <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        <th class="py-2.5 pl-4 sm:pl-6 pr-4">Roll No</th>
+                        <th class="py-2.5 pl-4 sm:pl-6 pr-2 w-8">
+                            <input type="checkbox" wire:click="toggleSelectAllOnPage({{ Illuminate\Support\Js::from($pageIds) }})" @checked($allOnPageSelected) title="Select all on this page" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        </th>
+                        <th class="py-2.5 pr-4">Roll No</th>
                         <th class="py-2.5 pr-4">Name</th>
                         <th class="py-2.5 pr-4">Program</th>
                         <th class="py-2.5 pr-4">Admission Year</th>
@@ -75,7 +90,10 @@
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                     @foreach ($students as $student)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
-                            <td class="py-3 pl-4 sm:pl-6 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $student->roll_no }}</td>
+                            <td class="py-3 pl-4 sm:pl-6 pr-2">
+                                <input type="checkbox" wire:model.live="selected" value="{{ $student->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            </td>
+                            <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $student->roll_no }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $student->name }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $student->program }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $student->admission_year }}</td>

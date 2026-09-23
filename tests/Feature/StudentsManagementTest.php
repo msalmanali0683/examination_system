@@ -118,6 +118,62 @@ class StudentsManagementTest extends TestCase
         $this->assertDatabaseMissing('students', ['id' => $student->id]);
     }
 
+    public function test_bulk_delete_removes_every_selected_student_and_leaves_others(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $toDelete = Student::factory()->count(2)->create();
+        $toKeep = Student::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->set('selected', $toDelete->pluck('id')->all())
+            ->call('bulkDelete');
+
+        foreach ($toDelete as $student) {
+            $this->assertDatabaseMissing('students', ['id' => $student->id]);
+        }
+        $this->assertDatabaseHas('students', ['id' => $toKeep->id]);
+    }
+
+    public function test_bulk_delete_skips_students_with_finalized_enrollments_but_deletes_the_rest(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $safeStudent = Student::factory()->create();
+        $protectedStudent = Student::factory()->create();
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        $subject = Subject::factory()->create();
+
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $protectedStudent->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->set('selected', [$safeStudent->id, $protectedStudent->id])
+            ->call('bulkDelete')
+            ->assertSee('skipped');
+
+        $this->assertDatabaseMissing('students', ['id' => $safeStudent->id]);
+        $this->assertDatabaseHas('students', ['id' => $protectedStudent->id]);
+    }
+
+    public function test_select_all_on_page_toggles_every_visible_student_and_back_off(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $students = Student::factory()->count(3)->create();
+        $ids = $students->pluck('id')->all();
+
+        $component = Livewire::actingAs($staff)->test(Index::class);
+
+        $component->call('toggleSelectAllOnPage', $ids);
+        $this->assertEqualsCanonicalizing($ids, $component->get('selected'));
+
+        $component->call('toggleSelectAllOnPage', $ids);
+        $this->assertSame([], $component->get('selected'));
+    }
+
     public function test_user_without_manage_enrollments_permission_is_forbidden(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
