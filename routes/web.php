@@ -8,6 +8,7 @@ use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\Index as SessionsIndex;
+use App\Livewire\Sessions\ReportShow;
 use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\Show as SessionsShow;
 use App\Livewire\Students\Index as StudentsIndex;
@@ -15,6 +16,7 @@ use App\Livewire\Subjects\Index as SubjectsIndex;
 use App\Livewire\Teachers\Import as TeachersImport;
 use App\Livewire\Teachers\Index as TeachersIndex;
 use App\Livewire\Users\Index as UsersIndex;
+use App\Services\Reports\ReportCatalog;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -89,10 +91,20 @@ Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('ses
     Route::get('simple-datesheet.pdf', [ReportDownloadController::class, 'simpleDatesheetPdf'])->name('simple-datesheet.pdf');
     Route::get('duty-roster.xlsx', [ReportDownloadController::class, 'dutySheetExcel'])->name('duty-roster.xlsx');
     Route::get('duty-roster.pdf', [ReportDownloadController::class, 'dutySheetPdf'])->name('duty-roster.pdf');
+    Route::get('teacher-attendance.xlsx', [ReportDownloadController::class, 'teacherAttendanceExcel'])->name('teacher-attendance.xlsx');
+    Route::get('teacher-attendance.pdf', [ReportDownloadController::class, 'teacherAttendancePdf'])->name('teacher-attendance.pdf');
     Route::get('subject-wise-seating.xlsx', [ReportDownloadController::class, 'subjectWiseSeatingExcel'])->name('subject-wise-seating.xlsx');
     Route::get('subject-wise-seating.pdf', [ReportDownloadController::class, 'subjectWiseSeatingPdf'])->name('subject-wise-seating.pdf');
     Route::get('batch-schedule.xlsx', [ReportDownloadController::class, 'batchScheduleExcel'])->name('batch-schedule.xlsx');
     Route::get('batch-schedule.pdf', [ReportDownloadController::class, 'batchSchedulePdf'])->name('batch-schedule.pdf');
 });
+
+// Registered after the literal .xlsx/.pdf download routes above so those
+// still match first — this wildcard only catches a plain report-type
+// slug with no extension, e.g. /reports/teacher-attendance.
+Route::get('sessions/{examSession}/reports/{reportType}', ReportShow::class)
+    ->middleware(['auth'])
+    ->whereIn('reportType', array_keys(ReportCatalog::TYPES))
+    ->name('sessions.reports.show');
 
 require __DIR__.'/auth.php';

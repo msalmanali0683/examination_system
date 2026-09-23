@@ -9,6 +9,7 @@ use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
 use App\Exports\SimpleDatesheetExport;
 use App\Exports\SubjectWiseSeatingExport;
+use App\Exports\TeacherAttendanceExport;
 use App\Models\ExamSession;
 use App\Models\ReportFile;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -157,6 +158,34 @@ class ReportFileGenerator
 
                 Pdf::loadView('reports.batch-schedule-pdf', ['sections' => $sections, 'session' => $session, 'showInvigilators' => $showInvigilators])
                     ->setPaper('a4', 'portrait')
+                    ->save($path, self::DISK);
+            }
+        );
+    }
+
+    /**
+     * showInvigilators is unused here — the sheet always lists every
+     * teacher on duty, it doesn't have anything to hide — but is still
+     * accepted and folded into the cache key filters, matching every
+     * other report, so the shared "Print invigilator names" checkbox
+     * produces the same filters shape the enqueue()/regenerate() calls
+     * expect.
+     */
+    public function teacherAttendanceExcel(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'teacher-attendance.xlsx', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            fn ($path) => Excel::store(new TeacherAttendanceExport($session, $date, $timeSlotIds), $path, self::DISK)
+        );
+    }
+
+    public function teacherAttendancePdf(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'teacher-attendance.pdf', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            function ($path) use ($session, $date, $timeSlotIds) {
+                $rowsByDate = (new ReportDataBuilder)->teacherAttendanceRows($session, $date, $timeSlotIds);
+
+                Pdf::loadView('reports.teacher-attendance-pdf', ['rowsByDate' => $rowsByDate, 'session' => $session])
+                    ->setPaper('a4', 'landscape')
                     ->save($path, self::DISK);
             }
         );

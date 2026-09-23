@@ -15,7 +15,7 @@
     </x-page-header>
 </x-slot>
 
-<div x-data="{ tab: 'rooms' }" class="space-y-6">
+<div x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'rooms' }" class="space-y-6">
 
     @if (session('status'))
         <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">

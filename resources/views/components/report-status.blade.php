@@ -1,4 +1,4 @@
-@props(['type', 'status'])
+@props(['status'])
 
 <div class="flex items-center gap-2 mt-2 flex-wrap">
     @if ($status['state'] === 'in_progress')
@@ -11,7 +11,7 @@
         </span>
     @elseif ($status['state'] === 'failed')
         <span class="text-xs text-red-500 dark:text-red-400" title="{{ $status['error'] }}">Generation failed.</span>
-        <button type="button" wire:click="regenerate('{{ $type }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $type }}')" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50">
+        <button type="button" wire:click="regenerate" wire:loading.attr="disabled" wire:target="regenerate" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50">
             Retry
         </button>
     @else
@@ -20,9 +20,9 @@
         @else
             <span class="text-xs text-gray-400 italic">Not generated yet &mdash; first download will build it</span>
         @endif
-        <button type="button" wire:click="regenerate('{{ $type }}')" wire:loading.attr="disabled" wire:target="regenerate('{{ $type }}')" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50">
-            <span wire:loading.remove wire:target="regenerate('{{ $type }}')">Regenerate</span>
-            <span wire:loading wire:target="regenerate('{{ $type }}')">Regenerating&hellip;</span>
+        <button type="button" wire:click="regenerate" wire:loading.attr="disabled" wire:target="regenerate" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50">
+            <span wire:loading.remove wire:target="regenerate">Regenerate</span>
+            <span wire:loading wire:target="regenerate">Regenerating&hellip;</span>
         </button>
     @endif
 </div>

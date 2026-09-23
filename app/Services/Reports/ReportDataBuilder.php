@@ -321,6 +321,33 @@ class ReportDataBuilder
     }
 
     /**
+     * One row per duty assignment (teacher, time, room), grouped by date
+     * — a print/sign-in sheet matching the department's own "Attendance
+     * Sheet" template (one table per day, Teacher Name / Time / Room # /
+     * a blank Signature column). A teacher with more than one duty the
+     * same day appears once per duty, same as the real sign-in sheets.
+     *
+     * @param  int[]|null  $timeSlotIds
+     */
+    public function teacherAttendanceRows(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): Collection
+    {
+        $query = DutyAssignment::where('exam_session_id', $session->id)->with(['teacher', 'timeSlot', 'room']);
+
+        $this->applySlotFilter($query, $date, $timeSlotIds);
+
+        return $query->get()
+            ->map(fn (DutyAssignment $duty) => (object) [
+                'teacherName' => $duty->teacher->name,
+                'date' => $duty->timeSlot->date,
+                'startTime' => $duty->timeSlot->start_time,
+                'endTime' => $duty->timeSlot->end_time,
+                'room' => $duty->room->name,
+            ])
+            ->sortBy(fn ($row) => $row->date->format('Y-m-d').$row->startTime.$row->room)
+            ->groupBy(fn ($row) => $row->date->format('Y-m-d'));
+    }
+
+    /**
      * @param  int[]|null  $timeSlotIds
      */
     private function dutyNamesByRoomSlot(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): Collection

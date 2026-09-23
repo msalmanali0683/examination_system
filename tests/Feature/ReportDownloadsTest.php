@@ -7,9 +7,10 @@ use App\Exports\FormattedDatesheetExport;
 use App\Exports\MasterDatesheetExport;
 use App\Exports\SeatingChartExport;
 use App\Exports\SimpleDatesheetExport;
+use App\Exports\TeacherAttendanceExport;
 use App\Jobs\GenerateReportFile;
 use App\Livewire\Sessions\Index;
-use App\Livewire\Sessions\ReportDownloads;
+use App\Livewire\Sessions\ReportShow;
 use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
@@ -151,6 +152,118 @@ class ReportDownloadsTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
+    public function test_teacher_attendance_excel_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.teacher-attendance.xlsx', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+    }
+
+    public function test_teacher_attendance_pdf_downloads(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = $this->seedSession();
+
+        $response = $this->actingAs($staff)->get(route('sessions.reports.teacher-attendance.pdf', $session));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', $response->headers->get('content-type'));
+    }
+
+    /**
+     * A teacher invigilating twice the same day (two different rooms, two
+     * different slots) must appear as two separate sign-in rows — matching
+     * the real department template, where the same name legitimately
+     * repeats once per duty rather than being deduplicated.
+     */
+    public function test_teacher_attendance_lists_one_row_per_duty_even_for_the_same_teacher_same_day(): void
+    {
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
+
+        $roomA = Room::factory()->create(['name' => 'ITC-501']);
+        $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slotA->id, 'room_id' => $roomA->id]);
+
+        $roomB = Room::factory()->create(['name' => 'ITC-502']);
+        $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30', 'end_time' => '13:30']);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slotB->id, 'room_id' => $roomB->id]);
+
+        $rowsByDate = (new ReportDataBuilder)->teacherAttendanceRows($session);
+
+        $this->assertCount(1, $rowsByDate);
+        $rows = $rowsByDate->get('2026-04-20');
+        $this->assertCount(2, $rows);
+        $this->assertSame(['Mr Zoraiz', 'Mr Zoraiz'], $rows->pluck('teacherName')->all());
+        $this->assertEqualsCanonicalizing(['ITC-501', 'ITC-502'], $rows->pluck('room')->all());
+        // Sorted by start time, matching the sign-in sheet's natural order.
+        $this->assertSame('ITC-501', $rows->first()->room);
+    }
+
+    /**
+     * The rendered sheet must match the department's own template columns
+     * (Teacher Name / Time / Room # / Signature) and the "Attendance
+     * Sheet <exam name> / <Day> (<date>)" title banner, with the
+     * signature column left blank for physical signing.
+     */
+    public function test_teacher_attendance_sheet_matches_the_template_columns_and_title(): void
+    {
+        $session = ExamSession::factory()->create(['name' => 'Mid Term Examination BSAI (Spring 2026)']);
+        $teacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Ms Ayesha']);
+        $room = Room::factory()->create(['name' => 'ITC-501']);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
+
+        $sheets = (new TeacherAttendanceExport($session))->sheets();
+        $this->assertCount(1, $sheets);
+
+        $html = $sheets[0]->view()->render();
+
+        $this->assertStringContainsString('Attendance Sheet Mid Term Examination BSAI (Spring 2026)', $html);
+        $this->assertStringContainsString('Monday (20-04-2026)', $html);
+        $this->assertStringContainsString('Teacher Name', $html);
+        $this->assertStringContainsString('Time', $html);
+        $this->assertStringContainsString('Room #', $html);
+        $this->assertStringContainsString('Signature', $html);
+        $this->assertStringContainsString('Ms Ayesha', $html);
+        $this->assertStringContainsString('09:00', $html);
+        $this->assertStringContainsString('ITC-501', $html);
+    }
+
+    /**
+     * A whole-exam download (no date filter) produces one Excel sheet per
+     * exam day, not one giant mixed table — each day still needs to be
+     * printed and signed separately.
+     */
+    public function test_teacher_attendance_excel_has_one_sheet_per_exam_day_for_a_whole_exam_download(): void
+    {
+        [$session] = $this->seedTwoDateSession();
+        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $room = Room::factory()->create();
+        DutyAssignment::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'time_slot_id' => TimeSlot::where('exam_session_id', $session->id)->orderBy('date')->first()->id,
+            'room_id' => $room->id,
+        ]);
+        DutyAssignment::create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $teacher->id,
+            'time_slot_id' => TimeSlot::where('exam_session_id', $session->id)->orderByDesc('date')->first()->id,
+            'room_id' => $room->id,
+        ]);
+
+        $sheets = (new TeacherAttendanceExport($session))->sheets();
+
+        $this->assertCount(2, $sheets);
+        $titles = collect($sheets)->map->title()->all();
+        $this->assertEqualsCanonicalizing(['Monday 04-May', 'Tuesday 05-May'], $titles);
     }
 
     public function test_subject_wise_seating_excel_downloads(): void
@@ -492,7 +605,7 @@ class ReportDownloadsTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         [$session, $slots] = $this->seedThreeSlotsOneDaySession();
 
-        $component = Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session]);
+        $component = Livewire::actingAs($staff)->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet']);
         $component->set('filterDate', '2026-05-04')
             ->set('filterSlotIds', [$slots[0]->id, $slots[1]->id]);
 
@@ -507,7 +620,7 @@ class ReportDownloadsTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         [$session, $slots] = $this->seedThreeSlotsOneDaySession();
 
-        $component = Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session]);
+        $component = Livewire::actingAs($staff)->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet']);
         $component->set('filterDate', '2026-05-04')
             ->set('filterSlotIds', [$slots[0]->id]);
 
@@ -622,8 +735,8 @@ class ReportDownloadsTest extends TestCase
         $this->travel(1)->minutes();
 
         Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
-            ->call('regenerate', 'datesheet');
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet'])
+            ->call('regenerate');
 
         $this->assertDatabaseCount('report_files', 2);
         $after = ReportFile::pluck('generated_at', 'report_key');
@@ -647,7 +760,7 @@ class ReportDownloadsTest extends TestCase
 
         $response = $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
 
-        $response->assertRedirect(route('sessions.show', $session));
+        $response->assertRedirect(route('sessions.show', ['examSession' => $session, 'tab' => 'reports']));
         $response->assertSessionHas('status');
 
         Queue::assertPushed(GenerateReportFile::class, 1);
@@ -715,7 +828,7 @@ class ReportDownloadsTest extends TestCase
         $this->actingAs($staff)->get(route('sessions.reports.datesheet.pdf', $session));
 
         Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet'])
             ->assertSee('Generating');
     }
 
@@ -732,7 +845,7 @@ class ReportDownloadsTest extends TestCase
         }
 
         Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet'])
             ->assertSee('Generation failed')
             ->assertSee('Retry');
     }
@@ -778,8 +891,8 @@ class ReportDownloadsTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = $this->seedSession();
 
-        Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session])->call('regenerate', 'datesheet');
-        Livewire::actingAs($staff)->test(ReportDownloads::class, ['examSession' => $session])->call('regenerate', 'datesheet');
+        Livewire::actingAs($staff)->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet'])->call('regenerate');
+        Livewire::actingAs($staff)->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'datesheet'])->call('regenerate');
 
         // datesheet.xlsx + datesheet.pdf from the first call only — the
         // second call sees both still queued/processing and skips them.

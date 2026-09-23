@@ -132,6 +132,31 @@ class ReportDownloadController extends Controller
             $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Subject-wise-Seating', 'pdf');
     }
 
+    /**
+     * A day's sign-in sheet for teachers on duty — Teacher Name, Time,
+     * Room # and a blank Signature column, matching the department's own
+     * "Attendance Sheet" template. Every date in range gets its own Excel
+     * sheet / PDF page, so a whole-exam download still prints one day at
+     * a time.
+     */
+    public function teacherAttendanceExcel(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'teacher-attendance.xlsx', 'teacherAttendanceExcel', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Teacher-Attendance', 'xlsx');
+    }
+
+    public function teacherAttendancePdf(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'teacher-attendance.pdf', 'teacherAttendancePdf', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Teacher-Attendance', 'pdf');
+    }
+
     public function batchScheduleExcel(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
     {
         Gate::authorize('view_reports');
@@ -177,7 +202,7 @@ class ReportDownloadController extends Controller
         }
 
         if (! $file) {
-            return redirect()->route('sessions.show', $examSession)
+            return redirect()->route('sessions.show', ['examSession' => $examSession, 'tab' => 'reports'])
                 ->with('status', "Generating the {$report} report in the background \u{2014} this can take a minute or two for a large session. This page will update automatically.");
         }
 

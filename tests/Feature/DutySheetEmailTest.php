@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Sessions\ReportDownloads;
+use App\Livewire\Sessions\ReportShow;
 use App\Mail\TeacherDutySheetMail;
 use App\Models\DutyAssignment;
 use App\Models\ExamSession;
@@ -35,7 +35,7 @@ class DutySheetEmailTest extends TestCase
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $withoutEmail->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
 
         Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'duty-roster'])
             ->call('emailAllDutySheets');
 
         Mail::assertSentCount(1);
@@ -55,7 +55,7 @@ class DutySheetEmailTest extends TestCase
         $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'duty-roster'])
             ->call('emailAllDutySheets')
             ->assertSet('examSession.id', $session->id);
 
@@ -70,9 +70,11 @@ class DutySheetEmailTest extends TestCase
         $staff->permissionOverrides()->create(['permission' => 'view_reports', 'granted' => false]);
         $session = ExamSession::factory()->create();
 
-        Livewire::actingAs($staff)
-            ->test(ReportDownloads::class, ['examSession' => $session])
-            ->call('emailAllDutySheets')
+        // The whole report page (not just this one action) requires
+        // view_reports — see ReportShow::mount() — so the denial shows
+        // up as soon as the page itself is requested.
+        $this->actingAs($staff)
+            ->get(route('sessions.reports.show', [$session, 'duty-roster']))
             ->assertForbidden();
 
         Mail::assertNothingSent();
