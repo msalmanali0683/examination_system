@@ -55,7 +55,14 @@
             <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search roll no or name"
                 class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
         </div>
-        <x-per-page-selector />
+        <div class="flex items-center gap-3">
+            @if ($students->total() > 0)
+                <x-btn wire:click="deleteAllStudents" wire:confirm="Delete ALL {{ $students->total() }} student(s){{ $search ? ' matching \''.$search.'\'' : '' }}? This also removes every enrollment (and any seat assigned to them) for every session they're in, unless one of those sessions is finalized. This cannot be undone." variant="danger" size="sm" icon="trash">
+                    Delete All{{ $search ? ' Matching' : '' }}
+                </x-btn>
+            @endif
+            <x-per-page-selector />
+        </div>
     </div>
 
     @if (count($selected) > 0)

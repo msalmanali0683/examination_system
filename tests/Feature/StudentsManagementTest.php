@@ -159,6 +159,67 @@ class StudentsManagementTest extends TestCase
         $this->assertDatabaseHas('students', ['id' => $protectedStudent->id]);
     }
 
+    public function test_delete_all_removes_every_student_and_skips_none_with_no_finalized_enrollments(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        Student::factory()->count(3)->create();
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteAllStudents')
+            ->assertSee('3 student(s) deleted');
+
+        $this->assertDatabaseCount('students', 0);
+    }
+
+    public function test_delete_all_only_matches_the_current_search_filter(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $matching = Student::factory()->create(['roll_no' => '70111111', 'name' => 'Ali Raza']);
+        $other = Student::factory()->create(['roll_no' => '70222222', 'name' => 'Bilal Ahmed']);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->set('search', 'Raza')
+            ->call('deleteAllStudents');
+
+        $this->assertDatabaseMissing('students', ['id' => $matching->id]);
+        $this->assertDatabaseHas('students', ['id' => $other->id]);
+    }
+
+    public function test_delete_all_skips_students_with_finalized_enrollments_but_deletes_the_rest(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $safeStudent = Student::factory()->create();
+        $protectedStudent = Student::factory()->create();
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        $subject = Subject::factory()->create();
+
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $protectedStudent->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteAllStudents')
+            ->assertSee('skipped');
+
+        $this->assertDatabaseMissing('students', ['id' => $safeStudent->id]);
+        $this->assertDatabaseHas('students', ['id' => $protectedStudent->id]);
+    }
+
+    public function test_delete_all_with_no_students_shows_a_friendly_message(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+
+        Livewire::actingAs($staff)
+            ->test(Index::class)
+            ->call('deleteAllStudents')
+            ->assertSee('No students to delete');
+    }
+
     public function test_select_all_on_page_toggles_every_visible_student_and_back_off(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

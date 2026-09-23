@@ -125,6 +125,20 @@ class Index extends Component
     }
 
     /**
+     * Every student matching the current search (or literally every
+     * student when the search box is empty) — shared by render() and
+     * deleteAllStudents() so "Delete All" always matches exactly what's
+     * on screen, not the unfiltered whole table.
+     */
+    private function studentsQuery()
+    {
+        return Student::when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
+            ->where('roll_no', 'like', "%{$this->search}%")
+            ->orWhere('name', 'like', "%{$this->search}%")
+        ));
+    }
+
+    /**
      * Selects or deselects every student currently visible on this page
      * (not the whole search result set) — $ids comes straight from the
      * paginated rows the view is already showing.
@@ -171,6 +185,39 @@ class Index extends Component
             .($blocked->isEmpty() ? '' : " {$blocked->count()} skipped — they have enrollments in a finalized session."));
     }
 
+    /**
+     * Deletes every student matching the current search filter (the
+     * whole result set, not just the current page) — same finalized-
+     * enrollment guard as bulkDelete(), just computed as one batched
+     * query instead of a per-student check since this can run over the
+     * entire roster rather than a handful of selected rows.
+     */
+    public function deleteAllStudents(): void
+    {
+        $this->authorize('manage_enrollments');
+
+        $ids = $this->studentsQuery()->pluck('id');
+
+        if ($ids->isEmpty()) {
+            session()->flash('error', 'No students to delete.');
+
+            return;
+        }
+
+        $blockedIds = Enrollment::whereIn('student_id', $ids)
+            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
+            ->distinct()
+            ->pluck('student_id');
+
+        $count = Student::destroy($ids->diff($blockedIds));
+
+        $this->selected = [];
+        $this->resetPage();
+
+        session()->flash($blockedIds->isEmpty() ? 'status' : 'error', "{$count} student(s) deleted."
+            .($blockedIds->isEmpty() ? '' : " {$blockedIds->count()} skipped — they have enrollments in a finalized session."));
+    }
+
     public function cancel(): void
     {
         $this->resetForm();
@@ -186,12 +233,7 @@ class Index extends Component
     public function render()
     {
         return view('livewire.students.index', [
-            'students' => Student::when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
-                ->where('roll_no', 'like', "%{$this->search}%")
-                ->orWhere('name', 'like', "%{$this->search}%")
-            ))
-                ->orderBy('roll_no')
-                ->paginate($this->perPage),
+            'students' => $this->studentsQuery()->orderBy('roll_no')->paginate($this->perPage),
         ]);
     }
 }
