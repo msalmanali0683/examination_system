@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Exports\AnswerSheetsExport;
 use App\Exports\BatchScheduleExport;
 use App\Exports\DutySheetExport;
 use App\Exports\FormattedDatesheetExport;
@@ -16,7 +17,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 
 /**
- * The single place that knows how to build each of the 11 report
+ * The single place that knows how to build each of the 13 report
  * downloads — shared by ReportDownloadController (serve the cached file,
  * building it first if this is the first request for it) and
  * Livewire\Sessions\ReportDownloads::regenerate() (force a fresh build),
@@ -186,6 +187,32 @@ class ReportFileGenerator
 
                 Pdf::loadView('reports.teacher-attendance-pdf', ['rowsByDate' => $rowsByDate, 'session' => $session])
                     ->setPaper('a4', 'landscape')
+                    ->save($path, self::DISK);
+            }
+        );
+    }
+
+    /**
+     * showInvigilators is unused here — answer sheets have nothing to do
+     * with invigilators — but is still accepted and folded into the cache
+     * key filters, matching every other report, so the shared
+     * enqueue()/regenerate() calls get the filters shape they expect.
+     */
+    public function answerSheetsExcel(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'answer-sheets.xlsx', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            fn ($path) => Excel::store(new AnswerSheetsExport($session, $date, $timeSlotIds), $path, self::DISK)
+        );
+    }
+
+    public function answerSheetsPdf(ExamSession $session, ?string $date, ?array $timeSlotIds, bool $showInvigilators, bool $force = false): ReportFile
+    {
+        return $this->run($session, 'answer-sheets.pdf', $this->normalizeFilters($date, $timeSlotIds, ['showInvigilators' => $showInvigilators]), $force,
+            function ($path) use ($session, $date, $timeSlotIds) {
+                $report = (new ReportDataBuilder)->answerSheetRows($session, $date, $timeSlotIds);
+
+                Pdf::loadView('reports.answer-sheets-pdf', ['report' => $report, 'session' => $session])
+                    ->setPaper('a4', 'portrait')
                     ->save($path, self::DISK);
             }
         );

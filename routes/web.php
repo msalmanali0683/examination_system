@@ -125,6 +125,8 @@ Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('ses
     Route::get('formatted-datesheet.xlsx', [ReportDownloadController::class, 'formattedDatesheetExcel'])->name('formatted-datesheet.xlsx');
     Route::get('simple-datesheet.xlsx', [ReportDownloadController::class, 'simpleDatesheetExcel'])->name('simple-datesheet.xlsx');
     Route::get('simple-datesheet.pdf', [ReportDownloadController::class, 'simpleDatesheetPdf'])->name('simple-datesheet.pdf');
+    Route::get('answer-sheets.xlsx', [ReportDownloadController::class, 'answerSheetsExcel'])->name('answer-sheets.xlsx');
+    Route::get('answer-sheets.pdf', [ReportDownloadController::class, 'answerSheetsPdf'])->name('answer-sheets.pdf');
     Route::get('duty-roster.xlsx', [ReportDownloadController::class, 'dutySheetExcel'])->name('duty-roster.xlsx');
     Route::get('duty-roster.pdf', [ReportDownloadController::class, 'dutySheetPdf'])->name('duty-roster.pdf');
     Route::get('teacher-attendance.xlsx', [ReportDownloadController::class, 'teacherAttendanceExcel'])->name('teacher-attendance.xlsx');

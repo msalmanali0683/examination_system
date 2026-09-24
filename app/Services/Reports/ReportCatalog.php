@@ -6,7 +6,7 @@ namespace App\Services\Reports;
  * Static metadata for every report type the Reports tab offers — label,
  * description, which formats it has, which ReportFileGenerator method
  * builds each format, which optional toggle (if any) it exposes, and
- * which data it depends on ('seating' or 'duties', gating whether the
+ * which data it depends on ('seating', 'duties' or 'timetable', gating whether the
  * report can be generated yet). The single source of truth shared by the
  * report index (Livewire\Sessions\ReportDownloads) and each report's own
  * filter-and-generate page (Livewire\Sessions\ReportShow), so the two
@@ -67,6 +67,17 @@ class ReportCatalog
             'flagLabel' => null,
             'gate' => 'seating',
         ],
+        'answer-sheets' => [
+            'label' => 'Answer Sheets Required',
+            'description' => 'How many answer sheets each slot needs — one per student per subject — with a total for every slot and a grand total for the whole exam.',
+            'icon' => 'clipboard',
+            'color' => 'teal',
+            'formats' => ['xlsx', 'pdf'],
+            'methods' => ['xlsx' => 'answerSheetsExcel', 'pdf' => 'answerSheetsPdf'],
+            'flagKey' => 'showInvigilators',
+            'flagLabel' => null,
+            'gate' => 'timetable',
+        ],
         'duty-roster' => [
             'label' => 'Teacher Duty Roster',
             'description' => 'Every teacher\'s invigilation duties — date, time, room and subject — grouped by teacher.',
@@ -112,6 +123,19 @@ class ReportCatalog
             'gate' => 'seating',
         ],
     ];
+
+    /**
+     * What has to exist before a report is worth opening, as the hint
+     * shown when it isn't there yet — keyed by the catalog's 'gate'.
+     */
+    public static function gateHint(string $gate): string
+    {
+        return match ($gate) {
+            'duties' => 'Generate duties first.',
+            'timetable' => 'Put subjects on time slots first (Generate Timetable).',
+            default => 'Generate seating first.',
+        };
+    }
 
     /**
      * @return string[]

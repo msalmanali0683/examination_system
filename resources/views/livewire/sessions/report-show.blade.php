@@ -20,7 +20,7 @@
     <p class="text-sm text-gray-500 dark:text-gray-400">{{ $config['description'] }}</p>
 
     @if (! $hasData)
-        <x-empty-state :icon="$config['icon']" title="Nothing to report yet" :description="$config['gate'] === 'duties' ? 'Generate duties first.' : 'Generate seating first.'" />
+        <x-empty-state :icon="$config['icon']" title="Nothing to report yet" :description="\App\Services\Reports\ReportCatalog::gateHint($config['gate'])" />
     @else
         <x-card>
             <div class="flex items-center gap-6 flex-wrap">

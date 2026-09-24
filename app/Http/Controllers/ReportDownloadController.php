@@ -96,6 +96,28 @@ class ReportDownloadController extends Controller
             $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Formatted-Datesheet', 'xlsx');
     }
 
+    /**
+     * How many answer sheets each slot needs (one per student per
+     * subject), with a total per slot and a grand total.
+     */
+    public function answerSheetsExcel(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'answer-sheets.xlsx', 'answerSheetsExcel', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Answer-Sheets', 'xlsx');
+    }
+
+    public function answerSheetsPdf(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
+    {
+        Gate::authorize('view_reports');
+        $date = $this->filterDate($request, $examSession);
+
+        return $this->resolve($examSession, 'answer-sheets.pdf', 'answerSheetsPdf', $date,
+            $this->filterTimeSlotIds($request, $examSession), 'showInvigilators', $this->showInvigilators($request), 'Answer-Sheets', 'pdf');
+    }
+
     public function dutySheetExcel(Request $request, ExamSession $examSession): BinaryFileResponse|RedirectResponse
     {
         Gate::authorize('view_reports');

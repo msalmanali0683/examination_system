@@ -9,6 +9,7 @@ use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\ReportFile;
 use App\Models\SeatAssignment;
+use App\Models\SubjectSlotAssignment;
 use App\Models\TimeSlot;
 use App\Services\Reports\ReportCatalog;
 use App\Services\Reports\ReportDataBuilder;
@@ -219,9 +220,11 @@ class ReportShow extends Component
                 ->get()
             : collect();
 
-        $hasData = $config['gate'] === 'duties'
-            ? DutyAssignment::where('exam_session_id', $this->examSession->id)->exists()
-            : SeatAssignment::where('exam_session_id', $this->examSession->id)->exists();
+        $hasData = match ($config['gate']) {
+            'duties' => DutyAssignment::where('exam_session_id', $this->examSession->id)->exists(),
+            'timetable' => SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->whereNotNull('time_slot_id')->exists(),
+            default => SeatAssignment::where('exam_session_id', $this->examSession->id)->exists(),
+        };
 
         $status = $this->buildStatus(new ReportFileCache, ReportCatalog::reportKeys($this->reportType), $this->filters());
 

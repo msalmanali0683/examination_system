@@ -32,7 +32,7 @@
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ $report['description'] }}</p>
             @unless ($report['available'])
-                <p class="text-xs text-gray-400 italic mt-2">{{ $report['gate'] === 'duties' ? 'Generate duties first.' : 'Generate seating first.' }}</p>
+                <p class="text-xs text-gray-400 italic mt-2">{{ \App\Services\Reports\ReportCatalog::gateHint($report['gate']) }}</p>
             @endunless
         </a>
     @endforeach

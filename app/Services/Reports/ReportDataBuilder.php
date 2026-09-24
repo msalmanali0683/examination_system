@@ -3,8 +3,10 @@
 namespace App\Services\Reports;
 
 use App\Models\DutyAssignment;
+use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\SeatAssignment;
+use App\Models\SubjectSlotAssignment;
 use App\Services\Generation\SemesterExtractor;
 use Illuminate\Support\Collection;
 
@@ -162,6 +164,103 @@ class ReportDataBuilder
         return $rows
             ->sortBy(fn ($row) => $row->date->format('Y-m-d').$row->startTime.$row->title)
             ->groupBy(fn ($row) => $row->date->format('Y-m-d'));
+    }
+
+    /**
+     * How many answer sheets each exam slot needs: one per student per
+     * subject, so a slot's total is the sum of its subjects' enrollments
+     * (e.g. Machine Learning 120 + AI 80 = 200 sheets). Built from the
+     * timetable and the enrollments, so it doesn't depend on seating
+     * having been generated. Subjects excluded from the exam, or with no
+     * enrolled students, don't appear.
+     *
+     * Slots are numbered 1..n in date/time order across the whole session
+     * *before* any date/slot filter is applied, so "Slot 3" keeps its
+     * number when the report is narrowed to a single day. Only slots that
+     * actually have a subject sitting are numbered — an unused time slot
+     * doesn't consume a number.
+     *
+     * Also reports how many enrolled subjects/students are not on the
+     * timetable yet (so not counted), when the report covers the whole
+     * session — the totals would otherwise look complete when they aren't.
+     *
+     * @param  int[]|null  $timeSlotIds
+     * @return object{slots: Collection, grandTotal: int, unscheduledSubjects: int, unscheduledStudents: int}
+     */
+    public function answerSheetRows(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): object
+    {
+        $placements = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->where('is_excluded', false)
+            ->with(['subject:id,code,title', 'timeSlot'])
+            ->get();
+
+        $studentsBySubject = Enrollment::where('exam_session_id', $session->id)
+            ->selectRaw('subject_id, count(*) as students')
+            ->groupBy('subject_id')
+            ->pluck('students', 'subject_id');
+
+        $slots = $placements
+            ->groupBy('time_slot_id')
+            ->map(function (Collection $group) use ($studentsBySubject) {
+                $timeSlot = $group->first()->timeSlot;
+
+                $subjects = $group
+                    ->map(fn (SubjectSlotAssignment $placement) => (object) [
+                        'code' => $placement->subject->code,
+                        'title' => $placement->subject->title,
+                        'students' => (int) $studentsBySubject->get($placement->subject_id, 0),
+                    ])
+                    ->filter(fn ($subject) => $subject->students > 0)
+                    ->sortBy('title')
+                    ->values();
+
+                $students = $subjects->sum('students');
+
+                return (object) [
+                    'timeSlot' => $timeSlot,
+                    'date' => $timeSlot->date,
+                    'day' => $timeSlot->date->format('l'),
+                    'time' => substr($timeSlot->start_time, 0, 5).' - '.substr($timeSlot->end_time, 0, 5),
+                    'subjects' => $subjects,
+                    'students' => $students,
+                    'sheets' => $students,
+                ];
+            })
+            ->filter(fn ($slot) => $slot->subjects->isNotEmpty())
+            ->sortBy(fn ($slot) => $slot->date->format('Y-m-d').$slot->timeSlot->start_time)
+            ->values()
+            ->map(function ($slot, $index) {
+                $slot->number = $index + 1;
+
+                return $slot;
+            });
+
+        if (! empty($timeSlotIds)) {
+            $slots = $slots->filter(fn ($slot) => in_array($slot->timeSlot->id, $timeSlotIds, true));
+        } elseif ($date) {
+            $slots = $slots->filter(fn ($slot) => $slot->date->format('Y-m-d') === $date);
+        }
+
+        $slots = $slots->values();
+        $filtered = ! empty($timeSlotIds) || $date;
+
+        $unscheduled = collect();
+
+        if (! $filtered) {
+            $handledSubjectIds = SubjectSlotAssignment::where('exam_session_id', $session->id)
+                ->where(fn ($query) => $query->whereNotNull('time_slot_id')->orWhere('is_excluded', true))
+                ->pluck('subject_id');
+
+            $unscheduled = $studentsBySubject->except($handledSubjectIds->all());
+        }
+
+        return (object) [
+            'slots' => $slots,
+            'grandTotal' => $slots->sum('sheets'),
+            'unscheduledSubjects' => $unscheduled->count(),
+            'unscheduledStudents' => (int) $unscheduled->sum(),
+        ];
     }
 
     /**
