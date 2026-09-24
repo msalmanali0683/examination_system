@@ -6,7 +6,6 @@ use App\Livewire\Sessions\CapacityCheck;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
-use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
@@ -61,10 +60,9 @@ class CapacityCheckTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $this->seedSlotWithSubjects($session, 1, 3);
-        Teacher::factory()->count(2)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(CapacityCheck::class, ['examSession' => $session])
@@ -78,10 +76,7 @@ class CapacityCheckTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
-        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         // Enrollments only — no TimeSlot/SubjectSlotAssignment at all,
         // matching "usable right after uploading the enrollment sheet".
@@ -133,10 +128,7 @@ class CapacityCheckTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
-        Room::factory()->count(2)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(2)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
 
         foreach (range(1, 2) as $i) {
             $subject = Subject::factory()->create();
@@ -178,8 +170,7 @@ class CapacityCheckTest extends TestCase
         // re-rendering the still-cached (non-empty) results.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);

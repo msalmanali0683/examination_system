@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\ExamSession;
 use App\Models\Room;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,6 +19,7 @@ class RoomFactory extends Factory
     public function definition(): array
     {
         return [
+            'exam_session_id' => ExamSession::factory(),
             'name' => 'Room '.fake()->unique()->numerify('###'),
             'rows' => 10,
             'columns' => 5,

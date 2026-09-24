@@ -1,13 +1,13 @@
 <x-slot name="header">
-    <x-page-header title="Dashboard" subtitle="Overview of exam sessions, rooms, teachers and students." icon="chart-bar" />
+    <x-page-header title="Dashboard" subtitle="Overview of your exam sessions — each one keeps its own rooms, teachers and students." icon="chart-bar" />
 </x-slot>
 
 <div class="space-y-6">
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
     <x-stat-card label="Exam Sessions" :value="$sessionCount" icon="calendar" color="indigo" />
-    <x-stat-card label="Active Rooms" :value="$roomCount" icon="door" color="blue" />
-    <x-stat-card label="Active Teachers" :value="$teacherCount" icon="cap" color="green" />
-    <x-stat-card label="Students on Record" :value="$studentCount" icon="users" color="amber" />
+    <x-stat-card label="In Progress" :value="$activeSessionCount" icon="clipboard" color="blue" />
+    <x-stat-card label="Finalized" :value="$finalizedSessionCount" icon="lock" color="green" />
+    <x-stat-card label="Students (all sessions)" :value="$studentCount" icon="users" color="amber" />
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -52,21 +52,12 @@
             @can('manage_sessions')
                 <x-btn :href="route('sessions.index')" wire:navigate variant="secondary" icon="calendar" class="w-full justify-start">Manage Sessions</x-btn>
             @endcan
-            @can('manage_rooms')
-                <x-btn :href="route('rooms.index')" wire:navigate variant="secondary" icon="door" class="w-full justify-start">Manage Rooms</x-btn>
-            @endcan
-            @can('manage_teachers')
-                <x-btn :href="route('teachers.index')" wire:navigate variant="secondary" icon="cap" class="w-full justify-start">Manage Teachers</x-btn>
-            @endcan
             @can('manage_users')
                 <x-btn :href="route('users.index')" wire:navigate variant="secondary" icon="users" class="w-full justify-start">Manage Users</x-btn>
             @endcan
         </div>
 
-        <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 space-y-1.5">
-            <div class="flex justify-between"><span>Subjects on record</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ $subjectCount }}</span></div>
-            <div class="flex justify-between"><span>Sessions in progress</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ $activeSessionCount }}</span></div>
-        </div>
+        <p class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">Rooms, teachers, subjects and students belong to a single session &mdash; open a session to manage them.</p>
     </x-card>
 </div>
 </div>

@@ -52,7 +52,7 @@ class IgnoredMissingTeachers extends Component
 
         $teacherId = $this->selection[$subjectId][$section] ?? null;
 
-        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+        if (! $teacherId || ! $this->examSession->teachers()->whereKey($teacherId)->exists()) {
             $this->flashError('Pick a teacher before assigning.');
 
             return;
@@ -123,7 +123,7 @@ class IgnoredMissingTeachers extends Component
         return view('livewire.sessions.ignored-missing-teachers', [
             'ignoredSections' => $ignoredSections,
             'suggestedTeachersBySubject' => $suggestedTeachersBySubject,
-            'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
+            'activeTeachers' => $this->examSession->teachers()->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 }

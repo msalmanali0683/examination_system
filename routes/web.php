@@ -39,30 +39,6 @@ Route::get('users', UsersIndex::class)
     ->middleware(['auth'])
     ->name('users.index');
 
-Route::get('rooms', RoomsIndex::class)
-    ->middleware(['auth'])
-    ->name('rooms.index');
-
-Route::get('rooms/import', RoomsImport::class)
-    ->middleware(['auth'])
-    ->name('rooms.import');
-
-Route::get('teachers', TeachersIndex::class)
-    ->middleware(['auth'])
-    ->name('teachers.index');
-
-Route::get('teachers/import', TeachersImport::class)
-    ->middleware(['auth'])
-    ->name('teachers.import');
-
-Route::get('subjects', SubjectsIndex::class)
-    ->middleware(['auth'])
-    ->name('subjects.index');
-
-Route::get('students', StudentsIndex::class)
-    ->middleware(['auth'])
-    ->name('students.index');
-
 Route::get('sessions', SessionsIndex::class)
     ->middleware(['auth'])
     ->name('sessions.index');
@@ -70,6 +46,30 @@ Route::get('sessions', SessionsIndex::class)
 Route::get('sessions/{examSession}', SessionsShow::class)
     ->middleware(['auth'])
     ->name('sessions.show');
+
+Route::get('sessions/{examSession}/rooms', RoomsIndex::class)
+    ->middleware(['auth'])
+    ->name('sessions.rooms.index');
+
+Route::get('sessions/{examSession}/rooms/import', RoomsImport::class)
+    ->middleware(['auth'])
+    ->name('sessions.rooms.import');
+
+Route::get('sessions/{examSession}/teachers', TeachersIndex::class)
+    ->middleware(['auth'])
+    ->name('sessions.teachers.index');
+
+Route::get('sessions/{examSession}/teachers/import', TeachersImport::class)
+    ->middleware(['auth'])
+    ->name('sessions.teachers.import');
+
+Route::get('sessions/{examSession}/subjects', SubjectsIndex::class)
+    ->middleware(['auth'])
+    ->name('sessions.subjects.index');
+
+Route::get('sessions/{examSession}/students', StudentsIndex::class)
+    ->middleware(['auth'])
+    ->name('sessions.students.index');
 
 Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
     ->middleware(['auth'])

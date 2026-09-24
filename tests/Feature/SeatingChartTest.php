@@ -7,7 +7,6 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
-use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
@@ -47,8 +46,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 5]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1);
 
@@ -66,8 +64,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 5]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1, locked: true);
 
@@ -84,8 +81,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 5]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seatA = $this->seat($session, $slot, $room, 1, 1);
         $this->seat($session, $slot, $room, 2, 2);
@@ -103,9 +99,8 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        $inactiveRoom = Room::factory()->create(['rows' => 5, 'columns' => 5]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 5]);
+        $inactiveRoom = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 5, 'is_active' => false]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1);
 
@@ -121,8 +116,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 2, 'columns' => 2]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 2, 'columns' => 2]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1);
 
@@ -138,8 +132,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1);
 
@@ -156,8 +149,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 10, 'columns' => 5, 'capacity' => 50]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true, 'capacity_override' => 40]);
+        $room = Room::factory()->for($session)->create(['rows' => 10, 'columns' => 5, 'capacity' => 50, 'capacity' => 40]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $this->seat($session, $slot, $room, 1, 1);
 
@@ -173,8 +165,7 @@ class SeatingChartTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $staff->permissionOverrides()->create(['permission' => 'edit_assignments', 'granted' => false]);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $seat = $this->seat($session, $slot, $room, 1, 1);
 
@@ -220,8 +211,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
@@ -238,7 +228,7 @@ class SeatingChartTest extends TestCase
 
         // Only one teacher exists at all, but the slot needs
         // invigilators_per_room (2) — a genuine, unfixable-here shortfall.
-        Teacher::factory()->create(['is_active' => true]);
+        Teacher::factory()->for($session)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(SeatingChart::class, ['examSession' => $session])
@@ -257,8 +247,7 @@ class SeatingChartTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
@@ -274,7 +263,7 @@ class SeatingChartTest extends TestCase
             'conflict_note' => 'CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.',
         ]);
 
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(SeatingChart::class, ['examSession' => $session])

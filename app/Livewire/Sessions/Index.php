@@ -4,7 +4,6 @@ namespace App\Livewire\Sessions;
 
 use App\Models\ActivityLog;
 use App\Models\ExamSession;
-use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -63,10 +62,12 @@ class Index extends Component
     }
 
     /**
-     * Starts a session from the settings (rooms, teacher constraints,
-     * generation settings) of a past one — none of the session-specific
-     * exam data (enrollments, time slots, generated seats/duties) carries
-     * over, since that needs a fresh import and generation run each time.
+     * Starts a session from a past one — its rooms, its teachers (with
+     * their duty constraints) and its generation settings are copied as
+     * brand-new rows owned by the new session, so editing them later never
+     * touches the original. None of the exam data (students, subjects,
+     * enrollments, time slots, generated seats/duties) carries over, since
+     * that needs a fresh import and generation run each time.
      */
     public function startDuplicate(int $sessionId): void
     {
@@ -104,19 +105,25 @@ class Index extends Component
                 'teacher_subject_exclusion' => $source->teacher_subject_exclusion,
             ]);
 
-            foreach ($source->sessionRooms as $sessionRoom) {
-                SessionRoom::create([
-                    'exam_session_id' => $newSession->id,
-                    'room_id' => $sessionRoom->room_id,
-                    'is_active' => $sessionRoom->is_active,
-                    'capacity_override' => $sessionRoom->capacity_override,
-                ]);
+            foreach ($source->rooms as $room) {
+                $newSession->rooms()->create($room->only(['name', 'rows', 'columns', 'capacity', 'room_type', 'is_active']));
+            }
+
+            $copiedTeacherIds = [];
+
+            foreach ($source->teachers as $teacher) {
+                $copy = $newSession->teachers()->create($teacher->only(['name', 'designation', 'department', 'email', 'phone', 'pernr', 'is_active']));
+                $copiedTeacherIds[$teacher->id] = $copy->id;
             }
 
             foreach ($source->sessionTeacherConstraints as $constraint) {
+                if (! isset($copiedTeacherIds[$constraint->teacher_id])) {
+                    continue;
+                }
+
                 SessionTeacherConstraint::create([
                     'exam_session_id' => $newSession->id,
-                    'teacher_id' => $constraint->teacher_id,
+                    'teacher_id' => $copiedTeacherIds[$constraint->teacher_id],
                     'is_excluded' => $constraint->is_excluded,
                     'min_duties' => $constraint->min_duties,
                     'max_duties' => $constraint->max_duties,
@@ -127,7 +134,7 @@ class Index extends Component
             return $newSession;
         });
 
-        ActivityLog::record($newSession, 'session.duplicated', "Created from \"{$source->name}\" (rooms and teacher constraints copied).");
+        ActivityLog::record($newSession, 'session.duplicated', "Created from \"{$source->name}\" (rooms, teachers and teacher constraints copied).");
 
         $this->redirect(route('sessions.show', $newSession), navigate: true);
     }
@@ -138,8 +145,9 @@ class Index extends Component
     }
 
     /**
-     * Every child table (rooms, teacher constraints, time slots,
-     * enrollments, generated seating/duties) cascades on delete at the
+     * Every child table (rooms, teachers, students, subjects, teacher
+     * constraints, time slots, enrollments, generated seating/duties)
+     * cascades on delete at the
      * database level, so this can never leave orphaned rows or fail with
      * a foreign-key error. A finalized session is the permanent
      * historical record, so it's excluded the same way every other

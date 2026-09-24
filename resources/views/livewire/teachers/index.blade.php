@@ -1,7 +1,7 @@
 <x-slot name="header">
-    <x-page-header title="Teachers" subtitle="Faculty available for invigilation duty." icon="cap">
+    <x-page-header title="Teachers" subtitle="{{ $examSession->name }} — faculty available for invigilation duty in this session." icon="cap" :back="route('sessions.show', $examSession)">
         <x-slot name="actions">
-            <a href="{{ route('teachers.import') }}" wire:navigate>
+            <a href="{{ route('sessions.teachers.import', $examSession) }}" wire:navigate>
                 <x-btn variant="secondary" icon="upload">Import</x-btn>
             </a>
             @if (! $showForm)
@@ -12,6 +12,8 @@
 </x-slot>
 
 <div class="space-y-6">
+<x-finalized-banner :session="$examSession" />
+
 @if (session('status'))
     <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
         {{ session('status') }}
@@ -68,7 +70,7 @@
     @if (count($selected) > 0)
         <div class="flex items-center gap-3 mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
             <span class="text-sm text-red-700 dark:text-red-300">{{ count($selected) }} selected</span>
-            <x-btn wire:click="bulkDelete" wire:confirm="Delete {{ count($selected) }} teacher(s)? This also removes their duty assignments and exclusion settings for every session, and clears them from any enrollments they were teaching. This cannot be undone." variant="danger" size="sm" icon="trash">Delete Selected</x-btn>
+            <x-btn wire:click="bulkDelete" wire:confirm="Delete {{ count($selected) }} teacher(s)? This also removes their duty assignments and exclusion settings, and clears them from any enrollments they were teaching. This cannot be undone." variant="danger" size="sm" icon="trash">Delete Selected</x-btn>
             <button type="button" wire:click="clearSelection" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
         </div>
     @endif

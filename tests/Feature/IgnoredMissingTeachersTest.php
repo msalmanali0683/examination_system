@@ -65,7 +65,7 @@ class IgnoredMissingTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $this->enroll($session, $subject, 'BSAI 1A', 2);
         $this->ignorePair($session, $subject->id, 'BSAI 1A');
 

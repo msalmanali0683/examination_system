@@ -2,16 +2,24 @@
 
 namespace App\Livewire\Students;
 
-use App\Models\Enrollment;
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ExamSession;
 use App\Models\Student;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * A session's own students — the ones imported or enrolled into it, and
+ * never shared with any other session.
+ */
 class Index extends Component
 {
+    use GuardsFinalizedSession;
     use WithPagination;
+
+    public ExamSession $examSession;
 
     public int $perPage = 25;
 
@@ -38,9 +46,10 @@ class Index extends Component
      */
     public array $selected = [];
 
-    public function mount(): void
+    public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_enrollments');
+        $this->examSession = $examSession;
     }
 
     public function updatedSearch(): void
@@ -63,7 +72,7 @@ class Index extends Component
     public function editStudent(int $id): void
     {
         $this->authorize('manage_enrollments');
-        $student = Student::findOrFail($id);
+        $student = $this->examSession->students()->findOrFail($id);
 
         $this->editingId = $student->id;
         $this->roll_no = $student->roll_no;
@@ -77,8 +86,12 @@ class Index extends Component
     {
         $this->authorize('manage_enrollments');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $validated = $this->validate([
-            'roll_no' => ['required', 'string', 'max:255', Rule::unique('students', 'roll_no')->ignore($this->editingId)],
+            'roll_no' => ['required', 'string', 'max:255', Rule::unique('students', 'roll_no')->where('exam_session_id', $this->examSession->id)->ignore($this->editingId)],
             'name' => ['required', 'string', 'max:255'],
             'program' => ['nullable', 'string', 'max:255'],
             'admission_year' => ['nullable', 'string', 'max:255'],
@@ -86,7 +99,7 @@ class Index extends Component
         $validated['program'] = $validated['program'] ?: null;
         $validated['admission_year'] = $validated['admission_year'] ?: null;
 
-        Student::updateOrCreate(['id' => $this->editingId], $validated);
+        $this->examSession->students()->updateOrCreate(['id' => $this->editingId], $validated);
 
         $this->resetForm();
         $this->showForm = false;
@@ -95,44 +108,32 @@ class Index extends Component
 
     /**
      * A student's enrollments cascade-delete at the database level (see
-     * enrollments.student_id's cascadeOnDelete()), which in turn cascades
-     * to their seat assignment — for a finalized session that would
-     * silently erase part of its permanent seating chart, so this is
-     * blocked the same way deleting the session itself is blocked while
-     * finalized. A non-finalized session's enrollments can always be
-     * re-imported, so only finalized use blocks this.
+     * enrollments.student_id's cascadeOnDelete()), taking their seat
+     * assignment with them — fine while the session can still be
+     * re-imported or regenerated, which is why a finalized session
+     * refuses it outright.
      */
     public function deleteStudent(int $id): void
     {
         $this->authorize('manage_enrollments');
-        $student = Student::findOrFail($id);
 
-        if ($this->hasFinalizedEnrollments($student)) {
-            session()->flash('error', "{$student->name} has enrollments in a finalized session and can't be deleted — unlock that session first if it really needs to change.");
-
+        if ($this->blockedByFinalization($this->examSession)) {
             return;
         }
 
-        $student->delete();
+        $this->examSession->students()->findOrFail($id)->delete();
         session()->flash('status', 'Student deleted.');
     }
 
-    private function hasFinalizedEnrollments(Student $student): bool
-    {
-        return Enrollment::where('student_id', $student->id)
-            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
-            ->exists();
-    }
-
     /**
-     * Every student matching the current search (or literally every
-     * student when the search box is empty) — shared by render() and
-     * deleteAllStudents() so "Delete All" always matches exactly what's
-     * on screen, not the unfiltered whole table.
+     * Every student in this session matching the current search (or the
+     * session's whole roster when the search box is empty) — shared by
+     * render() and deleteAllStudents() so "Delete All" always matches
+     * exactly what's on screen, not the unfiltered whole roster.
      */
     private function studentsQuery()
     {
-        return Student::when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
+        return $this->examSession->students()->when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
             ->where('roll_no', 'like', "%{$this->search}%")
             ->orWhere('name', 'like', "%{$this->search}%")
         ));
@@ -159,63 +160,47 @@ class Index extends Component
         $this->selected = [];
     }
 
-    /**
-     * A student's enrollment rows (and their seat assignments) cascade-
-     * delete at the database level — every one of those is a real FK
-     * constraint, not application logic, so this can never fail with a
-     * foreign-key error. But a student with enrollments in a finalized
-     * session is skipped (see hasFinalizedEnrollments()) rather than
-     * deleted, so a bulk action can never silently erase part of a
-     * finalized session's seating chart.
-     */
     public function bulkDelete(): void
     {
         $this->authorize('manage_enrollments');
 
-        $selected = Student::whereIn('id', $this->selected)->get();
-        $blocked = $selected->filter(fn (Student $student) => $this->hasFinalizedEnrollments($student));
-        $toDelete = $selected->reject(fn (Student $student) => $blocked->contains($student));
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
-        $count = Student::destroy($toDelete->pluck('id'));
+        $count = $this->examSession->students()->whereIn('id', $this->selected)->delete();
 
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash($blocked->isEmpty() ? 'status' : 'error', "{$count} student(s) deleted."
-            .($blocked->isEmpty() ? '' : " {$blocked->count()} skipped — they have enrollments in a finalized session."));
+        session()->flash('status', "{$count} student(s) deleted.");
     }
 
     /**
-     * Deletes every student matching the current search filter (the
-     * whole result set, not just the current page) — same finalized-
-     * enrollment guard as bulkDelete(), just computed as one batched
-     * query instead of a per-student check since this can run over the
-     * entire roster rather than a handful of selected rows.
+     * Deletes every student in this session matching the current search
+     * filter (the whole result set, not just the current page). Their
+     * enrollments and seat assignments go with them (real FK cascades).
      */
     public function deleteAllStudents(): void
     {
         $this->authorize('manage_enrollments');
 
-        $ids = $this->studentsQuery()->pluck('id');
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
-        if ($ids->isEmpty()) {
+        $count = $this->studentsQuery()->delete();
+
+        if ($count === 0) {
             session()->flash('error', 'No students to delete.');
 
             return;
         }
 
-        $blockedIds = Enrollment::whereIn('student_id', $ids)
-            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
-            ->distinct()
-            ->pluck('student_id');
-
-        $count = Student::destroy($ids->diff($blockedIds));
-
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash($blockedIds->isEmpty() ? 'status' : 'error', "{$count} student(s) deleted."
-            .($blockedIds->isEmpty() ? '' : " {$blockedIds->count()} skipped — they have enrollments in a finalized session."));
+        session()->flash('status', "{$count} student(s) deleted.");
     }
 
     public function cancel(): void

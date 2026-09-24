@@ -28,7 +28,7 @@
                             {{ $r->roomsNeeded }} / {{ $r->roomsAvailable }}
                             @if ($r->roomsShortfall() > 0)
                                 @if ($r->exceedsSystemWideRooms())
-                                    (short by {{ $r->roomsShortfall() }} &mdash; no more rooms exist anywhere; try combining sections/subjects in this slot)
+                                    (short by {{ $r->roomsShortfall() }} &mdash; this session has no more rooms; add rooms or try combining sections/subjects in this slot)
                                 @else
                                     ({{ $r->roomsShortfall() }} more needed)
                                 @endif

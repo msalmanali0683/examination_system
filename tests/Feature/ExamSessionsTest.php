@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Livewire\Sessions\Index;
-use App\Livewire\Sessions\RoomSelection;
 use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
 use App\Livewire\Sessions\TimeSlots;
@@ -12,7 +11,6 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
-use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
@@ -94,81 +92,11 @@ class ExamSessionsTest extends TestCase
             ->assertHasErrors(['end_date']);
     }
 
-    public function test_toggling_a_room_adds_and_removes_it_from_the_session(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
-
-        $component = Livewire::actingAs($staff)->test(RoomSelection::class, ['examSession' => $session]);
-
-        $component->call('toggleRoom', $room->id);
-        $this->assertDatabaseHas('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $room->id]);
-
-        $component->call('toggleRoom', $room->id);
-        $this->assertDatabaseMissing('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $room->id]);
-    }
-
-    public function test_capacity_override_is_clamped_to_room_capacity(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['capacity' => 50]);
-
-        $component = Livewire::actingAs($staff)->test(RoomSelection::class, ['examSession' => $session]);
-        $component->call('toggleRoom', $room->id);
-        $component->call('updateCapacityOverride', $room->id, '999');
-
-        $this->assertDatabaseHas('session_rooms', [
-            'exam_session_id' => $session->id,
-            'room_id' => $room->id,
-            'capacity_override' => 50,
-        ]);
-    }
-
-    public function test_select_all_rooms_includes_every_active_room_and_leaves_existing_overrides(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create();
-        $alreadyIncluded = Room::factory()->create(['capacity' => 50]);
-        $notYetIncluded = Room::factory()->create();
-        $inactiveRoom = Room::factory()->create(['is_active' => false]);
-
-        SessionRoom::create([
-            'exam_session_id' => $session->id, 'room_id' => $alreadyIncluded->id, 'is_active' => true, 'capacity_override' => 30,
-        ]);
-
-        Livewire::actingAs($staff)
-            ->test(RoomSelection::class, ['examSession' => $session])
-            ->call('selectAllRooms');
-
-        $this->assertDatabaseHas('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $alreadyIncluded->id, 'capacity_override' => 30]);
-        $this->assertDatabaseHas('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $notYetIncluded->id]);
-        $this->assertDatabaseMissing('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $inactiveRoom->id]);
-    }
-
-    public function test_deselect_all_rooms_removes_every_room_from_the_session(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create();
-        $roomA = Room::factory()->create();
-        $roomB = Room::factory()->create();
-
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomA->id, 'is_active' => true]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomB->id, 'is_active' => true]);
-
-        Livewire::actingAs($staff)
-            ->test(RoomSelection::class, ['examSession' => $session])
-            ->call('deselectAllRooms');
-
-        $this->assertDatabaseCount('session_rooms', 0);
-    }
-
     public function test_excluding_a_teacher_creates_a_constraint_row_and_reverting_removes_it(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
 
         $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
 
@@ -190,7 +118,7 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
 
         Livewire::actingAs($staff)
             ->test(TeacherConstraints::class, ['examSession' => $session])
@@ -208,8 +136,8 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teachers = Teacher::factory()->count(3)->create(['is_active' => true]);
-        Teacher::factory()->create(['is_active' => false]); // must be left alone
+        $teachers = Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->create(['is_active' => false]); // must be left alone
 
         Livewire::actingAs($staff)
             ->test(TeacherConstraints::class, ['examSession' => $session])
@@ -233,7 +161,7 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
 
         Livewire::actingAs($staff)
             ->test(TeacherConstraints::class, ['examSession' => $session])
@@ -251,7 +179,7 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
@@ -276,8 +204,8 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teachers = Teacher::factory()->count(3)->create(['is_active' => true]);
-        Teacher::factory()->create(['is_active' => false]); // must be left alone
+        $teachers = Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->create(['is_active' => false]); // must be left alone
 
         $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
 
@@ -304,7 +232,7 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
@@ -324,7 +252,7 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
 
         $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
 
@@ -396,8 +324,8 @@ class ExamSessionsTest extends TestCase
         $session = ExamSession::factory()->create(['status' => 'generated']);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
-        $teacher = Teacher::factory()->create();
-        $room = Room::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $enrollment = Enrollment::factory()->create([
@@ -460,13 +388,11 @@ class ExamSessionsTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'generated']);
-        $room = Room::factory()->create();
-        $teacher = Teacher::factory()->create();
-        $subject = Subject::factory()->create();
-        $student = Student::factory()->create();
+        $room = Room::factory()->for($session)->create();
+        $teacher = Teacher::factory()->for($session)->create();
+        $subject = Subject::factory()->for($session)->create();
+        $student = Student::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
         SessionTeacherConstraint::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'is_excluded' => true]);
         $enrollment = Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
         SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
@@ -480,18 +406,18 @@ class ExamSessionsTest extends TestCase
 
         $this->assertDatabaseMissing('exam_sessions', ['id' => $session->id]);
         $this->assertDatabaseCount('time_slots', 0);
-        $this->assertDatabaseCount('session_rooms', 0);
         $this->assertDatabaseCount('session_teacher_constraints', 0);
         $this->assertDatabaseCount('enrollments', 0);
         $this->assertDatabaseCount('subject_slot_assignments', 0);
         $this->assertDatabaseCount('seat_assignments', 0);
         $this->assertDatabaseCount('duty_assignments', 0);
 
-        // Shared catalog data is untouched.
-        $this->assertDatabaseHas('rooms', ['id' => $room->id]);
-        $this->assertDatabaseHas('teachers', ['id' => $teacher->id]);
-        $this->assertDatabaseHas('subjects', ['id' => $subject->id]);
-        $this->assertDatabaseHas('students', ['id' => $student->id]);
+        // The session owns its rooms, teachers, subjects and students, so
+        // they all go with it.
+        $this->assertDatabaseCount('rooms', 0);
+        $this->assertDatabaseCount('teachers', 0);
+        $this->assertDatabaseCount('subjects', 0);
+        $this->assertDatabaseCount('students', 0);
     }
 
     public function test_deleting_a_finalized_session_is_blocked(): void

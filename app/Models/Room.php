@@ -4,13 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Room extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'exam_session_id',
         'name',
         'rows',
         'columns',
@@ -23,8 +24,8 @@ class Room extends Model
         'is_active' => 'boolean',
     ];
 
-    public function sessionRooms(): HasMany
+    public function examSession(): BelongsTo
     {
-        return $this->hasMany(SessionRoom::class);
+        return $this->belongsTo(ExamSession::class);
     }
 }

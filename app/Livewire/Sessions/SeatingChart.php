@@ -69,7 +69,7 @@ class SeatingChart extends Component
             return;
         }
 
-        $room = $this->examSession->rooms()->wherePivot('is_active', true)->where('rooms.id', $roomId)->first();
+        $room = $this->examSession->rooms()->where('is_active', true)->whereKey($roomId)->first();
 
         if (! $room) {
             session()->flash('error', 'That room is not active for this session.');
@@ -192,9 +192,8 @@ class SeatingChart extends Component
                 ->get();
 
             $capacities = $this->examSession->rooms()
-                ->wherePivot('is_active', true)
-                ->get()
-                ->mapWithKeys(fn ($r) => [$r->id => $r->pivot->capacity_override ?? $r->capacity]);
+                ->where('is_active', true)
+                ->pluck('capacity', 'id');
 
             $rooms = $seats->groupBy('room_id')->map(function ($roomSeats) use ($capacities) {
                 $room = $roomSeats->first()->room;

@@ -2,15 +2,19 @@
 
 namespace App\Livewire\Teachers;
 
+use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Livewire\Concerns\HandlesExcelUpload;
-use App\Models\Teacher;
+use App\Models\ExamSession;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 class Import extends Component
 {
+    use GuardsFinalizedSession;
     use HandlesExcelUpload;
+
+    public ExamSession $examSession;
 
     private const TARGET_FIELDS = [
         'name' => 'Name',
@@ -31,9 +35,10 @@ class Import extends Component
 
     public int $updatedCount = 0;
 
-    public function mount(): void
+    public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_teachers');
+        $this->examSession = $examSession;
     }
 
     public function targetFields(): array
@@ -81,6 +86,10 @@ class Import extends Component
     {
         $this->authorize('manage_teachers');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $created = 0;
         $updated = 0;
 
@@ -106,10 +115,10 @@ class Import extends Component
             ];
 
             if ($email !== null) {
-                $teacher = Teacher::updateOrCreate(['email' => $email], $attributes);
+                $teacher = $this->examSession->teachers()->updateOrCreate(['email' => $email], $attributes);
                 $teacher->wasRecentlyCreated ? $created++ : $updated++;
             } else {
-                Teacher::create($attributes);
+                $this->examSession->teachers()->create($attributes);
                 $created++;
             }
         }

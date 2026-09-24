@@ -1,8 +1,10 @@
 <x-slot name="header">
-    <x-page-header title="Subjects" subtitle="Course catalog used across every exam session." icon="document" />
+    <x-page-header title="Subjects" subtitle="{{ $examSession->name }} — the courses in this session, created from its enrollment import." icon="document" :back="route('sessions.show', $examSession)" />
 </x-slot>
 
 <div class="space-y-6">
+<x-finalized-banner :session="$examSession" />
+
 @if (session('status'))
     <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
         {{ session('status') }}
@@ -25,7 +27,7 @@
             </div>
         </div>
         <div class="mt-4 space-y-2">
-            @foreach (\App\Models\Subject::whereIn('id', $selected)->orderBy('code')->get() as $subject)
+            @foreach ($examSession->subjects()->whereIn('id', $selected)->orderBy('code')->get() as $subject)
                 <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 cursor-pointer">
                     <input type="radio" wire:model="survivorId" value="{{ $subject->id }}" class="text-indigo-600 focus:ring-indigo-500">
                     <span class="font-medium">{{ $subject->code }}</span>

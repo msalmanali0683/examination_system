@@ -50,37 +50,32 @@ new class extends Component
             </a>
         @endcan
 
-        @can('manage_rooms')
-            <a href="{{ route('rooms.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('rooms.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="door" class="h-5 w-5 shrink-0 {{ request()->routeIs('rooms.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
-                {{ __('Rooms') }}
-            </a>
-        @endcan
+        @php $navSession = request()->route('examSession'); @endphp
+        @if ($navSession instanceof \App\Models\ExamSession)
+            <div class="mt-4 pt-4 border-t border-white/10 space-y-1">
+                <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate" title="{{ $navSession->name }}">{{ $navSession->name }}</div>
 
-        @can('manage_teachers')
-            <a href="{{ route('teachers.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('teachers.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="cap" class="h-5 w-5 shrink-0 {{ request()->routeIs('teachers.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
-                {{ __('Teachers') }}
-            </a>
-        @endcan
+                @php
+                    $sessionLinks = [
+                        ['route' => 'sessions.show', 'match' => 'sessions.show', 'label' => 'Overview', 'icon' => 'home', 'can' => 'manage_sessions'],
+                        ['route' => 'sessions.rooms.index', 'match' => 'sessions.rooms.*', 'label' => 'Rooms', 'icon' => 'door', 'can' => 'manage_rooms'],
+                        ['route' => 'sessions.teachers.index', 'match' => 'sessions.teachers.*', 'label' => 'Teachers', 'icon' => 'cap', 'can' => 'manage_teachers'],
+                        ['route' => 'sessions.subjects.index', 'match' => 'sessions.subjects.*', 'label' => 'Subjects', 'icon' => 'document', 'can' => 'manage_subjects'],
+                        ['route' => 'sessions.students.index', 'match' => 'sessions.students.*', 'label' => 'Students', 'icon' => 'user-group', 'can' => 'manage_enrollments'],
+                    ];
+                @endphp
 
-        @can('manage_subjects')
-            <a href="{{ route('subjects.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('subjects.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="document" class="h-5 w-5 shrink-0 {{ request()->routeIs('subjects.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
-                {{ __('Subjects') }}
-            </a>
-        @endcan
-
-        @can('manage_enrollments')
-            <a href="{{ route('students.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('students.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="user-group" class="h-5 w-5 shrink-0 {{ request()->routeIs('students.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
-                {{ __('Students') }}
-            </a>
-        @endcan
+                @foreach ($sessionLinks as $link)
+                    @can($link['can'])
+                        <a href="{{ route($link['route'], $navSession) }}" wire:navigate
+                           class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition {{ request()->routeIs($link['match']) ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+                            <x-icon :name="$link['icon']" class="h-4 w-4 shrink-0 {{ request()->routeIs($link['match']) ? 'text-indigo-400' : 'text-slate-400' }}" />
+                            {{ $link['label'] }}
+                        </a>
+                    @endcan
+                @endforeach
+            </div>
+        @endif
 
         @can('manage_users')
             <a href="{{ route('users.index') }}" wire:navigate

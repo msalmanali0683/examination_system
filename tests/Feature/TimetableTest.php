@@ -6,7 +6,6 @@ use App\Livewire\Sessions\Timetable;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
-use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
@@ -240,8 +239,7 @@ class TimetableTest extends TestCase
         // asked to respect real room capacity.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['respect_room_capacity' => true]);
-        $room = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subjectA = Subject::factory()->create();
@@ -270,8 +268,7 @@ class TimetableTest extends TestCase
         // and no capacity shortfall gets reported.
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['respect_room_capacity' => false]);
-        $room = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subjectA = Subject::factory()->create();
@@ -305,8 +302,7 @@ class TimetableTest extends TestCase
             'respect_room_capacity' => true,
             'seating_strategy' => 'strict_overflow_subject',
         ]);
-        $room = Room::factory()->create(['rows' => 6, 'columns' => 1, 'capacity' => 6]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 6, 'columns' => 1, 'capacity' => 6]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subjectA = Subject::factory()->create();

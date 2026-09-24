@@ -7,8 +7,6 @@ use App\Livewire\Concerns\HandlesExcelUpload;
 use App\Models\ActivityLog;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
-use App\Models\Student;
-use App\Models\Subject;
 use App\Models\Teacher;
 use App\Services\SubjectCodeNormalizer;
 use Illuminate\Support\Collection;
@@ -154,8 +152,8 @@ class EnrollmentImport extends Component
 
         $this->raiseResourceLimits();
 
-        $existingSubjects = Subject::pluck('id', 'code');
-        $existingStudents = Student::pluck('id', 'roll_no');
+        $existingSubjects = $this->examSession->subjects()->pluck('id', 'code');
+        $existingStudents = $this->examSession->students()->pluck('id', 'roll_no');
         $teacherCache = [];
         $created = 0;
         $updated = 0;
@@ -173,7 +171,7 @@ class EnrollmentImport extends Component
                 }
 
                 $student = $existingStudents->has($data['roll_no'])
-                    ? Student::find($existingStudents[$data['roll_no']])
+                    ? $this->examSession->students()->find($existingStudents[$data['roll_no']])
                     : null;
 
                 if ($student) {
@@ -183,7 +181,7 @@ class EnrollmentImport extends Component
                         'admission_year' => $data['admission_year'] ?? $student->admission_year,
                     ]);
                 } else {
-                    $student = Student::create([
+                    $student = $this->examSession->students()->create([
                         'roll_no' => $data['roll_no'],
                         'name' => $data['student_name'],
                         'program' => $data['program'],
@@ -200,9 +198,9 @@ class EnrollmentImport extends Component
                     // code still resolves it — but to the surviving
                     // subject, not the retired one, so both codes stay
                     // treated as one course going forward.
-                    $subject = Subject::find($existingSubjects[$code])->canonical();
+                    $subject = $this->examSession->subjects()->find($existingSubjects[$code])->canonical();
                 } else {
-                    $subject = Subject::create([
+                    $subject = $this->examSession->subjects()->create([
                         'code' => $code,
                         'title' => $data['course_title'],
                         'credit_hours' => $data['credit_hours'],
@@ -252,13 +250,22 @@ class EnrollmentImport extends Component
         $this->step = 'upload';
     }
 
+    /**
+     * Finds this session's teacher for an enrollment row — by PERNR, then
+     * email, and only when the row carries neither, by exact name — or
+     * adds them to the session. Only this session's own teachers are ever
+     * matched; another session's teacher of the same name is a different
+     * person as far as this session is concerned.
+     */
     private function resolveTeacher(?string $pernr, ?string $email, string $name): Teacher
     {
-        if ($pernr && $teacher = Teacher::where('pernr', $pernr)->first()) {
+        $teachers = $this->examSession->teachers();
+
+        if ($pernr && $teacher = (clone $teachers)->where('pernr', $pernr)->first()) {
             return $teacher;
         }
 
-        if ($email && $teacher = Teacher::where('email', $email)->first()) {
+        if ($email && $teacher = (clone $teachers)->where('email', $email)->first()) {
             if ($pernr && ! $teacher->pernr) {
                 $teacher->update(['pernr' => $pernr]);
             }
@@ -266,13 +273,17 @@ class EnrollmentImport extends Component
             return $teacher;
         }
 
-        return Teacher::create(['name' => $name, 'email' => $email, 'pernr' => $pernr]);
+        if (! $pernr && ! $email && $teacher = (clone $teachers)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first()) {
+            return $teacher;
+        }
+
+        return $teachers->create(['name' => $name, 'email' => $email, 'pernr' => $pernr]);
     }
 
     private function buildReport(): array
     {
-        $existingSubjectCodes = Subject::pluck('code')->flip();
-        $existingRollNos = Student::pluck('roll_no')->flip();
+        $existingSubjectCodes = $this->examSession->subjects()->pluck('code')->flip();
+        $existingRollNos = $this->examSession->students()->pluck('roll_no')->flip();
 
         $errors = [];
         $seenPairs = [];
@@ -413,7 +424,7 @@ class EnrollmentImport extends Component
     public function render()
     {
         $subjectSummary = $this->step === 'done'
-            ? Subject::whereHas('enrollments', fn ($q) => $q->where('exam_session_id', $this->examSession->id))
+            ? $this->examSession->subjects()->whereHas('enrollments', fn ($q) => $q->where('exam_session_id', $this->examSession->id))
                 ->withCount(['enrollments' => fn ($q) => $q->where('exam_session_id', $this->examSession->id)])
                 ->orderBy('code')
                 ->get()

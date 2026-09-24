@@ -4,8 +4,8 @@ namespace App\Services\Generation;
 
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\Room;
 use App\Models\SessionTeacherConstraint;
-use App\Models\Teacher;
 use App\Services\Generation\DTOs\SeatingResult;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
@@ -208,12 +208,12 @@ class SlotCapacitySimulator
      */
     private function activeRoomTemplate(ExamSession $session): array
     {
-        return $session->sessionRooms()->where('is_active', true)->with('room')->get()
-            ->map(fn ($sr) => [
-                'room_id' => $sr->room_id,
-                'rows' => $sr->room->rows,
-                'columns' => $sr->room->columns,
-                'capacity' => $sr->effectiveCapacity(),
+        return $session->rooms()->where('is_active', true)->get()
+            ->map(fn (Room $room) => [
+                'room_id' => $room->id,
+                'rows' => $room->rows,
+                'columns' => $room->columns,
+                'capacity' => $room->capacity,
                 'occupied' => [],
             ])
             ->sortByDesc('capacity')
@@ -236,7 +236,7 @@ class SlotCapacitySimulator
             ->filter(fn (SessionTeacherConstraint $c) => $c->is_excluded || $c->effectiveMaxDuties() <= 0)
             ->pluck('teacher_id');
 
-        return Teacher::where('is_active', true)
+        return $session->teachers()->where('is_active', true)
             ->whereNotIn('id', $unavailableTeacherIds)
             ->count();
     }

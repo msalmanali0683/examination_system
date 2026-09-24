@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ExamSession extends Model
@@ -57,9 +56,29 @@ class ExamSession extends Model
         return $this->hasMany(TimeSlot::class);
     }
 
-    public function sessionRooms(): HasMany
+    /**
+     * Rooms, teachers, students and subjects are owned by a single
+     * session — created, edited and deleted from inside it, and gone when
+     * it is deleted. Nothing here is shared with any other session.
+     */
+    public function rooms(): HasMany
     {
-        return $this->hasMany(SessionRoom::class);
+        return $this->hasMany(Room::class);
+    }
+
+    public function teachers(): HasMany
+    {
+        return $this->hasMany(Teacher::class);
+    }
+
+    public function students(): HasMany
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    public function subjects(): HasMany
+    {
+        return $this->hasMany(Subject::class);
     }
 
     public function sessionTeacherConstraints(): HasMany
@@ -90,22 +109,6 @@ class ExamSession extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
-    }
-
-    public function rooms(): BelongsToMany
-    {
-        return $this->belongsToMany(Room::class, 'session_rooms')
-            ->using(SessionRoom::class)
-            ->withPivot(['id', 'is_active', 'capacity_override'])
-            ->withTimestamps();
-    }
-
-    public function teachers(): BelongsToMany
-    {
-        return $this->belongsToMany(Teacher::class, 'session_teacher_constraints')
-            ->using(SessionTeacherConstraint::class)
-            ->withPivot(['id', 'is_excluded', 'min_duties', 'max_duties'])
-            ->withTimestamps();
     }
 
     public function isFinalized(): bool

@@ -12,12 +12,18 @@ class Subject extends Model
     use HasFactory;
 
     protected $fillable = [
+        'exam_session_id',
         'code',
         'title',
         'credit_hours',
         'exam_type',
         'merged_into_id',
     ];
+
+    public function examSession(): BelongsTo
+    {
+        return $this->belongsTo(ExamSession::class);
+    }
 
     public function enrollments(): HasMany
     {

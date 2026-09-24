@@ -8,6 +8,7 @@ use App\Models\ExamSession;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -16,40 +17,91 @@ class StudentsManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_staff_can_create_a_student(): void
+    private function staff(): User
     {
-        $staff = User::factory()->create(['role' => 'staff']);
+        return User::factory()->create(['role' => 'staff']);
+    }
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+    private function openPage(ExamSession $session)
+    {
+        return Livewire::actingAs($this->staff())->test(Index::class, ['examSession' => $session]);
+    }
+
+    public function test_staff_can_create_a_student_inside_the_session(): void
+    {
+        $session = ExamSession::factory()->create();
+
+        $this->openPage($session)
             ->set('roll_no', '70112233')
             ->set('name', 'Ayesha Khan')
             ->set('program', 'BS Computer Science')
             ->call('save');
 
-        $this->assertDatabaseHas('students', ['roll_no' => '70112233', 'name' => 'Ayesha Khan']);
+        $this->assertDatabaseHas('students', ['roll_no' => '70112233', 'name' => 'Ayesha Khan', 'exam_session_id' => $session->id]);
     }
 
-    public function test_roll_numbers_must_be_unique(): void
+    public function test_roll_numbers_must_be_unique_within_a_session(): void
     {
-        Student::factory()->create(['roll_no' => '70112233']);
-        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        Student::factory()->for($session)->create(['roll_no' => '70112233']);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->set('roll_no', '70112233')
             ->set('name', 'Someone Else')
             ->call('save')
             ->assertHasErrors(['roll_no']);
     }
 
+    public function test_the_same_roll_number_can_exist_in_another_session(): void
+    {
+        $sessionA = ExamSession::factory()->create();
+        $sessionB = ExamSession::factory()->create();
+        Student::factory()->for($sessionA)->create(['roll_no' => '70112233']);
+
+        $this->openPage($sessionB)
+            ->set('roll_no', '70112233')
+            ->set('name', 'Same Student, Other Department')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, $sessionB->students()->count());
+    }
+
+    public function test_only_this_sessions_students_are_listed(): void
+    {
+        $session = ExamSession::factory()->create();
+        Student::factory()->for($session)->create(['name' => 'Visible Student']);
+        Student::factory()->for(ExamSession::factory()->create())->create(['name' => 'Hidden Student']);
+
+        $this->openPage($session)
+            ->assertSee('Visible Student')
+            ->assertDontSee('Hidden Student');
+    }
+
+    public function test_a_student_from_another_session_cannot_be_touched(): void
+    {
+        $session = ExamSession::factory()->create();
+        $foreign = Student::factory()->for(ExamSession::factory()->create())->create(['name' => 'Foreign']);
+
+        foreach (['editStudent', 'deleteStudent'] as $action) {
+            $this->assertThrows(
+                fn () => $this->openPage($session)->call($action, $foreign->id),
+                ModelNotFoundException::class
+            );
+        }
+
+        $this->openPage($session)->set('selected', [$foreign->id])->call('bulkDelete');
+        $this->openPage($session)->call('deleteAllStudents');
+
+        $this->assertDatabaseHas('students', ['id' => $foreign->id, 'name' => 'Foreign']);
+    }
+
     public function test_staff_can_edit_a_student(): void
     {
-        $student = Student::factory()->create(['name' => 'Old Name']);
-        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $student = Student::factory()->for($session)->create(['name' => 'Old Name']);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->call('editStudent', $student->id)
             ->set('name', 'New Name')
             ->call('save');
@@ -57,75 +109,52 @@ class StudentsManagementTest extends TestCase
         $this->assertSame('New Name', $student->fresh()->name);
     }
 
-    public function test_a_student_with_no_history_can_be_deleted(): void
+    public function test_deleting_a_student_also_removes_their_enrollments(): void
     {
-        $student = Student::factory()->create();
-        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $student = Student::factory()->for($session)->create();
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => Subject::factory()->for($session),
+        ]);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->call('deleteStudent', $student->id)
             ->assertHasNoErrors();
 
         $this->assertDatabaseMissing('students', ['id' => $student->id]);
+        $this->assertDatabaseMissing('enrollments', ['id' => $enrollment->id]);
     }
 
-    /**
-     * Deleting a student cascades to their enrollments (cascadeOnDelete()
-     * on enrollments.student_id), and from there to their seat assignment
-     * — for a finalized session that would silently erase part of its
-     * permanent seating chart, so this is blocked the same way deleting
-     * the session itself is blocked while finalized.
-     */
-    public function test_deleting_a_student_enrolled_in_a_finalized_session_is_blocked(): void
+    public function test_a_finalized_session_refuses_student_deletion(): void
     {
-        $student = Student::factory()->create();
-        $session = ExamSession::factory()->create(['status' => 'finalized']);
-        $subject = Subject::factory()->create();
+        $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
+        $student = Student::factory()->for($session)->create();
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id,
             'student_id' => $student->id,
-            'subject_id' => $subject->id,
+            'subject_id' => Subject::factory()->for($session),
         ]);
-        $staff = User::factory()->create(['role' => 'staff']);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->call('deleteStudent', $student->id)
-            ->assertSee("can't be deleted");
+            ->assertSee('finalized')
+            ->set('selected', [$student->id])
+            ->call('bulkDelete')
+            ->call('deleteAllStudents');
 
         $this->assertDatabaseHas('students', ['id' => $student->id]);
         $this->assertDatabaseHas('enrollments', ['id' => $enrollment->id]);
     }
 
-    public function test_deleting_a_student_enrolled_only_in_a_non_finalized_session_is_allowed(): void
-    {
-        $student = Student::factory()->create();
-        $session = ExamSession::factory()->create(['status' => 'generated']);
-        $subject = Subject::factory()->create();
-        Enrollment::factory()->create([
-            'exam_session_id' => $session->id,
-            'student_id' => $student->id,
-            'subject_id' => $subject->id,
-        ]);
-        $staff = User::factory()->create(['role' => 'staff']);
-
-        Livewire::actingAs($staff)
-            ->test(Index::class)
-            ->call('deleteStudent', $student->id)
-            ->assertHasNoErrors();
-
-        $this->assertDatabaseMissing('students', ['id' => $student->id]);
-    }
-
     public function test_bulk_delete_removes_every_selected_student_and_leaves_others(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $toDelete = Student::factory()->count(2)->create();
-        $toKeep = Student::factory()->create();
+        $session = ExamSession::factory()->create();
+        $toDelete = Student::factory()->for($session)->count(2)->create();
+        $toKeep = Student::factory()->for($session)->create();
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->set('selected', $toDelete->pluck('id')->all())
             ->call('bulkDelete');
 
@@ -135,51 +164,28 @@ class StudentsManagementTest extends TestCase
         $this->assertDatabaseHas('students', ['id' => $toKeep->id]);
     }
 
-    public function test_bulk_delete_skips_students_with_finalized_enrollments_but_deletes_the_rest(): void
+    public function test_delete_all_removes_every_student_in_the_session_and_only_that_session(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $safeStudent = Student::factory()->create();
-        $protectedStudent = Student::factory()->create();
-        $session = ExamSession::factory()->create(['status' => 'finalized']);
-        $subject = Subject::factory()->create();
+        $session = ExamSession::factory()->create();
+        $other = ExamSession::factory()->create();
+        Student::factory()->for($session)->count(3)->create();
+        $survivor = Student::factory()->for($other)->create();
 
-        Enrollment::factory()->create([
-            'exam_session_id' => $session->id,
-            'student_id' => $protectedStudent->id,
-            'subject_id' => $subject->id,
-        ]);
-
-        Livewire::actingAs($staff)
-            ->test(Index::class)
-            ->set('selected', [$safeStudent->id, $protectedStudent->id])
-            ->call('bulkDelete')
-            ->assertSee('skipped');
-
-        $this->assertDatabaseMissing('students', ['id' => $safeStudent->id]);
-        $this->assertDatabaseHas('students', ['id' => $protectedStudent->id]);
-    }
-
-    public function test_delete_all_removes_every_student_and_skips_none_with_no_finalized_enrollments(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        Student::factory()->count(3)->create();
-
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->call('deleteAllStudents')
             ->assertSee('3 student(s) deleted');
 
-        $this->assertDatabaseCount('students', 0);
+        $this->assertSame(0, $session->students()->count());
+        $this->assertDatabaseHas('students', ['id' => $survivor->id]);
     }
 
     public function test_delete_all_only_matches_the_current_search_filter(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $matching = Student::factory()->create(['roll_no' => '70111111', 'name' => 'Ali Raza']);
-        $other = Student::factory()->create(['roll_no' => '70222222', 'name' => 'Bilal Ahmed']);
+        $session = ExamSession::factory()->create();
+        $matching = Student::factory()->for($session)->create(['roll_no' => '70111111', 'name' => 'Ali Raza']);
+        $other = Student::factory()->for($session)->create(['roll_no' => '70222222', 'name' => 'Bilal Ahmed']);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->set('search', 'Raza')
             ->call('deleteAllStudents');
 
@@ -187,46 +193,21 @@ class StudentsManagementTest extends TestCase
         $this->assertDatabaseHas('students', ['id' => $other->id]);
     }
 
-    public function test_delete_all_skips_students_with_finalized_enrollments_but_deletes_the_rest(): void
-    {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $safeStudent = Student::factory()->create();
-        $protectedStudent = Student::factory()->create();
-        $session = ExamSession::factory()->create(['status' => 'finalized']);
-        $subject = Subject::factory()->create();
-
-        Enrollment::factory()->create([
-            'exam_session_id' => $session->id,
-            'student_id' => $protectedStudent->id,
-            'subject_id' => $subject->id,
-        ]);
-
-        Livewire::actingAs($staff)
-            ->test(Index::class)
-            ->call('deleteAllStudents')
-            ->assertSee('skipped');
-
-        $this->assertDatabaseMissing('students', ['id' => $safeStudent->id]);
-        $this->assertDatabaseHas('students', ['id' => $protectedStudent->id]);
-    }
-
     public function test_delete_all_with_no_students_shows_a_friendly_message(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->call('deleteAllStudents')
             ->assertSee('No students to delete');
     }
 
     public function test_select_all_on_page_toggles_every_visible_student_and_back_off(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $students = Student::factory()->count(3)->create();
-        $ids = $students->pluck('id')->all();
+        $session = ExamSession::factory()->create();
+        $ids = Student::factory()->for($session)->count(3)->create()->pluck('id')->all();
 
-        $component = Livewire::actingAs($staff)->test(Index::class);
+        $component = $this->openPage($session);
 
         $component->call('toggleSelectAllOnPage', $ids);
         $this->assertEqualsCanonicalizing($ids, $component->get('selected'));
@@ -237,22 +218,22 @@ class StudentsManagementTest extends TestCase
 
     public function test_user_without_manage_enrollments_permission_is_forbidden(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
+        $staff = $this->staff();
         $staff->permissionOverrides()->create(['permission' => 'manage_enrollments', 'granted' => false]);
+        $session = ExamSession::factory()->create();
 
         $this->actingAs($staff)
-            ->get('/students')
+            ->get(route('sessions.students.index', $session))
             ->assertForbidden();
     }
 
     public function test_searching_filters_by_roll_no_or_name(): void
     {
-        Student::factory()->create(['roll_no' => '70111111', 'name' => 'Ali Raza']);
-        Student::factory()->create(['roll_no' => '70222222', 'name' => 'Bilal Ahmed']);
-        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        Student::factory()->for($session)->create(['roll_no' => '70111111', 'name' => 'Ali Raza']);
+        Student::factory()->for($session)->create(['roll_no' => '70222222', 'name' => 'Bilal Ahmed']);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        $this->openPage($session)
             ->set('search', 'Raza')
             ->assertViewHas('students', fn ($students) => $students->count() === 1 && $students->first()->name === 'Ali Raza');
     }

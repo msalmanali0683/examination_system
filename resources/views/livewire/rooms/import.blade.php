@@ -1,5 +1,5 @@
 <x-slot name="header">
-    <x-page-header title="Import Rooms" subtitle="Upload a spreadsheet, map its columns, then review before committing." icon="upload" :back="route('rooms.index')" />
+    <x-page-header title="Import Rooms" subtitle="Upload a spreadsheet, map its columns, then review before committing." icon="upload" :back="route('sessions.rooms.index', $examSession)" />
 </x-slot>
 
 <x-card class="max-w-3xl mx-auto">
@@ -157,7 +157,7 @@
                 {{ $createdCount }} room(s) created, {{ $updatedCount }} updated (matched by name).
             </p>
             <div class="mt-6 flex items-center justify-center gap-3">
-                <x-btn :href="route('rooms.index')" wire:navigate icon="door">View Rooms</x-btn>
+                <x-btn :href="route('sessions.rooms.index', $examSession)" wire:navigate icon="door">View Rooms</x-btn>
                 <x-btn variant="ghost" wire:click="startOver">Import Another File</x-btn>
             </div>
         </div>

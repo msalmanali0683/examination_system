@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Livewire\Rooms\Import;
+use App\Models\ExamSession;
+use App\Models\Room;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -22,7 +24,7 @@ class RoomImportTest extends TestCase
 
     private function csv(): UploadedFile
     {
-        $content = <<<CSV
+        $content = <<<'CSV'
         Room Name,Room Type,Rows,Columns,Capacity
         ITC-401,Regular,10,5,50
         ITC-402,Lab,10,4,35
@@ -36,9 +38,10 @@ class RoomImportTest extends TestCase
     public function test_upload_guesses_column_mapping(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', $this->csv())
             ->assertSet('step', 'map')
             ->assertSet('mapping.name', 0)
@@ -51,9 +54,10 @@ class RoomImportTest extends TestCase
     public function test_confirm_mapping_requires_name_rows_and_columns(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', $this->csv())
             ->set('mapping.rows', '')
             ->call('confirmMapping')
@@ -64,9 +68,10 @@ class RoomImportTest extends TestCase
     public function test_review_flags_missing_required_fields_duplicate_names_and_oversized_capacity(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
         $component = Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', $this->csv())
             ->call('confirmMapping');
 
@@ -82,9 +87,10 @@ class RoomImportTest extends TestCase
     public function test_commit_creates_and_updates_rooms(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', $this->csv())
             ->call('confirmMapping')
             ->call('commitImport')
@@ -112,9 +118,10 @@ class RoomImportTest extends TestCase
     public function test_capacity_is_capped_at_the_rooms_grid_size(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', $this->csv())
             ->call('confirmMapping')
             ->call('commitImport');
@@ -127,13 +134,14 @@ class RoomImportTest extends TestCase
     public function test_missing_capacity_column_defaults_to_the_full_grid(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
-        $content = <<<CSV
+        $session = ExamSession::factory()->create();
+        $content = <<<'CSV'
         Room Name,Rows,Columns
         ITC-999,10,4
         CSV;
 
         Livewire::actingAs($staff)
-            ->test(Import::class)
+            ->test(Import::class, ['examSession' => $session])
             ->set('file', UploadedFile::fake()->createWithContent('rooms-no-capacity.csv', $content))
             ->call('confirmMapping')
             ->call('commitImport');
@@ -144,10 +152,29 @@ class RoomImportTest extends TestCase
     public function test_user_without_manage_rooms_permission_is_forbidden(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
         $staff->permissionOverrides()->create(['permission' => 'manage_rooms', 'granted' => false]);
 
         $this->actingAs($staff)
-            ->get('/rooms/import')
+            ->get(route('sessions.rooms.import', $session))
             ->assertForbidden();
+    }
+
+    public function test_import_only_touches_its_own_sessions_rooms(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $other = ExamSession::factory()->create();
+        $untouched = Room::factory()->for($other)->create(['name' => 'ITC-401', 'rows' => 3, 'columns' => 3, 'capacity' => 9]);
+
+        Livewire::actingAs($staff)
+            ->test(Import::class, ['examSession' => $session])
+            ->set('file', $this->csv())
+            ->call('confirmMapping')
+            ->call('commitImport');
+
+        $this->assertSame(2, $session->rooms()->count());
+        $this->assertSame(9, $untouched->fresh()->capacity);
+        $this->assertSame(1, $other->rooms()->count());
     }
 }

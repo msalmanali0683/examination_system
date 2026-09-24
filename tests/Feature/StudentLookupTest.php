@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Sessions\StudentLookup;
+use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
@@ -24,10 +25,10 @@ class StudentLookupTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['name' => 'ITC-310']);
+        $room = Room::factory()->for($session)->create(['name' => 'ITC-310']);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $teacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Ms Huria']);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Ms Huria']);
         $student = Student::factory()->create(['roll_no' => '70180938', 'name' => 'Moeez Arif']);
 
         $enrollment = Enrollment::factory()->create([
@@ -46,7 +47,7 @@ class StudentLookupTest extends TestCase
             'column_number' => 3,
         ]);
 
-        \App\Models\DutyAssignment::create([
+        DutyAssignment::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
             'time_slot_id' => $slot->id,
@@ -96,7 +97,7 @@ class StudentLookupTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();

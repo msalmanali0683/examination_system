@@ -55,7 +55,7 @@ class SectionTeachers extends Component
 
         $teacherId = $this->selection[$subjectId][$section] ?? null;
 
-        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+        if (! $teacherId || ! $this->examSession->teachers()->whereKey($teacherId)->exists()) {
             session()->flash('error', 'Pick a teacher before changing.');
 
             return;
@@ -116,7 +116,7 @@ class SectionTeachers extends Component
 
         return view('livewire.sessions.section-teachers', [
             'rows' => $rows,
-            'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
+            'activeTeachers' => $this->examSession->teachers()->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 }

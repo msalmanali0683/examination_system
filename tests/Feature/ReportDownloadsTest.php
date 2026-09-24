@@ -44,10 +44,10 @@ class ReportDownloadsTest extends TestCase
     private function seedSession(array $attributes = []): ExamSession
     {
         $session = ExamSession::factory()->create($attributes);
-        $room = Room::factory()->create(['rows' => 2, 'columns' => 2, 'capacity' => 4]);
+        $room = Room::factory()->for($session)->create(['rows' => 2, 'columns' => 2, 'capacity' => 4]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         foreach ([['r' => 1, 'c' => 1], ['r' => 2, 'c' => 1]] as $seat) {
             $student = Student::factory()->create();
@@ -185,13 +185,13 @@ class ReportDownloadsTest extends TestCase
     public function test_teacher_attendance_lists_one_row_per_duty_even_for_the_same_teacher_same_day(): void
     {
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
 
-        $roomA = Room::factory()->create(['name' => 'ITC-501']);
+        $roomA = Room::factory()->for($session)->create(['name' => 'ITC-501']);
         $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slotA->id, 'room_id' => $roomA->id]);
 
-        $roomB = Room::factory()->create(['name' => 'ITC-502']);
+        $roomB = Room::factory()->for($session)->create(['name' => 'ITC-502']);
         $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30', 'end_time' => '13:30']);
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slotB->id, 'room_id' => $roomB->id]);
 
@@ -215,8 +215,8 @@ class ReportDownloadsTest extends TestCase
     public function test_teacher_attendance_sheet_matches_the_template_columns_and_title(): void
     {
         $session = ExamSession::factory()->create(['name' => 'Mid Term Examination BSAI (Spring 2026)']);
-        $teacher = Teacher::factory()->create(['is_active' => true, 'name' => 'Ms Ayesha']);
-        $room = Room::factory()->create(['name' => 'ITC-501']);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Ms Ayesha']);
+        $room = Room::factory()->for($session)->create(['name' => 'ITC-501']);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
 
@@ -351,8 +351,8 @@ class ReportDownloadsTest extends TestCase
     public function test_simple_datesheet_lists_a_subject_once_per_slot_even_when_split_across_rooms(): void
     {
         $session = ExamSession::factory()->create();
-        $roomA = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
-        $roomB = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $roomA = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $roomB = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '12:00']);
         $subject = Subject::factory()->create(['title' => 'Programming Fundamentals']);
 
@@ -390,12 +390,12 @@ class ReportDownloadsTest extends TestCase
         // template needs both rooms on the SAME row (Room 1.../Room 2...),
         // not one row per room like the flat Master Datesheet.
         $session = ExamSession::factory()->create();
-        $roomA = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-501']);
-        $roomB = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-502']);
+        $roomA = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-501']);
+        $roomB = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1, 'name' => 'ITC-502']);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
         $subject = Subject::factory()->create(['code' => 'CS02115|11', 'title' => 'Programming Fundamentals']);
-        $teacherA = Teacher::factory()->create(['is_active' => true, 'name' => 'Ms Ayesha']);
-        $teacherB = Teacher::factory()->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Ms Ayesha']);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Mr Zoraiz']);
 
         foreach ([[$roomA, $teacherA], [$roomB, $teacherB]] as [$room, $teacher]) {
             $student = Student::factory()->create();
@@ -472,11 +472,11 @@ class ReportDownloadsTest extends TestCase
     private function seedTwoDateSession(): array
     {
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $room = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
 
         $slotOne = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-04']);
         $subjectOne = Subject::factory()->create(['code' => 'DAY1-SUBJ']);
-        $teacherOne = Teacher::factory()->create(['is_active' => true, 'name' => 'Day One Teacher']);
+        $teacherOne = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Day One Teacher']);
         $studentOne = Student::factory()->create();
         $enrollmentOne = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'student_id' => $studentOne->id, 'subject_id' => $subjectOne->id, 'section' => 'A',
@@ -489,10 +489,10 @@ class ReportDownloadsTest extends TestCase
             'exam_session_id' => $session->id, 'teacher_id' => $teacherOne->id, 'time_slot_id' => $slotOne->id, 'room_id' => $room->id,
         ]);
 
-        $roomTwo = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+        $roomTwo = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
         $slotTwo = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-05']);
         $subjectTwo = Subject::factory()->create(['code' => 'DAY2-SUBJ']);
-        $teacherTwo = Teacher::factory()->create(['is_active' => true, 'name' => 'Day Two Teacher']);
+        $teacherTwo = Teacher::factory()->for($session)->create(['is_active' => true, 'name' => 'Day Two Teacher']);
         $studentTwo = Student::factory()->create();
         $enrollmentTwo = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'student_id' => $studentTwo->id, 'subject_id' => $subjectTwo->id, 'section' => 'B',
@@ -548,10 +548,10 @@ class ReportDownloadsTest extends TestCase
         $subjects = [];
 
         foreach (['09:00', '11:30', '14:00'] as $i => $time) {
-            $room = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
+            $room = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
             $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-05-04', 'start_time' => $time]);
             $subject = Subject::factory()->create(['code' => 'SLOT'.$i.'-SUBJ']);
-            $teacher = Teacher::factory()->create(['is_active' => true]);
+            $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
             $student = Student::factory()->create();
             $enrollment = Enrollment::factory()->create([
                 'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'A',

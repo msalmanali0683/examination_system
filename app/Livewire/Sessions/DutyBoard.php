@@ -80,7 +80,7 @@ class DutyBoard extends Component
             return;
         }
 
-        $teacher = Teacher::where('id', $newTeacherId)->where('is_active', true)->first();
+        $teacher = $this->examSession->teachers()->where('id', $newTeacherId)->where('is_active', true)->first();
 
         if (! $teacher) {
             session()->flash('error', 'That teacher is not active.');
@@ -191,7 +191,7 @@ class DutyBoard extends Component
     {
         $this->authorize('manage_sessions');
 
-        $teacher = Teacher::find($teacherId);
+        $teacher = $this->examSession->teachers()->find($teacherId);
 
         if (! $teacher) {
             return;
@@ -231,7 +231,7 @@ class DutyBoard extends Component
 
         $constraints = SessionTeacherConstraint::where('exam_session_id', $this->examSession->id)->get()->keyBy('teacher_id');
 
-        return Teacher::where('is_active', true)
+        return $this->examSession->teachers()->where('is_active', true)
             ->orderBy('name')
             ->get()
             ->map(function (Teacher $teacher) use ($counts, $constraints) {
@@ -277,7 +277,7 @@ class DutyBoard extends Component
                 ->get()
                 ->keyBy('teacher_id');
 
-            $candidates = Teacher::where('is_active', true)
+            $candidates = $this->examSession->teachers()->where('is_active', true)
                 ->orderBy('name')
                 ->get()
                 ->filter(function (Teacher $teacher) use ($constraints, $slot) {

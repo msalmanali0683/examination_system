@@ -602,12 +602,12 @@ class Timetable extends Component
             ->get()
             ->groupBy('subject_id');
 
-        $roomTemplate = $this->examSession->sessionRooms()->where('is_active', true)->with('room')->get()
-            ->map(fn ($sr) => [
-                'room_id' => $sr->room_id,
-                'rows' => $sr->room->rows,
-                'columns' => $sr->room->columns,
-                'capacity' => $sr->effectiveCapacity(),
+        $roomTemplate = $this->examSession->rooms()->where('is_active', true)->get()
+            ->map(fn ($room) => [
+                'room_id' => $room->id,
+                'rows' => $room->rows,
+                'columns' => $room->columns,
+                'capacity' => $room->capacity,
                 'occupied' => [],
             ])
             ->sortByDesc('capacity')
@@ -679,8 +679,7 @@ class Timetable extends Component
         // subjects already assigned there are using — that's what the Pin
         // dropdown needs to show so the admin can see, before picking a
         // slot, whether it still has room for this subject's students.
-        $seatsAvailableTotal = $this->examSession->sessionRooms()->where('is_active', true)->with('room')->get()
-            ->sum(fn ($sr) => $sr->effectiveCapacity());
+        $seatsAvailableTotal = $this->examSession->rooms()->where('is_active', true)->sum('capacity');
 
         $seatsUsedPerSlot = $subjects
             ->filter(fn (Subject $s) => $assignments->get($s->id)?->time_slot_id !== null && ! $assignments->get($s->id)?->is_excluded)

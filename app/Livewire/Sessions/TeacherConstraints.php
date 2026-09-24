@@ -88,7 +88,7 @@ class TeacherConstraints extends Component
         }
 
         DB::transaction(function () use ($min, $max) {
-            foreach (Teacher::where('is_active', true)->pluck('id') as $teacherId) {
+            foreach ($this->examSession->teachers()->where('is_active', true)->pluck('id') as $teacherId) {
                 $this->apply($this->constraintFor($teacherId), [
                     'min_duties' => $min,
                     'max_duties' => $max,
@@ -132,7 +132,7 @@ class TeacherConstraints extends Component
         }
 
         DB::transaction(function () use ($day, $available) {
-            foreach (Teacher::where('is_active', true)->pluck('id') as $teacherId) {
+            foreach ($this->examSession->teachers()->where('is_active', true)->pluck('id') as $teacherId) {
                 $constraint = $this->constraintFor($teacherId);
                 $unavailable = $constraint->unavailable_days ?? [];
 
@@ -190,7 +190,7 @@ class TeacherConstraints extends Component
         );
 
         return view('livewire.sessions.teacher-constraints', [
-            'teachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
+            'teachers' => $this->examSession->teachers()->where('is_active', true)->orderBy('name')->get(),
             'constraints' => $constraints,
             'allAvailableByDay' => $allAvailableByDay,
         ]);

@@ -25,11 +25,11 @@ class DutySheetEmailTest extends TestCase
 
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        $withEmail = Teacher::factory()->create(['is_active' => true, 'email' => 'huria@example.com']);
-        $withoutEmail = Teacher::factory()->create(['is_active' => true, 'email' => null]);
+        $withEmail = Teacher::factory()->for($session)->create(['is_active' => true, 'email' => 'huria@example.com']);
+        $withoutEmail = Teacher::factory()->for($session)->create(['is_active' => true, 'email' => null]);
 
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $withEmail->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
         DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $withoutEmail->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);

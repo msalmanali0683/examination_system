@@ -140,8 +140,12 @@ class Show extends Component
     {
         return view('livewire.sessions.show', [
             'enrollmentCount' => $this->examSession->enrollments()->count(),
-            'studentCount' => $this->examSession->enrollments()->distinct()->count('student_id'),
-            'subjectCount' => $this->examSession->enrollments()->distinct()->count('subject_id'),
+            'studentCount' => $this->examSession->students()->count(),
+            'subjectCount' => $this->examSession->subjects()->count(),
+            'roomCount' => $this->examSession->rooms()->count(),
+            'activeRoomCount' => $this->examSession->rooms()->where('is_active', true)->count(),
+            'seatCount' => (int) $this->examSession->rooms()->where('is_active', true)->sum('capacity'),
+            'teacherCount' => $this->examSession->teachers()->count(),
             'activityLogs' => $this->examSession->activityLogs()->with('user')->latest('created_at')->take(50)->get(),
         ]);
     }

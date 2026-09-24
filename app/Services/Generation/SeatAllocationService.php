@@ -86,17 +86,17 @@ class SeatAllocationService
     }
 
     /**
-     * Same as preview(), but allocates against every room defined in the
-     * system (active or not, in this session or not) rather than just the
-     * session's active rooms. Used to answer "how many rooms would this
-     * slot truly need" independent of what's currently activated — the
-     * basis for the capacity/requirement check's shortfall numbers.
+     * Same as preview(), but allocates against every room this session
+     * has (active or not) rather than just its active ones. Used to
+     * answer "how many rooms would this slot truly need" independent of
+     * which rooms are currently switched on — the basis for the
+     * capacity/requirement check's shortfall numbers.
      *
      * @return Collection<int, array{slot: TimeSlot, result: SeatingResult, roomsUsed: int}>
      */
     public function previewAgainstAllRooms(ExamSession $session, ?SeatingStrategy $strategyOverride = null): Collection
     {
-        return $this->allocatePerSlot($session, $this->allRoomsPool(), $strategyOverride)->map(fn ($pair) => [
+        return $this->allocatePerSlot($session, $this->allRoomsPool($session), $strategyOverride)->map(fn ($pair) => [
             'slot' => $pair[0],
             'result' => $pair[1],
             'roomsUsed' => collect($pair[1]->placements)->pluck('roomId')->unique()->count(),
@@ -105,7 +105,7 @@ class SeatAllocationService
 
     /**
      * The number of rooms this slot would truly need to seat everyone,
-     * even beyond however many rooms actually exist in the system today
+     * even beyond however many rooms this session actually has today
      * — used when previewAgainstAllRooms() still leaves students unseated
      * with every real room, so the capacity check can report an honest
      * shortfall instead of a flat "one more room" guess. Simulated by
@@ -125,7 +125,7 @@ class SeatAllocationService
             return 0;
         }
 
-        $pool = $this->allRoomsPool();
+        $pool = $this->allRoomsPool($session);
         $largest = $pool->sortByDesc('capacity')->first();
 
         if ($largest === null) {
@@ -162,9 +162,9 @@ class SeatAllocationService
      * any particular session — the ceiling used to tell "you have more
      * rooms to activate" apart from "no more rooms exist anywhere".
      */
-    public function totalSystemRoomsCount(): int
+    public function totalSystemRoomsCount(ExamSession $session): int
     {
-        return $this->allRoomsPool()->count();
+        return $this->allRoomsPool($session)->count();
     }
 
     /**
@@ -172,20 +172,20 @@ class SeatAllocationService
      */
     private function activeSessionRoomPool(ExamSession $session): Collection
     {
-        return $session->sessionRooms()->where('is_active', true)->with('room')->get()->map(fn ($sr) => [
-            'room_id' => $sr->room_id,
-            'rows' => $sr->room->rows,
-            'columns' => $sr->room->columns,
-            'capacity' => $sr->effectiveCapacity(),
+        return $session->rooms()->where('is_active', true)->get()->map(fn (Room $room) => [
+            'room_id' => $room->id,
+            'rows' => $room->rows,
+            'columns' => $room->columns,
+            'capacity' => $room->capacity,
         ]);
     }
 
     /**
      * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
      */
-    private function allRoomsPool(): Collection
+    private function allRoomsPool(ExamSession $session): Collection
     {
-        return Room::where('is_active', true)->get()->map(fn (Room $room) => [
+        return $session->rooms()->get()->map(fn (Room $room) => [
             'room_id' => $room->id,
             'rows' => $room->rows,
             'columns' => $room->columns,

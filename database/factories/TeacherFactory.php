@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\ExamSession;
 use App\Models\Teacher;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,6 +19,7 @@ class TeacherFactory extends Factory
     public function definition(): array
     {
         return [
+            'exam_session_id' => ExamSession::factory(),
             'name' => fake()->name(),
             'designation' => 'Lecturer',
             'department' => 'Software Engineering',

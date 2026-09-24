@@ -6,7 +6,6 @@ use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SeatAssignment;
-use App\Models\SessionRoom;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SubjectSlotAssignment;
@@ -37,8 +36,7 @@ class SeatAllocationServiceTest extends TestCase
     public function test_strict_strategy_seats_a_subject_section_in_one_room_column_by_column(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subject = Subject::factory()->create();
@@ -64,10 +62,8 @@ class SeatAllocationServiceTest extends TestCase
     public function test_two_subjects_in_the_same_slot_never_share_a_room_under_strict(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $roomA = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        $roomB = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomA->id, 'is_active' => true]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomB->id, 'is_active' => true]);
+        $roomA = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        $roomB = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subjectA = Subject::factory()->create();
@@ -90,8 +86,7 @@ class SeatAllocationServiceTest extends TestCase
     public function test_locked_seats_are_preserved_on_regeneration(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subject = Subject::factory()->create();
@@ -134,8 +129,7 @@ class SeatAllocationServiceTest extends TestCase
         // regenerated), the stale row from its old slot collided with the
         // new insert and crashed with a duplicate-key error.
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
         $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
 
@@ -161,8 +155,7 @@ class SeatAllocationServiceTest extends TestCase
     public function test_insufficient_capacity_produces_warnings(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $room = Room::factory()->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subject = Subject::factory()->create();
@@ -178,10 +171,8 @@ class SeatAllocationServiceTest extends TestCase
     public function test_inactive_session_rooms_are_not_used(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
-        $activeRoom = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        $inactiveRoom = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom->id, 'is_active' => true]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $inactiveRoom->id, 'is_active' => false]);
+        $activeRoom = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
+        $inactiveRoom = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10, 'is_active' => false]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $subject = Subject::factory()->create();
@@ -197,8 +188,7 @@ class SeatAllocationServiceTest extends TestCase
     public function test_strict_overflow_subject_strategy_fills_leftover_seats_with_a_different_subject(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict_overflow_subject']);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $primarySubject = Subject::factory()->create();
@@ -226,8 +216,7 @@ class SeatAllocationServiceTest extends TestCase
     public function test_strict_overflow_section_then_subject_strategy_prefers_a_section_but_falls_back_to_another_subject(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict_overflow_section_then_subject']);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $primarySubject = Subject::factory()->create();

@@ -2,15 +2,23 @@
 
 namespace App\Livewire\Subjects;
 
-use App\Models\Subject;
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ExamSession;
 use App\Services\SubjectMergeService;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * A session's own subjects — created from its enrollment import, and never
+ * shared with any other session.
+ */
 class Index extends Component
 {
+    use GuardsFinalizedSession;
     use WithPagination;
+
+    public ExamSession $examSession;
 
     public int $perPage = 25;
 
@@ -33,9 +41,10 @@ class Index extends Component
      */
     public string $survivorId = '';
 
-    public function mount(): void
+    public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_subjects');
+        $this->examSession = $examSession;
     }
 
     public function updatedSearch(): void
@@ -102,6 +111,10 @@ class Index extends Component
     {
         $this->authorize('manage_subjects');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         // Checkbox values arrive as strings (e.g. "1"), so $selected is an
         // array of strings — normalize before comparing against the
         // (int)-cast survivor id, or a strict in_array() check here would
@@ -115,7 +128,7 @@ class Index extends Component
             return;
         }
 
-        $keep = Subject::find($survivorId);
+        $keep = $this->examSession->subjects()->find($survivorId);
         $mergeAwayIds = array_values(array_diff($selectedIds, [$survivorId]));
 
         if (! $keep || empty($mergeAwayIds)) {
@@ -129,7 +142,7 @@ class Index extends Component
         $merged = 0;
 
         foreach ($mergeAwayIds as $mergeAwayId) {
-            $mergeAway = Subject::find($mergeAwayId);
+            $mergeAway = $this->examSession->subjects()->find($mergeAwayId);
 
             if (! $mergeAway || $mergeAway->isMerged()) {
                 continue;
@@ -168,7 +181,7 @@ class Index extends Component
     public function render()
     {
         return view('livewire.subjects.index', [
-            'subjects' => Subject::with('mergedInto')
+            'subjects' => $this->examSession->subjects()->with('mergedInto')
                 ->when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
                     ->where('code', 'like', "%{$this->search}%")
                     ->orWhere('title', 'like', "%{$this->search}%")

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
-use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
@@ -36,12 +35,11 @@ class SlotCapacitySimulatorTest extends TestCase
     public function test_it_works_directly_from_enrollments_with_no_timetable_or_subject_slot_assignments_at_all(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
-        Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => Room::first()->id, 'is_active' => true]);
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         // No TimeSlot, no SubjectSlotAssignment created anywhere in this test.
         $result = (new SlotCapacitySimulator)->simulate($session);
@@ -59,10 +57,7 @@ class SlotCapacitySimulatorTest extends TestCase
         // so a capacity-aware packer should fit every one of them into a
         // single simulated slot instead of splitting into fixed batches.
         $session = ExamSession::factory()->create();
-        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         $big = Subject::factory()->create();
         $medium = Subject::factory()->create();
@@ -88,10 +83,7 @@ class SlotCapacitySimulatorTest extends TestCase
         // than being force-fit or dropped. Demonstrates slots naturally
         // needing different numbers of rooms (4 vs 1), not a fixed count.
         $session = ExamSession::factory()->create();
-        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         $subjects = Subject::factory()->count(5)->create();
         $this->enrollStudents($session, $subjects[0], 'A', 10);
@@ -115,10 +107,7 @@ class SlotCapacitySimulatorTest extends TestCase
         // capacity for all four in one slot — but capped at 1 subject per
         // slot, so each one must get its own even though nothing forces it.
         $session = ExamSession::factory()->create();
-        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         $subjects = Subject::factory()->count(4)->create();
         foreach ($subjects as $subject) {
@@ -135,10 +124,7 @@ class SlotCapacitySimulatorTest extends TestCase
     {
         // 4 rooms, plenty of capacity — each subject needs only one room.
         $session = ExamSession::factory()->create();
-        Room::factory()->count(4)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
 
         $subjectA = Subject::factory()->create();
         $subjectB = Subject::factory()->create();
@@ -174,10 +160,7 @@ class SlotCapacitySimulatorTest extends TestCase
     public function test_every_section_of_a_subject_stays_in_the_same_simulated_slot(): void
     {
         $session = ExamSession::factory()->create();
-        Room::factory()->count(3)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(3)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         $multiSection = Subject::factory()->create();
         $this->enrollStudents($session, $multiSection, 'BSAI 1A', 6);
@@ -201,10 +184,7 @@ class SlotCapacitySimulatorTest extends TestCase
         // could never allow, so the simulator must not allow it either,
         // even though it would otherwise pack them into one slot.
         $session = ExamSession::factory()->create();
-        Room::factory()->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
 
         $subjectA = Subject::factory()->create();
         $subjectB = Subject::factory()->create();
@@ -227,14 +207,13 @@ class SlotCapacitySimulatorTest extends TestCase
     public function test_teachers_available_excludes_teachers_excluded_from_this_session(): void
     {
         $session = ExamSession::factory()->create();
-        Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => Room::first()->id, 'is_active' => true]);
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
 
-        $available = Teacher::factory()->create(['is_active' => true]);
-        $excluded = Teacher::factory()->create(['is_active' => true]);
+        $available = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $excluded = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $excluded->id,
@@ -249,14 +228,13 @@ class SlotCapacitySimulatorTest extends TestCase
     public function test_teachers_available_excludes_teachers_capped_at_zero_max_duties(): void
     {
         $session = ExamSession::factory()->create();
-        Room::factory()->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => Room::first()->id, 'is_active' => true]);
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
 
-        $available = Teacher::factory()->create(['is_active' => true]);
-        $zeroMax = Teacher::factory()->create(['is_active' => true]);
+        $available = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $zeroMax = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $zeroMax->id,
@@ -277,11 +255,8 @@ class SlotCapacitySimulatorTest extends TestCase
         // exceed 2 (there's nowhere else to place anyone), which must not
         // be allowed to read as "0 shortfall" against roomsAvailable=2.
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
-        Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 15);
@@ -308,10 +283,7 @@ class SlotCapacitySimulatorTest extends TestCase
     public function test_a_subject_with_more_students_than_one_room_holds_needs_multiple_rooms(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 2]);
-        Room::factory()->count(2)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        foreach (Room::all() as $room) {
-            SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
-        }
+        Room::factory()->for($session)->count(2)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 8);

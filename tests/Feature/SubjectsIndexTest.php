@@ -16,23 +16,29 @@ class SubjectsIndexTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function staff(): User
+    {
+        return User::factory()->create(['role' => 'staff']);
+    }
+
     public function test_user_without_manage_subjects_permission_is_forbidden(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
+        $staff = $this->staff();
         $staff->permissionOverrides()->create(['permission' => 'manage_subjects', 'granted' => false]);
+        $session = ExamSession::factory()->create();
 
         $this->actingAs($staff)
-            ->get('/subjects')
+            ->get(route('sessions.subjects.index', $session))
             ->assertForbidden();
     }
 
     public function test_subjects_are_listed_and_searchable(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        Subject::factory()->create(['code' => 'CS02115|11', 'title' => 'Programming Fundamentals']);
-        Subject::factory()->create(['code' => 'MAT10130|11', 'title' => 'Pre-Calculus I']);
+        $session = ExamSession::factory()->create();
+        Subject::factory()->for($session)->create(['code' => 'CS02115|11', 'title' => 'Programming Fundamentals']);
+        Subject::factory()->for($session)->create(['code' => 'MAT10130|11', 'title' => 'Pre-Calculus I']);
 
-        $component = Livewire::actingAs($staff)->test(Index::class);
+        $component = Livewire::actingAs($this->staff())->test(Index::class, ['examSession' => $session]);
         $this->assertCount(2, $component->viewData('subjects'));
 
         $component->set('search', 'Pre-Calculus');
@@ -40,19 +46,29 @@ class SubjectsIndexTest extends TestCase
         $this->assertSame('MAT10130|11', $component->viewData('subjects')->first()->code);
     }
 
+    public function test_only_this_sessions_subjects_are_listed(): void
+    {
+        $session = ExamSession::factory()->create();
+        Subject::factory()->for($session)->create(['code' => 'CS101|11']);
+        Subject::factory()->for(ExamSession::factory()->create())->create(['code' => 'EE999|11']);
+
+        $component = Livewire::actingAs($this->staff())->test(Index::class, ['examSession' => $session]);
+
+        $this->assertSame(['CS101|11'], $component->viewData('subjects')->pluck('code')->all());
+    }
+
     public function test_merging_two_subjects_moves_enrollments_and_flags_the_merged_one(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $keep = Subject::factory()->create(['code' => 'EE07205|11', 'title' => 'Digital Logic and Design']);
-        $mergeAway = Subject::factory()->create(['code' => 'EES07104|11', 'title' => 'Digital Logic Design']);
         $session = ExamSession::factory()->create(['status' => 'draft']);
-        $student = Student::factory()->create();
+        $keep = Subject::factory()->for($session)->create(['code' => 'EE07205|11', 'title' => 'Digital Logic and Design']);
+        $mergeAway = Subject::factory()->for($session)->create(['code' => 'EES07104|11', 'title' => 'Digital Logic Design']);
+        $student = Student::factory()->for($session)->create();
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $mergeAway->id,
         ]);
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
             // Checkbox values arrive as strings in real usage (unlike a
             // plain PHP array of int ids) — regression coverage for a bug
             // where a strict in_array() comparison against an (int)-cast
@@ -76,13 +92,43 @@ class SubjectsIndexTest extends TestCase
         $this->assertSame($keep->id, $mergeAway->fresh()->merged_into_id);
     }
 
+    public function test_a_subject_from_another_session_cannot_be_merged_in(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'draft']);
+        $keep = Subject::factory()->for($session)->create();
+        $foreign = Subject::factory()->for(ExamSession::factory()->create())->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->set('selected', [(string) $keep->id, (string) $foreign->id])
+            ->set('survivorId', (string) $keep->id)
+            ->call('confirmMerge');
+
+        $this->assertNull($foreign->fresh()->merged_into_id);
+    }
+
+    public function test_merging_is_blocked_on_a_finalized_session(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
+        $keep = Subject::factory()->for($session)->create();
+        $mergeAway = Subject::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->set('selected', [(string) $keep->id, (string) $mergeAway->id])
+            ->set('survivorId', (string) $keep->id)
+            ->call('confirmMerge');
+
+        $this->assertNull($mergeAway->fresh()->merged_into_id);
+    }
+
     public function test_opening_the_merge_modal_with_fewer_than_two_selected_shows_an_error(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $subject = Subject::factory()->create();
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
 
-        Livewire::actingAs($staff)
-            ->test(Index::class)
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
             ->set('selected', [$subject->id])
             ->call('openMergeModal')
             ->assertSet('showMergeModal', false);
@@ -90,14 +136,14 @@ class SubjectsIndexTest extends TestCase
 
     public function test_select_all_on_page_excludes_already_merged_subjects(): void
     {
-        $staff = User::factory()->create(['role' => 'staff']);
-        $active = Subject::factory()->count(2)->create();
-        $survivor = Subject::factory()->create();
-        $merged = Subject::factory()->create(['merged_into_id' => $survivor->id]);
+        $session = ExamSession::factory()->create();
+        $active = Subject::factory()->for($session)->count(2)->create();
+        $survivor = Subject::factory()->for($session)->create();
+        $merged = Subject::factory()->for($session)->create(['merged_into_id' => $survivor->id]);
 
         $pageIds = [...$active->pluck('id')->all(), $survivor->id];
 
-        $component = Livewire::actingAs($staff)->test(Index::class);
+        $component = Livewire::actingAs($this->staff())->test(Index::class, ['examSession' => $session]);
         $component->call('toggleSelectAllOnPage', $pageIds);
 
         $this->assertEqualsCanonicalizing($pageIds, $component->get('selected'));

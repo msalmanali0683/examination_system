@@ -37,10 +37,10 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
-        $oldTeacher = Teacher::factory()->create(['is_active' => true]);
-        $newTeacher = Teacher::factory()->create(['is_active' => true]);
+        $oldTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $newTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $duty = $this->duty($session, $slot, $room, $oldTeacher);
 
         Livewire::actingAs($staff)
@@ -56,10 +56,10 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $oldTeacher = Teacher::factory()->create(['is_active' => true]);
-        $newTeacher = Teacher::factory()->create(['is_active' => true]);
+        $oldTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $newTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $duty = $this->duty($session, $slot, $room, $oldTeacher, locked: true);
 
         Livewire::actingAs($staff)
@@ -73,10 +73,10 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $oldTeacher = Teacher::factory()->create(['is_active' => true]);
-        $excludedTeacher = Teacher::factory()->create(['is_active' => true]);
+        $oldTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $excludedTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $excludedTeacher->id,
@@ -95,11 +95,11 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $roomA = Room::factory()->create();
-        $roomB = Room::factory()->create();
+        $roomA = Room::factory()->for($session)->create();
+        $roomB = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $teacherA = Teacher::factory()->create(['is_active' => true]);
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
         $dutyA = $this->duty($session, $slot, $roomA, $teacherA);
         $this->duty($session, $slot, $roomB, $teacherB); // teacherB already on duty this slot
 
@@ -114,9 +114,9 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $duty = $this->duty($session, $slot, $room, $teacher);
 
         $component = Livewire::actingAs($staff)->test(DutyBoard::class, ['examSession' => $session]);
@@ -133,10 +133,10 @@ class DutyBoardTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $staff->permissionOverrides()->create(['permission' => 'edit_assignments', 'granted' => false]);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
-        $newTeacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $newTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $duty = $this->duty($session, $slot, $room, $teacher);
 
         Livewire::actingAs($staff)
@@ -162,7 +162,7 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'draft', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
@@ -179,7 +179,7 @@ class DutyBoardTest extends TestCase
             'row_number' => 1,
             'column_number' => 1,
         ]);
-        Teacher::factory()->create(['is_active' => true]);
+        Teacher::factory()->for($session)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(DutyBoard::class, ['examSession' => $session])
@@ -193,9 +193,9 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $teacher = Teacher::factory()->create(['name' => 'Dr Naveed']);
-        $roomA = Room::factory()->create(['name' => 'Room A']);
-        $roomB = Room::factory()->create(['name' => 'Room B']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Dr Naveed']);
+        $roomA = Room::factory()->for($session)->create(['name' => 'Room A']);
+        $roomB = Room::factory()->for($session)->create(['name' => 'Room B']);
         $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '11:00']);
         $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '13:00', 'end_time' => '15:00']);
 
@@ -222,9 +222,9 @@ class DutyBoardTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $this->duty($session, $slot, $room, $teacher);
 
         $component = Livewire::actingAs($staff)->test(DutyBoard::class, ['examSession' => $session]);

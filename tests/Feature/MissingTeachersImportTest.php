@@ -61,8 +61,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $teacher = Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
         $this->enroll($session, $subject, 'BSAI 1A', 3);
 
         $component = Livewire::actingAs($staff)
@@ -87,7 +87,7 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
         $this->enroll($session, $subject, 'BSAI 1A');
 
         $component = Livewire::actingAs($staff)
@@ -109,8 +109,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $teacher = Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
         $this->enroll($session, $subject, 'BSAI 1A', 2);
 
         $component = Livewire::actingAs($staff)
@@ -135,9 +135,9 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $existingTeacher = Teacher::factory()->create(['name' => 'Original Teacher', 'is_active' => true]);
-        $newTeacher = Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $existingTeacher = Teacher::factory()->for($session)->create(['name' => 'Original Teacher', 'is_active' => true]);
+        $newTeacher = Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
 
         $already = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => $existingTeacher->id,
@@ -160,8 +160,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
         $this->enroll($session, $subject, 'BSAI 1A');
 
         $component = Livewire::actingAs($staff)
@@ -190,8 +190,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized']);
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
         $missing = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
         ]);
@@ -210,8 +210,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
         ]);
@@ -236,9 +236,9 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $ignoredSubject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $pendingSubject = Subject::factory()->create(['code' => 'CS202', 'title' => 'Data Structures']);
-        $teacher = Teacher::factory()->create(['name' => 'Huria Ali', 'is_active' => true]);
+        $ignoredSubject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $pendingSubject = Subject::factory()->for($session)->create(['code' => 'CS202', 'title' => 'Data Structures']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Huria Ali', 'is_active' => true]);
 
         $ignoredEnrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $ignoredSubject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
@@ -287,7 +287,7 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
         $this->enroll($session, $subject, 'BSAI 1A');
 
         $response = $this->actingAs($staff)->get(route('sessions.missing-teachers.template', $session));
@@ -303,8 +303,8 @@ class MissingTeachersImportTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $ignoredSubject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $pendingSubject = Subject::factory()->create(['code' => 'CS202', 'title' => 'Data Structures']);
+        $ignoredSubject = Subject::factory()->for($session)->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $pendingSubject = Subject::factory()->for($session)->create(['code' => 'CS202', 'title' => 'Data Structures']);
         $this->enroll($session, $ignoredSubject, 'BSAI 1A');
         $this->enroll($session, $pendingSubject, 'BSAI 1A');
         $session->update(['ignored_missing_teacher_sections' => [

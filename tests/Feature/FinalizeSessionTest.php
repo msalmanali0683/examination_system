@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
-use App\Livewire\Sessions\RoomSelection;
 use App\Livewire\Sessions\SeatingChart;
 use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
@@ -88,24 +88,25 @@ class FinalizeSessionTest extends TestCase
         ]);
     }
 
-    public function test_room_selection_is_blocked_on_a_finalized_session(): void
+    public function test_room_changes_are_blocked_on_a_finalized_session(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
-            ->test(RoomSelection::class, ['examSession' => $session])
-            ->call('toggleRoom', $room->id);
+            ->test(RoomsIndex::class, ['examSession' => $session])
+            ->call('toggleActive', $room->id)
+            ->call('deleteRoom', $room->id);
 
-        $this->assertDatabaseMissing('session_rooms', ['exam_session_id' => $session->id, 'room_id' => $room->id]);
+        $this->assertDatabaseHas('rooms', ['id' => $room->id, 'is_active' => true]);
     }
 
     public function test_teacher_constraints_are_blocked_on_a_finalized_session(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         Livewire::actingAs($staff)
             ->test(TeacherConstraints::class, ['examSession' => $session])
@@ -160,7 +161,7 @@ class FinalizeSessionTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
-        $room = Room::factory()->create(['rows' => 2, 'columns' => 2, 'capacity' => 4]);
+        $room = Room::factory()->for($session)->create(['rows' => 2, 'columns' => 2, 'capacity' => 4]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $student = Student::factory()->create();
@@ -193,10 +194,10 @@ class FinalizeSessionTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized', 'locked_at' => now()]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-        $teacherA = Teacher::factory()->create(['is_active' => true]);
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
         $duty = DutyAssignment::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacherA->id,

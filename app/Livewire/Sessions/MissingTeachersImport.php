@@ -145,8 +145,8 @@ class MissingTeachersImport extends Component
             return;
         }
 
-        $subjects = Subject::all(['id', 'code', 'title']);
-        $teachers = Teacher::where('is_active', true)->get(['id', 'name']);
+        $subjects = $this->examSession->subjects()->get(['id', 'code', 'title']);
+        $teachers = $this->examSession->teachers()->where('is_active', true)->get(['id', 'name']);
 
         $this->unresolvedSubjects = $this->findUnresolved(
             $this->distinctCellValues('course'),
@@ -193,8 +193,8 @@ class MissingTeachersImport extends Component
             return;
         }
 
-        $subjects = Subject::all(['id', 'code', 'title']);
-        $teachers = Teacher::where('is_active', true)->get(['id', 'name']);
+        $subjects = $this->examSession->subjects()->get(['id', 'code', 'title']);
+        $teachers = $this->examSession->teachers()->where('is_active', true)->get(['id', 'name']);
         $allowedPairs = $this->pendingPairs()
             ->map(fn ($row) => MissingTeacherSections::key($row->subject_id, strtolower(trim($row->section))))
             ->flip();
@@ -367,8 +367,8 @@ class MissingTeachersImport extends Component
 
     private function buildReport(): array
     {
-        $subjects = Subject::all(['id', 'code', 'title']);
-        $teachers = Teacher::where('is_active', true)->get(['id', 'name']);
+        $subjects = $this->examSession->subjects()->get(['id', 'code', 'title']);
+        $teachers = $this->examSession->teachers()->where('is_active', true)->get(['id', 'name']);
         $missingPairs = $this->pendingPairs()
             ->map(fn ($row) => MissingTeacherSections::key($row->subject_id, strtolower(trim($row->section))))
             ->flip();

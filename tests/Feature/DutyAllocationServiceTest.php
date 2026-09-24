@@ -43,11 +43,11 @@ class DutyAllocationServiceTest extends TestCase
     public function test_assigns_the_configured_number_of_invigilators_to_every_room_in_use(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 2]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $this->seatOneStudent($session, $subject, $slot, $room);
-        $teachers = Teacher::factory()->count(2)->create(['is_active' => true]);
+        $teachers = Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
 
         // Give both teachers a minimum of 0 so this test isolates "does
         // every room get its invigilators" from the separate fairness
@@ -70,7 +70,7 @@ class DutyAllocationServiceTest extends TestCase
     public function test_no_seating_means_no_slots_need_invigilators(): void
     {
         $session = ExamSession::factory()->create();
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         $result = (new DutyAllocationService)->generate($session);
 
@@ -81,13 +81,13 @@ class DutyAllocationServiceTest extends TestCase
     public function test_regenerating_leaves_locked_duties_untouched(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
         $this->seatOneStudent($session, $subject, $slot, $room);
 
-        $lockedTeacher = Teacher::factory()->create(['is_active' => true]);
-        Teacher::factory()->count(2)->create(['is_active' => true]);
+        $lockedTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
 
         DutyAssignment::create([
             'exam_session_id' => $session->id,
@@ -112,14 +112,14 @@ class DutyAllocationServiceTest extends TestCase
     public function test_excluded_and_day_unavailable_teachers_are_never_assigned(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']); // Monday
         $subject = Subject::factory()->create();
         $this->seatOneStudent($session, $subject, $slot, $room);
 
-        $excluded = Teacher::factory()->create(['is_active' => true]);
-        $unavailableMonday = Teacher::factory()->create(['is_active' => true]);
-        $eligible = Teacher::factory()->create(['is_active' => true]);
+        $excluded = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $unavailableMonday = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $eligible = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
@@ -149,7 +149,7 @@ class DutyAllocationServiceTest extends TestCase
         // capacity for more, and reached even though the config default
         // min is also 2 (so this isn't just coincidentally matching it).
         $subjectX = Subject::factory()->create();
-        $teacherA = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'B']);
 
@@ -160,14 +160,14 @@ class DutyAllocationServiceTest extends TestCase
         ]);
 
         // A second teacher with the default 2-6 range to absorb the rest.
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         // 8 slots x 1 room x 1 invigilator = 8 duty-slots, exactly A's
         // capped 2 plus B's capped 6.
         $subjectOther = Subject::factory()->create();
         for ($i = 0; $i < 8; $i++) {
             $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-            $room = Room::factory()->create();
+            $room = Room::factory()->for($session)->create();
             $this->seatOneStudent($session, $subjectOther, $slot, $room);
         }
 
@@ -188,7 +188,7 @@ class DutyAllocationServiceTest extends TestCase
         // cap teacher A at exactly 2 duties for a subject that was never
         // actually scheduled.
         $subjectX = Subject::factory()->create();
-        $teacherA = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectX->id, 'teacher_id' => $teacherA->id, 'section' => 'B']);
 
@@ -199,14 +199,14 @@ class DutyAllocationServiceTest extends TestCase
             'is_excluded' => true,
         ]);
 
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         // 8 slots x 1 room x 1 invigilator = 8 duty-slots to split between
         // the two default-range (2-6) teachers.
         $subjectOther = Subject::factory()->create();
         for ($i = 0; $i < 8; $i++) {
             $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
-            $room = Room::factory()->create();
+            $room = Room::factory()->for($session)->create();
             $this->seatOneStudent($session, $subjectOther, $slot, $room);
         }
 
@@ -234,12 +234,12 @@ class DutyAllocationServiceTest extends TestCase
         $slotC = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => $day, 'start_time' => '14:00', 'end_time' => '15:30']);
 
         foreach ([$slotA, $slotB, $slotC] as $slot) {
-            $room = Room::factory()->create();
+            $room = Room::factory()->for($session)->create();
             $this->seatOneStudent($session, $subject, $slot, $room);
         }
 
-        $teacherA = Teacher::factory()->create(['is_active' => true]);
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         foreach ([$teacherA, $teacherB] as $teacher) {
             SessionTeacherConstraint::create([
@@ -263,12 +263,12 @@ class DutyAllocationServiceTest extends TestCase
     public function test_teacher_subject_exclusion_keeps_a_teacher_off_their_own_subjects_slot(): void
     {
         $session = ExamSession::factory()->create(['invigilators_per_room' => 1, 'teacher_subject_exclusion' => true]);
-        $room = Room::factory()->create();
+        $room = Room::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
         $subject = Subject::factory()->create();
 
-        $owner = Teacher::factory()->create(['is_active' => true]); // teaches this subject
-        $other = Teacher::factory()->create(['is_active' => true]);
+        $owner = Teacher::factory()->for($session)->create(['is_active' => true]); // teaches this subject
+        $other = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         $student = Student::factory()->create();
         $enrollment = Enrollment::factory()->create([

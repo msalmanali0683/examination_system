@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Models\ExamSession;
+use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
@@ -161,10 +162,9 @@ class EnrollmentImportTest extends TestCase
 
     public function test_existing_teacher_matched_by_pernr_is_reused_not_duplicated(): void
     {
-        Teacher::factory()->create(['pernr' => '22044', 'name' => 'Huria Ali (old spelling)']);
-
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
+        Teacher::factory()->for($session)->create(['pernr' => '22044', 'name' => 'Huria Ali (old spelling)']);
 
         Livewire::actingAs($staff)
             ->test(EnrollmentImport::class, ['examSession' => $session])
@@ -177,15 +177,14 @@ class EnrollmentImportTest extends TestCase
 
     public function test_importing_a_merged_away_code_resolves_to_the_surviving_subject(): void
     {
-        $survivor = Subject::factory()->create(['code' => 'CS09186-NEW|11', 'title' => 'ICT Applications']);
-        $mergedAway = Subject::factory()->create([
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $survivor = Subject::factory()->for($session)->create(['code' => 'CS09186-NEW|11', 'title' => 'ICT Applications']);
+        $mergedAway = Subject::factory()->for($session)->create([
             'code' => 'CS09186|11',
             'title' => 'Applications of ICT',
             'merged_into_id' => $survivor->id,
         ]);
-
-        $staff = User::factory()->create(['role' => 'staff']);
-        $session = ExamSession::factory()->create();
 
         Livewire::actingAs($staff)
             ->test(EnrollmentImport::class, ['examSession' => $session])
@@ -248,5 +247,78 @@ class EnrollmentImportTest extends TestCase
             ->assertSet('mapping.roll_no', 0)
             ->assertSet('mapping.student_name', 1)
             ->assertSet('mapping.course_code', 2);
+    }
+
+    public function test_import_creates_students_subjects_and_teachers_owned_by_the_session(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(EnrollmentImport::class, ['examSession' => $session])
+            ->set('file', $this->csv())
+            ->call('confirmMapping')
+            ->call('commitImport');
+
+        $this->assertGreaterThan(0, $session->students()->count());
+        $this->assertGreaterThan(0, $session->subjects()->count());
+        $this->assertGreaterThan(0, $session->teachers()->count());
+        $this->assertSame(Student::count(), $session->students()->count());
+        $this->assertSame(Subject::count(), $session->subjects()->count());
+        $this->assertSame(Teacher::count(), $session->teachers()->count());
+    }
+
+    public function test_the_same_file_imported_into_two_sessions_keeps_them_completely_separate(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $sessionA = ExamSession::factory()->create();
+        $sessionB = ExamSession::factory()->create();
+
+        foreach ([$sessionA, $sessionB] as $session) {
+            Livewire::actingAs($staff)
+                ->test(EnrollmentImport::class, ['examSession' => $session])
+                ->set('file', $this->csv())
+                ->call('confirmMapping')
+                ->call('commitImport');
+        }
+
+        $this->assertSame($sessionA->students()->count(), $sessionB->students()->count());
+        $this->assertSame($sessionA->subjects()->count(), $sessionB->subjects()->count());
+        $this->assertSame($sessionA->teachers()->count(), $sessionB->teachers()->count());
+        $this->assertSame([], $sessionA->students()->pluck('id')->intersect($sessionB->students()->pluck('id'))->all());
+        $this->assertSame([], $sessionA->teachers()->pluck('id')->intersect($sessionB->teachers()->pluck('id'))->all());
+
+        // Every enrollment points at rows owned by its own session.
+        foreach ([$sessionA, $sessionB] as $session) {
+            foreach ($session->enrollments()->with(['student', 'subject'])->get() as $enrollment) {
+                $this->assertSame($session->id, $enrollment->student->exam_session_id);
+                $this->assertSame($session->id, $enrollment->subject->exam_session_id);
+            }
+        }
+    }
+
+    public function test_a_teacher_named_in_the_file_is_matched_to_the_sessions_existing_teacher_by_name(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $other = ExamSession::factory()->create();
+        $mine = Teacher::factory()->for($session)->create(['name' => 'Ahmed Iftikhar', 'email' => null, 'pernr' => null]);
+        Teacher::factory()->for($other)->create(['name' => 'Huria Ali', 'email' => null, 'pernr' => null]);
+
+        $content = "SAPNO,Name,Course Code,Course Title,Section,Teacher\n70100001,Ali,CS101,Intro,BSAI 1A,Ahmed Iftikhar\n70100002,Bilal,CS101,Intro,BSAI 1A,Huria Ali\n";
+
+        Livewire::actingAs($staff)
+            ->test(EnrollmentImport::class, ['examSession' => $session])
+            ->set('file', UploadedFile::fake()->createWithContent('e.csv', $content))
+            ->call('confirmMapping')
+            ->call('commitImport');
+
+        // "Ahmed Iftikhar" already exists in this session and is reused;
+        // "Huria Ali" only exists in the other session, so this session
+        // gets its own new copy instead of borrowing that one.
+        $this->assertSame(2, $session->teachers()->count());
+        $this->assertSame(1, $session->teachers()->where('name', 'Ahmed Iftikhar')->count());
+        $this->assertSame($mine->id, $session->teachers()->where('name', 'Ahmed Iftikhar')->value('id'));
+        $this->assertSame(1, $other->teachers()->count());
     }
 }

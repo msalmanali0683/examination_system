@@ -62,7 +62,7 @@ class MissingTeachers extends Component
 
         $teacherId = $this->missingTeacherSelection[$subjectId][$section] ?? null;
 
-        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+        if (! $teacherId || ! $this->examSession->teachers()->whereKey($teacherId)->exists()) {
             session()->flash('error', 'Pick a teacher before assigning.');
 
             return;
@@ -94,7 +94,7 @@ class MissingTeachers extends Component
 
         $teacherId = $this->bulkMissingTeacherId;
 
-        if (! $teacherId || ! Teacher::whereKey($teacherId)->exists()) {
+        if (! $teacherId || ! $this->examSession->teachers()->whereKey($teacherId)->exists()) {
             session()->flash('error', 'Pick a teacher before assigning to all.');
 
             return;
@@ -174,7 +174,7 @@ class MissingTeachers extends Component
             'missingTeacherSections' => $missingTeacherSections,
             'suggestedTeachersBySubject' => $suggestedTeachersBySubject,
             'ignoredMissingTeacherCount' => count($this->examSession->ignored_missing_teacher_sections ?? []),
-            'activeTeachers' => Teacher::where('is_active', true)->orderBy('name')->get(),
+            'activeTeachers' => $this->examSession->teachers()->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 }

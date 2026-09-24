@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\Room;
-use App\Models\SessionRoom;
 use App\Models\SessionTeacherConstraint;
 use App\Models\Student;
 use App\Models\Subject;
@@ -48,15 +47,14 @@ class RequirementCalculatorTest extends TestCase
     public function test_requirement_is_met_with_enough_rooms_and_teachers(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         $result = (new RequirementCalculator)->calculate($session);
 
@@ -79,8 +77,7 @@ class RequirementCalculatorTest extends TestCase
     public function test_a_teacher_shortfall_alone_does_not_prevent_a_slot_from_being_met(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 2]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
@@ -89,7 +86,7 @@ class RequirementCalculatorTest extends TestCase
 
         // Only one teacher exists for the whole system, but the slot
         // needs invigilators_per_room (2) — a genuine teacher shortfall.
-        Teacher::factory()->create(['is_active' => true]);
+        Teacher::factory()->for($session)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -101,17 +98,15 @@ class RequirementCalculatorTest extends TestCase
     public function test_seats_available_sums_capacity_across_every_active_room(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $roomA = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        $roomB = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomA->id, 'is_active' => true]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $roomB->id, 'is_active' => true]);
+        $roomA = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        $roomB = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 6);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        Teacher::factory()->count(2)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -123,18 +118,17 @@ class RequirementCalculatorTest extends TestCase
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
 
-        $activeRoom = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom->id, 'is_active' => true]);
+        $activeRoom = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
 
-        // Exists in the system but not activated for this session.
-        Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        // Belongs to the session but is switched off (inactive).
+        Room::factory()->for($session)->create(['is_active' => false, 'rows' => 3, 'columns' => 1, 'capacity' => 3]);
 
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        Teacher::factory()->count(5)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(5)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -154,14 +148,12 @@ class RequirementCalculatorTest extends TestCase
         // unseated even though 2 needed == 2 active.
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
 
-        $activeRoom1 = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        $activeRoom2 = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom1->id, 'is_active' => true]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom2->id, 'is_active' => true]);
+        $activeRoom1 = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        $activeRoom2 = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
 
-        // Exist in the system but not activated for this session.
-        Room::factory()->create(['rows' => 4, 'columns' => 2, 'capacity' => 8]);
-        Room::factory()->create(['rows' => 4, 'columns' => 2, 'capacity' => 8]);
+        // Belong to the session but are switched off (inactive).
+        Room::factory()->for($session)->create(['is_active' => false, 'rows' => 4, 'columns' => 2, 'capacity' => 8]);
+        Room::factory()->for($session)->create(['is_active' => false, 'rows' => 4, 'columns' => 2, 'capacity' => 8]);
 
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
         $subjectA = Subject::factory()->create();
@@ -171,7 +163,7 @@ class RequirementCalculatorTest extends TestCase
         $this->assignSubjectToSlot($session, $subjectA, $slot);
         $this->assignSubjectToSlot($session, $subjectB, $slot);
 
-        Teacher::factory()->count(5)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(5)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -190,15 +182,14 @@ class RequirementCalculatorTest extends TestCase
         // true shortfall and implying "activate one more room" when
         // there wasn't a spare room anywhere to activate.
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 12);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        Teacher::factory()->count(5)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(5)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -215,18 +206,17 @@ class RequirementCalculatorTest extends TestCase
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
 
-        $activeRoom = Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $activeRoom->id, 'is_active' => true]);
+        $activeRoom = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
 
-        // Exists in the system but not activated for this session.
-        Room::factory()->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        // Belongs to the session but is switched off (inactive).
+        Room::factory()->for($session)->create(['is_active' => false, 'rows' => 3, 'columns' => 1, 'capacity' => 3]);
 
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        Teacher::factory()->count(5)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(5)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -236,15 +226,14 @@ class RequirementCalculatorTest extends TestCase
     public function test_excluding_a_teacher_reduces_available_count(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
         $this->enrollStudents($session, $subject, 'BSAI 1A', 2);
         $this->assignSubjectToSlot($session, $subject, $slot);
 
-        $teachers = Teacher::factory()->count(2)->create(['is_active' => true]);
+        $teachers = Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teachers[0]->id,
@@ -259,8 +248,7 @@ class RequirementCalculatorTest extends TestCase
     public function test_teacher_unavailable_on_one_day_only_affects_that_day(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
 
         $monday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']); // Monday
         $tuesday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '11:00']); // Tuesday
@@ -272,7 +260,7 @@ class RequirementCalculatorTest extends TestCase
         $this->assignSubjectToSlot($session, $subjectA, $monday);
         $this->assignSubjectToSlot($session, $subjectB, $tuesday);
 
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         SessionTeacherConstraint::create([
             'exam_session_id' => $session->id,
             'teacher_id' => $teacher->id,
@@ -289,8 +277,7 @@ class RequirementCalculatorTest extends TestCase
     public function test_adjacency_only_warnings_do_not_count_as_unseated(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'mixed', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 3, 'columns' => 2, 'capacity' => 6]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 2, 'capacity' => 6]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subjectA = Subject::factory()->create();
@@ -300,7 +287,7 @@ class RequirementCalculatorTest extends TestCase
         $this->assignSubjectToSlot($session, $subjectA, $slot);
         $this->assignSubjectToSlot($session, $subjectB, $slot);
 
-        Teacher::factory()->count(5)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(5)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -316,8 +303,7 @@ class RequirementCalculatorTest extends TestCase
         // generator couldn't avoid (conflict_note gets set when it placed
         // a subject anyway because no clash-free day was left).
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
@@ -330,7 +316,7 @@ class RequirementCalculatorTest extends TestCase
             'conflict_note' => 'Clashes with CS101 (12 shared students) — no clash-free day remained; placed anyway.',
         ]);
 
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -357,8 +343,7 @@ class RequirementCalculatorTest extends TestCase
     public function test_a_same_day_alert_does_not_prevent_a_slot_from_being_met(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
@@ -371,7 +356,7 @@ class RequirementCalculatorTest extends TestCase
             'conflict_note' => 'CS101 and CS202 share 5 student(s) but were placed on the same day — no clash-free day remained. Consider adding a day/slot or pinning one of them elsewhere.',
         ]);
 
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -397,8 +382,7 @@ class RequirementCalculatorTest extends TestCase
     public function test_a_note_combining_a_same_day_mention_and_a_real_clash_still_blocks(): void
     {
         $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
-        $room = Room::factory()->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
-        SessionRoom::create(['exam_session_id' => $session->id, 'room_id' => $room->id, 'is_active' => true]);
+        $room = Room::factory()->for($session)->create(['rows' => 5, 'columns' => 2, 'capacity' => 10]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 
         $subject = Subject::factory()->create();
@@ -411,7 +395,7 @@ class RequirementCalculatorTest extends TestCase
             'conflict_note' => 'Shares students with CS101 on the same day — placed anyway. Shares students with CS303 in the exact same time slot — placed anyway.',
         ]);
 
-        Teacher::factory()->count(3)->create(['is_active' => true]);
+        Teacher::factory()->for($session)->count(3)->create(['is_active' => true]);
 
         $requirement = (new RequirementCalculator)->calculate($session)->first();
 
@@ -427,9 +411,9 @@ class RequirementCalculatorTest extends TestCase
         // room with 4 columns that only Mixed (4 subjects/room) can use
         // efficiently as a single room for all four subjects at once.
         for ($i = 0; $i < 4; $i++) {
-            Room::factory()->create(['rows' => 2, 'columns' => 1, 'capacity' => 2]);
+            Room::factory()->for($session)->create(['rows' => 2, 'columns' => 1, 'capacity' => 2]);
         }
-        Room::factory()->create(['rows' => 2, 'columns' => 4, 'capacity' => 8]);
+        Room::factory()->for($session)->create(['rows' => 2, 'columns' => 4, 'capacity' => 8]);
 
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
 

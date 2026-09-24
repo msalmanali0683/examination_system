@@ -28,8 +28,7 @@ class DutyAllocationService
     public function __construct(
         private DutyFairnessService $fairnessService = new DutyFairnessService,
         private DutyRebalancer $rebalancer = new DutyRebalancer,
-    ) {
-    }
+    ) {}
 
     public function generate(ExamSession $session): DutyResult
     {
@@ -180,7 +179,7 @@ class DutyAllocationService
         $excludedIds = $constraints->where('is_excluded', true)->keys();
         $sectionOverrides = $this->sectionBasedDutyOverrides($session);
 
-        return Teacher::where('is_active', true)
+        return $session->teachers()->where('is_active', true)
             ->whereNotIn('id', $excludedIds)
             ->orderBy('id')
             ->get()

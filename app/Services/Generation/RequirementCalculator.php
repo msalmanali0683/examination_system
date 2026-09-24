@@ -33,15 +33,15 @@ class RequirementCalculator
         $activePreview = $this->seatAllocationService->preview($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
         $allRoomsPreview = $this->seatAllocationService->previewAgainstAllRooms($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
 
-        $activeSessionRooms = $session->sessionRooms()->where('is_active', true)->with('room')->get();
+        $activeSessionRooms = $session->rooms()->where('is_active', true)->get();
         $roomsAvailable = $activeSessionRooms->count();
-        $seatsAvailable = $activeSessionRooms->sum(fn ($sr) => $sr->effectiveCapacity());
-        $roomsAvailableSystemWide = $this->seatAllocationService->totalSystemRoomsCount();
+        $seatsAvailable = $activeSessionRooms->sum('capacity');
+        $roomsAvailableSystemWide = $this->seatAllocationService->totalSystemRoomsCount($session);
 
         // Every active teacher is available by default; a constraint row
         // only exists where the admin explicitly excluded them or marked
         // specific days unavailable (see TeacherConstraints::apply()).
-        $activeTeacherCount = Teacher::where('is_active', true)->count();
+        $activeTeacherCount = $session->teachers()->where('is_active', true)->count();
         $constraints = SessionTeacherConstraint::where('exam_session_id', $session->id)->get();
         $excludedCount = $constraints->where('is_excluded', true)->count();
         $constrainedNotExcluded = $constraints->where('is_excluded', false);

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\ExamSession;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,6 +19,7 @@ class StudentFactory extends Factory
     public function definition(): array
     {
         return [
+            'exam_session_id' => ExamSession::factory(),
             'roll_no' => (string) fake()->unique()->numerify('70#####'),
             'name' => fake()->name(),
             'program' => 'Bachelor of Science in Artificial Intelligence',

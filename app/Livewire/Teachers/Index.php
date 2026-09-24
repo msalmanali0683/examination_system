@@ -2,16 +2,24 @@
 
 namespace App\Livewire\Teachers;
 
-use App\Models\DutyAssignment;
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ExamSession;
 use App\Models\Teacher;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * A session's own teachers — added, edited, imported and deleted from
+ * inside the session, and never shared with any other one.
+ */
 class Index extends Component
 {
+    use GuardsFinalizedSession;
     use WithPagination;
+
+    public ExamSession $examSession;
 
     public int $perPage = 25;
 
@@ -42,9 +50,10 @@ class Index extends Component
      */
     public array $selected = [];
 
-    public function mount(): void
+    public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_teachers');
+        $this->examSession = $examSession;
     }
 
     public function updatedSearch(): void
@@ -67,7 +76,7 @@ class Index extends Component
     public function editTeacher(int $id): void
     {
         $this->authorize('manage_teachers');
-        $teacher = Teacher::findOrFail($id);
+        $teacher = $this->examSession->teachers()->findOrFail($id);
 
         $this->editingId = $teacher->id;
         $this->name = $teacher->name;
@@ -83,17 +92,21 @@ class Index extends Component
     {
         $this->authorize('manage_teachers');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'designation' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('teachers', 'email')->ignore($this->editingId)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('teachers', 'email')->where('exam_session_id', $this->examSession->id)->ignore($this->editingId)],
             'phone' => ['nullable', 'string', 'max:255'],
         ]);
         $validated['is_active'] = $this->is_active;
         $validated['email'] = $validated['email'] ?: null;
 
-        Teacher::updateOrCreate(['id' => $this->editingId], $validated);
+        $this->examSession->teachers()->updateOrCreate(['id' => $this->editingId], $validated);
 
         $this->resetForm();
         $this->showForm = false;
@@ -103,40 +116,31 @@ class Index extends Component
     public function toggleActive(int $id): void
     {
         $this->authorize('manage_teachers');
-        $teacher = Teacher::findOrFail($id);
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $teacher = $this->examSession->teachers()->findOrFail($id);
         $teacher->update(['is_active' => ! $teacher->is_active]);
     }
 
     /**
-     * A teacher's duty assignments cascade-delete at the database level
-     * (see duty_assignments.teacher_id), which would silently erase a
-     * finalized session's duty roster — the one thing a finalized
-     * session is supposed to never lose (see
-     * ExamSession::deleteSession()). Blocked the same way that guard
-     * blocks deleting the session itself; a non-finalized session's
-     * duties can always be regenerated, so only finalized use blocks
-     * this.
+     * A teacher's duty assignments and constraint rows cascade-delete at
+     * the database level, and their enrollment rows just lose the teacher
+     * reference (nullable column) — fine while the session can still be
+     * regenerated, which is why a finalized session refuses it outright.
      */
     public function deleteTeacher(int $id): void
     {
         $this->authorize('manage_teachers');
-        $teacher = Teacher::findOrFail($id);
 
-        if ($this->hasFinalizedDuties($teacher)) {
-            session()->flash('error', "{$teacher->name} has duty assignments in a finalized session and can't be deleted — unlock that session first if it really needs to change.");
-
+        if ($this->blockedByFinalization($this->examSession)) {
             return;
         }
 
-        $teacher->delete();
+        $this->examSession->teachers()->findOrFail($id)->delete();
         session()->flash('status', 'Teacher deleted.');
-    }
-
-    private function hasFinalizedDuties(Teacher $teacher): bool
-    {
-        return DutyAssignment::where('teacher_id', $teacher->id)
-            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
-            ->exists();
     }
 
     /**
@@ -160,31 +164,22 @@ class Index extends Component
         $this->selected = [];
     }
 
-    /**
-     * A teacher's duty assignments and session-teacher-constraint rows
-     * cascade-delete at the database level, and their enrollment rows
-     * just lose the teacher reference (nullable column) — every one of
-     * those is a real FK constraint, not application logic, so this can
-     * never fail with a foreign-key error. But a teacher with duties in
-     * a finalized session is skipped (see hasFinalizedDuties()) rather
-     * than deleted, so a bulk action can never silently erase a
-     * finalized session's duty roster.
-     */
     public function bulkDelete(): void
     {
         $this->authorize('manage_teachers');
 
-        $selected = Teacher::whereIn('id', $this->selected)->get();
-        $blocked = $selected->filter(fn (Teacher $teacher) => $this->hasFinalizedDuties($teacher));
-        $toDelete = $selected->reject(fn (Teacher $teacher) => $blocked->contains($teacher));
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
 
-        $count = Teacher::destroy($toDelete->pluck('id'));
+        $count = $this->examSession->teachers()->whereIn('id', $this->selected)->get()
+            ->each(fn (Teacher $teacher) => $teacher->delete())
+            ->count();
 
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash($blocked->isEmpty() ? 'status' : 'error', "{$count} teacher(s) deleted."
-            .($blocked->isEmpty() ? '' : " {$blocked->count()} skipped — they have duty assignments in a finalized session."));
+        session()->flash('status', "{$count} teacher(s) deleted.");
     }
 
     public function cancel(): void
@@ -203,10 +198,10 @@ class Index extends Component
     public function render()
     {
         return view('livewire.teachers.index', [
-            'teachers' => Teacher::when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
-                    ->where('name', 'like', "%{$this->search}%")
-                    ->orWhere('email', 'like', "%{$this->search}%")
-                ))
+            'teachers' => $this->examSession->teachers()->when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
+                ->where('name', 'like', "%{$this->search}%")
+                ->orWhere('email', 'like', "%{$this->search}%")
+            ))
                 ->orderBy('name')
                 ->paginate($this->perPage),
         ]);

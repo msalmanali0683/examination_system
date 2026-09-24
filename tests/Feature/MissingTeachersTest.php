@@ -21,13 +21,13 @@ class MissingTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         $withTeacher = Enrollment::factory()->create([
             'exam_session_id' => $session->id,
             'subject_id' => $subject->id,
             'section' => 'BSAI 1A',
-            'teacher_id' => Teacher::factory()->create(['is_active' => true])->id,
+            'teacher_id' => Teacher::factory()->for($session)->create(['is_active' => true])->id,
         ]);
         $missing1 = Enrollment::factory()->create([
             'exam_session_id' => $session->id,
@@ -128,11 +128,11 @@ class MissingTeachersTest extends TestCase
         $session = ExamSession::factory()->create();
         $subjectA = Subject::factory()->create();
         $subjectB = Subject::factory()->create();
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
 
         $missingA = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1A', 'teacher_id' => null]);
         $missingB = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2A', 'teacher_id' => null]);
-        $alreadyTaught = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1B', 'teacher_id' => Teacher::factory()->create()->id]);
+        $alreadyTaught = Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1B', 'teacher_id' => Teacher::factory()->for($session)->create()->id]);
 
         Livewire::actingAs($staff)
             ->test(MissingTeachers::class, ['examSession' => $session])

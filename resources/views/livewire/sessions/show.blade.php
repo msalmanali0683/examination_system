@@ -99,7 +99,7 @@
                 <x-icon name="door" class="h-4 w-4" /> Rooms
             </button>
             <button type="button" @click="tab = 'teachers'" :class="tab === 'teachers' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="cap" class="h-4 w-4" /> Teacher Constraints
+                <x-icon name="cap" class="h-4 w-4" /> Teachers
             </button>
             <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="calendar" class="h-4 w-4" /> Time Slots
@@ -127,9 +127,46 @@
 
         <div class="p-4 sm:p-6">
             <div x-show="tab === 'rooms'">
-                <livewire:sessions.room-selection :exam-session="$examSession" :key="'rooms-'.$examSession->id" />
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Rooms</h3>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">This session's own exam rooms &mdash; add, edit, import or delete them without affecting any other session.</p>
+                    </div>
+                    @can('manage_rooms')
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <x-btn :href="route('sessions.rooms.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import Rooms</x-btn>
+                            <x-btn :href="route('sessions.rooms.index', $examSession)" wire:navigate icon="door">Manage Rooms</x-btn>
+                        </div>
+                    @endcan
+                </div>
+                <div class="mt-6 grid grid-cols-3 gap-4 text-center">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $roomCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Rooms</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $activeRoomCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Active</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $seatCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Seats in active rooms</div>
+                    </div>
+                </div>
             </div>
-            <div x-show="tab === 'teachers'">
+            <div x-show="tab === 'teachers'" class="space-y-6">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Teachers <span class="text-sm font-normal text-gray-400">&middot; {{ $teacherCount }} in this session</span></h3>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">This session's own invigilators &mdash; add, edit, import or delete them here, then set who is excluded and how many duties each can take below.</p>
+                    </div>
+                    @can('manage_teachers')
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <x-btn :href="route('sessions.teachers.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import Teachers</x-btn>
+                            <x-btn :href="route('sessions.teachers.index', $examSession)" wire:navigate icon="cap">Manage Teachers</x-btn>
+                        </div>
+                    @endcan
+                </div>
                 <livewire:sessions.teacher-constraints :exam-session="$examSession" :key="'teachers-'.$examSession->id" />
             </div>
             <div x-show="tab === 'slots'">
@@ -149,6 +186,14 @@
                         <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $subjectCount }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">Subjects</div>
                     </div>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap mb-4">
+                    @can('manage_enrollments')
+                        <x-btn :href="route('sessions.students.index', $examSession)" wire:navigate variant="secondary" icon="user-group">Manage Students</x-btn>
+                    @endcan
+                    @can('manage_subjects')
+                        <x-btn :href="route('sessions.subjects.index', $examSession)" wire:navigate variant="secondary" icon="document">Manage Subjects</x-btn>
+                    @endcan
                 </div>
                 @if (! $examSession->isFinalized())
                     <div class="flex items-center gap-3 flex-wrap">

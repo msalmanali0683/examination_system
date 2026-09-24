@@ -2,17 +2,24 @@
 
 namespace App\Livewire\Rooms;
 
-use App\Models\DutyAssignment;
-use App\Models\Room;
+use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ExamSession;
 use App\Models\SeatAssignment;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * A session's own rooms — added, edited, imported and deleted from inside
+ * the session, and never shared with any other one.
+ */
 class Index extends Component
 {
+    use GuardsFinalizedSession;
     use WithPagination;
+
+    public ExamSession $examSession;
 
     public int $perPage = 25;
 
@@ -32,9 +39,10 @@ class Index extends Component
 
     public bool $is_active = true;
 
-    public function mount(): void
+    public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_rooms');
+        $this->examSession = $examSession;
     }
 
     public function addRoom(): void
@@ -47,7 +55,7 @@ class Index extends Component
     public function editRoom(int $id): void
     {
         $this->authorize('manage_rooms');
-        $room = Room::findOrFail($id);
+        $room = $this->examSession->rooms()->findOrFail($id);
 
         $this->editingId = $room->id;
         $this->name = $room->name;
@@ -63,10 +71,14 @@ class Index extends Component
     {
         $this->authorize('manage_rooms');
 
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
         $maxCapacity = (int) $this->rows * (int) $this->columns;
 
         $validated = $this->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('rooms', 'name')->ignore($this->editingId)],
+            'name' => ['required', 'string', 'max:255', Rule::unique('rooms', 'name')->where('exam_session_id', $this->examSession->id)->ignore($this->editingId)],
             'rows' => ['required', 'integer', 'min:1'],
             'columns' => ['required', 'integer', 'min:1'],
             'capacity' => ['required', 'integer', 'min:1', "max:{$maxCapacity}"],
@@ -75,12 +87,12 @@ class Index extends Component
         $validated['is_active'] = $this->is_active;
 
         if ($this->editingId && $this->shrinksBelowExistingSeats($this->editingId, $validated['rows'], $validated['columns'])) {
-            $this->addError('rows', 'This room already has seat assignments outside that grid in a session that isn\'t finalized yet — regenerate or move those seats first, then resize the room.');
+            $this->addError('rows', 'This room already has seat assignments outside that grid — regenerate or move those seats first, then resize the room.');
 
             return;
         }
 
-        Room::updateOrCreate(['id' => $this->editingId], $validated);
+        $this->examSession->rooms()->updateOrCreate(['id' => $this->editingId], $validated);
 
         $this->resetForm();
         $this->showForm = false;
@@ -90,57 +102,43 @@ class Index extends Component
     /**
      * A smaller grid would silently strand any seat already placed outside
      * it — invisible in the seating chart grid but still counted, which is
-     * exactly what happened to session 1's ITC-5xx rooms. Finalized
-     * sessions are historical and excluded since they can't be
-     * regenerated anyway.
+     * exactly what happened to session 1's ITC-5xx rooms.
      */
     private function shrinksBelowExistingSeats(int $roomId, int $rows, int $columns): bool
     {
         return SeatAssignment::where('room_id', $roomId)
             ->where(fn ($q) => $q->where('row_number', '>', $rows)->orWhere('column_number', '>', $columns))
-            ->whereHas('examSession', fn ($q) => $q->where('status', '!=', 'finalized'))
             ->exists();
     }
 
     public function toggleActive(int $id): void
     {
         $this->authorize('manage_rooms');
-        $room = Room::findOrFail($id);
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $room = $this->examSession->rooms()->findOrFail($id);
         $room->update(['is_active' => ! $room->is_active]);
     }
 
     /**
-     * Deleting a room cascades to every seat/duty assignment that ever
-     * used it (both tables' room_id are cascadeOnDelete()), which would
-     * silently erase a finalized session's seating chart or duty roster
-     * — the one thing a finalized session is supposed to never lose (see
-     * ExamSession::deleteSession()). Blocked the same way that guard
-     * blocks deleting the session itself; a non-finalized session's data
-     * can always be regenerated, so only finalized use blocks this.
+     * Deleting a room also removes every seat and duty assignment that
+     * used it (both tables' room_id are cascadeOnDelete()) — fine while
+     * the session can still be regenerated, which is why a finalized
+     * session refuses it outright.
      */
     public function deleteRoom(int $id): void
     {
         $this->authorize('manage_rooms');
-        $room = Room::findOrFail($id);
 
-        if ($this->usedInFinalizedSession($room)) {
-            session()->flash('error', "{$room->name} has seat or duty assignments in a finalized session and can't be deleted — unlock that session first if it really needs to change.");
-
+        if ($this->blockedByFinalization($this->examSession)) {
             return;
         }
 
-        $room->delete();
+        $this->examSession->rooms()->findOrFail($id)->delete();
         session()->flash('status', 'Room deleted.');
-    }
-
-    private function usedInFinalizedSession(Room $room): bool
-    {
-        return SeatAssignment::where('room_id', $room->id)
-            ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
-            ->exists()
-            || DutyAssignment::where('room_id', $room->id)
-                ->whereHas('examSession', fn ($q) => $q->where('status', 'finalized'))
-                ->exists();
     }
 
     public function cancel(): void
@@ -165,7 +163,7 @@ class Index extends Component
     public function render()
     {
         return view('livewire.rooms.index', [
-            'rooms' => Room::orderBy('name')->paginate($this->perPage),
+            'rooms' => $this->examSession->rooms()->orderBy('name')->paginate($this->perPage),
         ]);
     }
 }

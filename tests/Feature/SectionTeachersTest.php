@@ -48,7 +48,7 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $teacher = Teacher::factory()->create(['name' => 'Huria Ali']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Huria Ali']);
         $this->enroll($session, $subject, 'BSAI 1A', $teacher->id);
         $this->enroll($session, $subject, 'BSAI 1A', $teacher->id);
 
@@ -65,8 +65,8 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
-        $teacherA = Teacher::factory()->create();
-        $teacherB = Teacher::factory()->create();
+        $teacherA = Teacher::factory()->for($session)->create();
+        $teacherB = Teacher::factory()->for($session)->create();
         $this->enroll($session, $subject, 'BSAI 1A', $teacherA->id);
         $this->enroll($session, $subject, 'BSAI 1A', $teacherB->id);
 
@@ -82,8 +82,8 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $oldTeacher = Teacher::factory()->create(['is_active' => true]);
-        $newTeacher = Teacher::factory()->create(['is_active' => true]);
+        $oldTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $newTeacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => $oldTeacher->id,
         ]);
@@ -101,7 +101,7 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
         ]);
@@ -119,8 +119,8 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $teacherA = Teacher::factory()->create();
-        $teacherB = Teacher::factory()->create(['is_active' => true]);
+        $teacherA = Teacher::factory()->for($session)->create();
+        $teacherB = Teacher::factory()->for($session)->create(['is_active' => true]);
         $enrollmentA = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => $teacherA->id,
         ]);
@@ -156,8 +156,8 @@ class SectionTeachersTest extends TestCase
         $session = ExamSession::factory()->create();
         $subjectA = Subject::factory()->create(['code' => 'CS101']);
         $subjectB = Subject::factory()->create(['code' => 'CS202']);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
-        $originalTeacher = Teacher::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $originalTeacher = Teacher::factory()->for($session)->create();
 
         $target = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 1A', 'teacher_id' => $originalTeacher->id,
@@ -202,7 +202,7 @@ class SectionTeachersTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create(['status' => 'finalized']);
         $subject = Subject::factory()->create(['code' => 'CS101']);
-        $teacher = Teacher::factory()->create(['is_active' => true]);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A', 'teacher_id' => null,
         ]);
