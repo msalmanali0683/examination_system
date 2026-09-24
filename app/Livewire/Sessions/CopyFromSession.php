@@ -12,9 +12,11 @@ use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 /**
- * Pulls rooms or teachers from another session into this one. Rooms and
- * teachers belong to a single session, so this makes brand-new copies
- * owned by the current session — the source is never touched or shared.
+ * Imports rooms or teachers from another session into this one, in two
+ * steps: pick a session from the list, then tick which of its rooms or
+ * teachers to bring over. Rooms and teachers belong to a single session,
+ * so this makes brand-new copies owned by the current session — the
+ * source is never touched or shared.
  */
 class CopyFromSession extends Component
 {
@@ -55,6 +57,11 @@ class CopyFromSession extends Component
         return route("sessions.{$this->type}.index", $this->examSession);
     }
 
+    private function label(): string
+    {
+        return $this->type === 'rooms' ? 'room' : 'teacher';
+    }
+
     private function sourceSession(): ?ExamSession
     {
         if ($this->sourceSessionId === '') {
@@ -66,7 +73,7 @@ class CopyFromSession extends Component
 
     /**
      * Every row of the chosen session, and which of them this session
-     * already has (those can't be copied again).
+     * already has (those can't be imported again).
      *
      * @return array{0: Collection, 1: Collection}
      */
@@ -84,27 +91,48 @@ class CopyFromSession extends Component
     }
 
     /**
-     * Choosing a session starts with everything it has that this session
-     * doesn't checked — the common case is "bring it all over".
+     * IDs of the chosen session's rows that can still be imported.
+     *
+     * @return Collection<int, int>
      */
-    public function updatedSourceSessionId(): void
-    {
-        $this->selectAll();
-    }
-
-    public function selectAll(): void
+    private function availableIds(): Collection
     {
         [$rows, $alreadyThere] = $this->sourceRows($this->sourceSession());
 
-        $this->selected = $rows->pluck('id')->diff($alreadyThere)->map(fn ($id) => (string) $id)->values()->all();
+        return $rows->pluck('id')->diff($alreadyThere)->values();
     }
 
-    public function selectNone(): void
+    public function chooseSession(int $sessionId): void
     {
+        $this->authorize($this->permission());
+
+        $this->sourceSessionId = (string) $sessionId;
         $this->selected = [];
+        $this->resetErrorBag();
     }
 
-    public function copy(): void
+    public function chooseAnother(): void
+    {
+        $this->sourceSessionId = '';
+        $this->selected = [];
+        $this->resetErrorBag();
+    }
+
+    /**
+     * The header checkbox: ticks every importable row, or clears them all
+     * if they're already all ticked.
+     */
+    public function toggleSelectAll(): void
+    {
+        $available = $this->availableIds();
+        $selected = collect($this->selected)->map(fn ($id) => (int) $id);
+
+        $this->selected = $available->isNotEmpty() && $available->diff($selected)->isEmpty()
+            ? []
+            : $available->map(fn ($id) => (string) $id)->all();
+    }
+
+    public function importSelected(): void
     {
         $this->authorize($this->permission());
 
@@ -115,7 +143,7 @@ class CopyFromSession extends Component
         $source = $this->sourceSession();
 
         if (! $source) {
-            $this->addError('sourceSessionId', 'Pick a session to copy from.');
+            $this->addError('sourceSessionId', 'Pick a session to import from.');
 
             return;
         }
@@ -123,7 +151,7 @@ class CopyFromSession extends Component
         $ids = array_values(array_unique(array_map('intval', $this->selected)));
 
         if ($ids === []) {
-            session()->flash('error', "Tick at least one {$this->label()} to copy.");
+            session()->flash('error', "Select at least one {$this->label()} to import.");
 
             return;
         }
@@ -133,7 +161,7 @@ class CopyFromSession extends Component
             ? $copier->copyRooms($source, $this->examSession, $ids)
             : $copier->copyTeachers($source, $this->examSession, $ids, $this->withConstraints);
 
-        $message = "Copied {$result['copied']} {$this->label()}(s) from \"{$source->name}\".";
+        $message = "Imported {$result['copied']} {$this->label()}(s) from \"{$source->name}\".";
 
         if ($result['skipped'] > 0) {
             $message .= " {$result['skipped']} skipped — already in this session.";
@@ -145,16 +173,13 @@ class CopyFromSession extends Component
         $this->redirect($this->indexRoute(), navigate: true);
     }
 
-    private function label(): string
-    {
-        return $this->type === 'rooms' ? 'room' : 'teacher';
-    }
-
     #[Layout('layouts.app')]
     public function render()
     {
         $source = $this->sourceSession();
         [$rows, $alreadyThere] = $this->sourceRows($source);
+        $available = $rows->pluck('id')->diff($alreadyThere);
+        $selected = collect($this->selected)->map(fn ($id) => (int) $id);
 
         return view('livewire.sessions.copy-from-session', [
             'sessions' => ExamSession::whereKeyNot($this->examSession->id)
@@ -164,6 +189,8 @@ class CopyFromSession extends Component
             'source' => $source,
             'rows' => $rows,
             'alreadyThere' => $alreadyThere->flip(),
+            'availableCount' => $available->count(),
+            'allSelected' => $available->isNotEmpty() && $available->diff($selected)->isEmpty(),
             'label' => $this->label(),
             'indexRoute' => $this->indexRoute(),
         ]);

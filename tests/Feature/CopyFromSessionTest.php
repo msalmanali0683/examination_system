@@ -28,17 +28,51 @@ class CopyFromSessionTest extends TestCase
         return Livewire::actingAs($this->staff())->test(CopyFromSession::class, ['examSession' => $session, 'type' => $type]);
     }
 
-    public function test_choosing_a_session_pre_ticks_everything_it_has(): void
+    public function test_choosing_a_session_shows_its_rooms_with_nothing_ticked(): void
     {
         $target = ExamSession::factory()->create();
         $source = ExamSession::factory()->create();
-        $rooms = Room::factory()->for($source)->count(3)->create();
+        Room::factory()->for($source)->count(3)->create();
 
-        $selected = $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
-            ->get('selected');
+        $this->page($target, 'rooms')
+            ->call('chooseSession', $source->id)
+            ->assertSet('selected', [])
+            ->assertSee('Import 0 room(s)');
+    }
 
-        $this->assertEqualsCanonicalizing($rooms->pluck('id')->map(fn ($id) => (string) $id)->all(), $selected);
+    public function test_the_header_checkbox_ticks_every_importable_row_and_clears_them_again(): void
+    {
+        $target = ExamSession::factory()->create();
+        $source = ExamSession::factory()->create();
+        Room::factory()->for($target)->create(['name' => 'ITC-101']);
+        Room::factory()->for($source)->create(['name' => 'ITC-101']); // already in the session
+        $others = Room::factory()->for($source)->count(3)->create();
+
+        $component = $this->page($target, 'rooms')->call('chooseSession', $source->id);
+
+        $component->call('toggleSelectAll');
+        $this->assertEqualsCanonicalizing($others->pluck('id')->map(fn ($id) => (string) $id)->all(), $component->get('selected'));
+
+        $component->call('toggleSelectAll');
+        $this->assertSame([], $component->get('selected'));
+    }
+
+    public function test_the_page_is_two_steps_pick_a_session_then_pick_rooms(): void
+    {
+        $target = ExamSession::factory()->create();
+        $source = ExamSession::factory()->create(['name' => 'Physics Midterm']);
+        Room::factory()->for($source)->create(['name' => 'PHY-LAB-1']);
+
+        $component = $this->page($target, 'rooms');
+
+        // Step 1: the other sessions are listed, their rooms are not.
+        $component->assertSee('Physics Midterm')->assertDontSee('PHY-LAB-1');
+
+        // Step 2: opening a session lists its rooms.
+        $component->call('chooseSession', $source->id)->assertSee('PHY-LAB-1');
+
+        // ...and it's one click back to the session list.
+        $component->call('chooseAnother')->assertSet('sourceSessionId', '')->assertDontSee('PHY-LAB-1');
     }
 
     public function test_selected_rooms_are_copied_as_new_rows_owned_by_this_session(): void
@@ -49,9 +83,9 @@ class CopyFromSessionTest extends TestCase
         $leave = Room::factory()->for($source)->create(['name' => 'ITC-102']);
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
+            ->call('chooseSession', $source->id)
             ->set('selected', [(string) $keep->id])
-            ->call('copy')
+            ->call('importSelected')
             ->assertRedirect(route('sessions.rooms.index', $target));
 
         $copy = $target->rooms()->where('name', 'ITC-101')->firstOrFail();
@@ -75,12 +109,10 @@ class CopyFromSessionTest extends TestCase
         $fresh = Room::factory()->for($source)->create(['name' => 'ITC-102']);
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
-            // Pre-ticking leaves out what the session already has...
-            ->assertSet('selected', [(string) $fresh->id])
-            // ...and even a forced tick can't create a second copy.
+            ->call('chooseSession', $source->id)
+            // Even a forced tick can't create a second copy.
             ->set('selected', [(string) $dup->id, (string) $fresh->id])
-            ->call('copy');
+            ->call('importSelected');
 
         $this->assertSame(2, $target->rooms()->count());
         $this->assertSame(10, $target->rooms()->where('name', 'ITC-101')->value('capacity'));
@@ -95,9 +127,9 @@ class CopyFromSessionTest extends TestCase
         $theirs = Room::factory()->for($third)->create(['name' => 'SECRET-1']);
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
+            ->call('chooseSession', $source->id)
             ->set('selected', [(string) $mine->id, (string) $theirs->id])
-            ->call('copy');
+            ->call('importSelected');
 
         $this->assertSame(['ITC-101'], $target->rooms()->pluck('name')->all());
     }
@@ -108,9 +140,9 @@ class CopyFromSessionTest extends TestCase
         $room = Room::factory()->for($target)->create();
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $target->id)
+            ->call('chooseSession', $target->id)
             ->set('selected', [(string) $room->id])
-            ->call('copy')
+            ->call('importSelected')
             ->assertHasErrors(['sourceSessionId']);
 
         $this->assertSame(1, $target->rooms()->count());
@@ -123,10 +155,9 @@ class CopyFromSessionTest extends TestCase
         Room::factory()->for($source)->create();
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
-            ->call('selectNone')
-            ->call('copy')
-            ->assertSee('Tick at least one room');
+            ->call('chooseSession', $source->id)
+            ->call('importSelected')
+            ->assertSee('Select at least one room');
 
         $this->assertSame(0, $target->rooms()->count());
     }
@@ -146,8 +177,9 @@ class CopyFromSessionTest extends TestCase
         ]);
 
         $this->page($target, 'teachers')
-            ->set('sourceSessionId', (string) $source->id)
-            ->call('copy')
+            ->call('chooseSession', $source->id)
+            ->call('toggleSelectAll')
+            ->call('importSelected')
             ->assertRedirect(route('sessions.teachers.index', $target));
 
         $copy = $target->teachers()->where('email', 'huria@example.com')->firstOrFail();
@@ -173,9 +205,10 @@ class CopyFromSessionTest extends TestCase
         SessionTeacherConstraint::create(['exam_session_id' => $source->id, 'teacher_id' => $teacher->id, 'is_excluded' => true]);
 
         $this->page($target, 'teachers')
-            ->set('sourceSessionId', (string) $source->id)
+            ->call('chooseSession', $source->id)
+            ->call('toggleSelectAll')
             ->set('withConstraints', false)
-            ->call('copy');
+            ->call('importSelected');
 
         $this->assertSame(1, $target->teachers()->count());
         $this->assertDatabaseCount('session_teacher_constraints', 1);
@@ -211,8 +244,8 @@ class CopyFromSessionTest extends TestCase
         Room::factory()->for($source)->create();
 
         $this->page($target, 'rooms')
-            ->set('sourceSessionId', (string) $source->id)
-            ->call('copy');
+            ->call('chooseSession', $source->id)
+            ->call('importSelected');
 
         $this->assertSame(0, $target->rooms()->count());
     }
@@ -228,10 +261,13 @@ class CopyFromSessionTest extends TestCase
         $component = $this->page($target, 'rooms');
         $component->assertSee('Source Session')->assertDontSee('Target Session (');
 
-        $component->set('sourceSessionId', (string) $source->id)
+        $component->call('chooseSession', $source->id)
             ->assertSee('Already in this session')
             ->assertSee('ITC-102')
-            ->assertSee('Copy 1 room(s)');
+            ->assertSee('Import 0 room(s)')
+            // Ticking "all" counts only what can actually be imported.
+            ->call('toggleSelectAll')
+            ->assertSee('Import 1 room(s)');
     }
 
     public function test_the_type_cannot_be_switched_from_the_browser(): void

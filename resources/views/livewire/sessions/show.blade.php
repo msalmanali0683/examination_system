@@ -134,8 +134,8 @@
                     </div>
                     @can('manage_rooms')
                         <div class="flex items-center gap-2 flex-wrap">
-                            <x-btn :href="route('sessions.copy', [$examSession, 'rooms'])" wire:navigate variant="secondary" icon="download">Copy from Session</x-btn>
-                            <x-btn :href="route('sessions.rooms.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import Rooms</x-btn>
+                            <x-btn :href="route('sessions.copy', [$examSession, 'rooms'])" wire:navigate variant="secondary" icon="download">Import from Other Session</x-btn>
+                            <x-btn :href="route('sessions.rooms.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import from Excel</x-btn>
                             <x-btn :href="route('sessions.rooms.index', $examSession)" wire:navigate icon="door">Manage Rooms</x-btn>
                         </div>
                     @endcan
@@ -163,8 +163,8 @@
                     </div>
                     @can('manage_teachers')
                         <div class="flex items-center gap-2 flex-wrap">
-                            <x-btn :href="route('sessions.copy', [$examSession, 'teachers'])" wire:navigate variant="secondary" icon="download">Copy from Session</x-btn>
-                            <x-btn :href="route('sessions.teachers.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import Teachers</x-btn>
+                            <x-btn :href="route('sessions.copy', [$examSession, 'teachers'])" wire:navigate variant="secondary" icon="download">Import from Other Session</x-btn>
+                            <x-btn :href="route('sessions.teachers.import', $examSession)" wire:navigate variant="secondary" icon="upload">Import from Excel</x-btn>
                             <x-btn :href="route('sessions.teachers.index', $examSession)" wire:navigate icon="cap">Manage Teachers</x-btn>
                         </div>
                     @endcan
