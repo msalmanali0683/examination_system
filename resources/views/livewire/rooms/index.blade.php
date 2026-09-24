@@ -1,6 +1,9 @@
 <x-slot name="header">
     <x-page-header title="Rooms" subtitle="{{ $examSession->name }} — this session's exam venues, their seating grid and capacity." icon="door" :back="route('sessions.show', $examSession)">
         <x-slot name="actions">
+            <a href="{{ route('sessions.copy', [$examSession, 'rooms']) }}" wire:navigate>
+                <x-btn variant="secondary" icon="download">Copy from Session</x-btn>
+            </a>
             <a href="{{ route('sessions.rooms.import', $examSession) }}" wire:navigate>
                 <x-btn variant="secondary" icon="upload">Import</x-btn>
             </a>
@@ -73,7 +76,7 @@
     </div>
 
     @if ($rooms->isEmpty())
-        <x-empty-state icon="door" title="No rooms yet" description="Add this session's exam rooms — or import them from a spreadsheet — to start planning seating." />
+        <x-empty-state icon="door" title="No rooms yet" description="Add this session's exam rooms, import them from a spreadsheet, or copy them from another session." />
     @else
         <div class="overflow-x-auto -mx-4 sm:-mx-6">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

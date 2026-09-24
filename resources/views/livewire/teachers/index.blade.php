@@ -1,6 +1,9 @@
 <x-slot name="header">
     <x-page-header title="Teachers" subtitle="{{ $examSession->name }} — faculty available for invigilation duty in this session." icon="cap" :back="route('sessions.show', $examSession)">
         <x-slot name="actions">
+            <a href="{{ route('sessions.copy', [$examSession, 'teachers']) }}" wire:navigate>
+                <x-btn variant="secondary" icon="download">Copy from Session</x-btn>
+            </a>
             <a href="{{ route('sessions.teachers.import', $examSession) }}" wire:navigate>
                 <x-btn variant="secondary" icon="upload">Import</x-btn>
             </a>
@@ -76,7 +79,7 @@
     @endif
 
     @if ($teachers->isEmpty())
-        <x-empty-state icon="cap" title="No teachers yet" description="Add teachers manually or import them from a spreadsheet." />
+        <x-empty-state icon="cap" title="No teachers yet" description="Add teachers manually, import them from a spreadsheet, or copy them from another session." />
     @else
         @php
             $pageIds = $teachers->pluck('id')->all();

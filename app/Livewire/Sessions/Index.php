@@ -4,7 +4,7 @@ namespace App\Livewire\Sessions;
 
 use App\Models\ActivityLog;
 use App\Models\ExamSession;
-use App\Models\SessionTeacherConstraint;
+use App\Services\SessionDataCopier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
@@ -105,31 +105,9 @@ class Index extends Component
                 'teacher_subject_exclusion' => $source->teacher_subject_exclusion,
             ]);
 
-            foreach ($source->rooms as $room) {
-                $newSession->rooms()->create($room->only(['name', 'rows', 'columns', 'capacity', 'room_type', 'is_active']));
-            }
-
-            $copiedTeacherIds = [];
-
-            foreach ($source->teachers as $teacher) {
-                $copy = $newSession->teachers()->create($teacher->only(['name', 'designation', 'department', 'email', 'phone', 'pernr', 'is_active']));
-                $copiedTeacherIds[$teacher->id] = $copy->id;
-            }
-
-            foreach ($source->sessionTeacherConstraints as $constraint) {
-                if (! isset($copiedTeacherIds[$constraint->teacher_id])) {
-                    continue;
-                }
-
-                SessionTeacherConstraint::create([
-                    'exam_session_id' => $newSession->id,
-                    'teacher_id' => $copiedTeacherIds[$constraint->teacher_id],
-                    'is_excluded' => $constraint->is_excluded,
-                    'min_duties' => $constraint->min_duties,
-                    'max_duties' => $constraint->max_duties,
-                    'unavailable_days' => $constraint->unavailable_days,
-                ]);
-            }
+            $copier = new SessionDataCopier;
+            $copier->copyRooms($source, $newSession);
+            $copier->copyTeachers($source, $newSession);
 
             return $newSession;
         });

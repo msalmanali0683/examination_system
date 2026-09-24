@@ -5,6 +5,7 @@ use App\Http\Controllers\ReportDownloadController;
 use App\Livewire\Dashboard;
 use App\Livewire\Rooms\Import as RoomsImport;
 use App\Livewire\Rooms\Index as RoomsIndex;
+use App\Livewire\Sessions\CopyFromSession;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
@@ -70,6 +71,11 @@ Route::get('sessions/{examSession}/subjects', SubjectsIndex::class)
 Route::get('sessions/{examSession}/students', StudentsIndex::class)
     ->middleware(['auth'])
     ->name('sessions.students.index');
+
+Route::get('sessions/{examSession}/copy/{type}', CopyFromSession::class)
+    ->middleware(['auth'])
+    ->whereIn('type', ['rooms', 'teachers'])
+    ->name('sessions.copy');
 
 Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
     ->middleware(['auth'])
