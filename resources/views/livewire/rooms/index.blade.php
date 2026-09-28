@@ -106,7 +106,7 @@
                                 <a href="{{ route('sessions.availability', [$examSession, 'rooms', $room->id]) }}" wire:navigate class="text-sm font-medium text-gray-600 dark:text-gray-300 hover:underline">
                                     Specific slots @if ($room->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $room->unavailable_slots_count }} off)</span>@endif
                                 </a>
-                                <button type="button" wire:click="editRoom({{ $room->id }})" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
+                                <button type="button" wire:click="editRoom({{ $room->id }})" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
                                 <button type="button" wire:click="deleteRoom({{ $room->id }})" wire:confirm="Delete room {{ $room->name }}?" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                             </td>
                         </tr>

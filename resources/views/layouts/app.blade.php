@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+@php
+    $theme = \App\Support\Themes::themeFor(auth()->user());
+    $appearance = \App\Support\Themes::appearanceFor(auth()->user());
+@endphp
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ $theme }}" data-appearance="{{ $appearance }}" @guest data-guest @endguest @class(['dark' => $appearance === 'dark'])>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,6 +14,9 @@
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet" />
+
+        <!-- Theme: applied before first paint so there's no flash of the wrong colours -->
+        @include('partials.theme-init')
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])

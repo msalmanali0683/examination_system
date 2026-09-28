@@ -90,7 +90,7 @@
                 <thead>
                     <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         <th class="py-2.5 pl-4 sm:pl-6 pr-2 w-8">
-                            <input type="checkbox" wire:click="toggleSelectAllOnPage({{ Illuminate\Support\Js::from($pageIds) }})" @checked($allOnPageSelected) title="Select all on this page" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <input type="checkbox" wire:click="toggleSelectAllOnPage({{ Illuminate\Support\Js::from($pageIds) }})" @checked($allOnPageSelected) title="Select all on this page" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                         </th>
                         <th class="py-2.5 pr-4">Name</th>
                         <th class="py-2.5 pr-4">Designation</th>
@@ -104,7 +104,7 @@
                     @foreach ($teachers as $teacher)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
                             <td class="py-3 pl-4 sm:pl-6 pr-2">
-                                <input type="checkbox" wire:model.live="selected" value="{{ $teacher->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <input type="checkbox" wire:model.live="selected" value="{{ $teacher->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                             </td>
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $teacher->name }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $teacher->designation }}</td>
@@ -119,7 +119,7 @@
                                 <a href="{{ route('sessions.availability', [$examSession, 'teachers', $teacher->id]) }}" wire:navigate class="text-sm font-medium text-gray-600 dark:text-gray-300 hover:underline">
                                     Specific slots @if ($teacher->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $teacher->unavailable_slots_count }} off)</span>@endif
                                 </a>
-                                <button type="button" wire:click="editTeacher({{ $teacher->id }})" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
+                                <button type="button" wire:click="editTeacher({{ $teacher->id }})" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
                                 <button type="button" wire:click="deleteTeacher({{ $teacher->id }})" wire:confirm="Delete {{ $teacher->name }}?" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                             </td>
                         </tr>

@@ -83,12 +83,12 @@
                         <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $daysNeeded }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">Days needed at {{ $slotsPerDay }}/day</div>
                     </div>
-                    <div class="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
-                        <div class="text-2xl font-semibold text-indigo-700 dark:text-indigo-300">{{ $peakRoomsNeeded }}</div>
+                    <div class="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
+                        <div class="text-2xl font-semibold text-primary-700 dark:text-primary-300">{{ $peakRoomsNeeded }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">Peak rooms needed (busiest slot)</div>
                     </div>
-                    <div class="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
-                        <div class="text-2xl font-semibold text-indigo-700 dark:text-indigo-300">{{ $peakTeachersNeeded }}</div>
+                    <div class="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
+                        <div class="text-2xl font-semibold text-primary-700 dark:text-primary-300">{{ $peakTeachersNeeded }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">Peak teachers needed (busiest slot)</div>
                     </div>
                 </div>

@@ -3,13 +3,13 @@
 <div class="flex items-center justify-between gap-4 flex-wrap">
     <div class="flex items-center gap-3">
         @if ($icon)
-            <span class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+            <span class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                 <x-icon :name="$icon" class="h-5 w-5" />
             </span>
         @endif
         <div>
             @if ($back)
-                <a href="{{ $back }}" wire:navigate class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-0.5">
+                <a href="{{ $back }}" wire:navigate class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 mb-0.5">
                     <x-icon name="arrow-left" class="h-3 w-3" /> Back
                 </a>
             @endif

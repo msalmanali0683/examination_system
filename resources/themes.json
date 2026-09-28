@@ -1,0 +1,14 @@
+{
+    "default": "indigo",
+    "appearances": ["system", "light", "dark"],
+    "themes": {
+        "indigo": { "label": "Indigo", "hue": "indigo", "grayTint": 0, "chromeTint": 0 },
+        "ocean": { "label": "Ocean", "hue": "blue", "grayTint": 0.1, "chromeTint": 0.3 },
+        "emerald": { "label": "Emerald", "hue": "emerald", "darken": 1, "grayTint": 0.08, "chromeTint": 0.3 },
+        "teal": { "label": "Teal", "hue": "teal", "darken": 1, "grayTint": 0.08, "chromeTint": 0.3 },
+        "violet": { "label": "Violet", "hue": "violet", "grayTint": 0.08, "chromeTint": 0.3 },
+        "rose": { "label": "Rose", "hue": "rose", "grayTint": 0.06, "chromeTint": 0.28 },
+        "sunset": { "label": "Sunset", "hue": "orange", "darken": 1, "grayTint": 0.06, "chromeTint": 0.28 },
+        "graphite": { "label": "Graphite", "hue": "slate", "grayTint": 0, "chromeTint": 0 }
+    }
+}

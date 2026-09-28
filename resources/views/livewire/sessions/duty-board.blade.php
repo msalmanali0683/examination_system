@@ -7,7 +7,7 @@
     @if ($teacherDutyDetails)
         <div class="p-6">
             <div class="flex items-start gap-3">
-                <x-icon name="clipboard" class="h-6 w-6 text-indigo-600 shrink-0" />
+                <x-icon name="clipboard" class="h-6 w-6 text-primary-600 shrink-0" />
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ $teacherDutyDetails['teacherName'] }}</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ count($teacherDutyDetails['duties']) }} duty/duties this session:</p>
@@ -68,7 +68,7 @@
                     <button type="button" wire:click="selectSlot({{ $slot->id }})"
                         @class([
                             'px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition',
-                            'bg-indigo-600 text-white shadow-sm' => $activeSlotId === $slot->id,
+                            'bg-primary-600 text-white shadow-sm' => $activeSlotId === $slot->id,
                             'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600' => $activeSlotId !== $slot->id,
                         ])>
                         {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }}
@@ -137,7 +137,7 @@
                             <tr>
                                 <td class="py-2 px-3">
                                     @if ($row->count > 0)
-                                        <button type="button" wire:click="showTeacherDuties({{ $row->teacher->id }})" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ $row->teacher->name }}</button>
+                                        <button type="button" wire:click="showTeacherDuties({{ $row->teacher->id }})" class="text-primary-600 dark:text-primary-400 hover:underline">{{ $row->teacher->name }}</button>
                                     @else
                                         <span class="text-gray-900 dark:text-gray-100">{{ $row->teacher->name }}</span>
                                     @endif

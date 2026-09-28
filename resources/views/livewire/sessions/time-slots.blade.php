@@ -50,7 +50,7 @@
                 <div class="flex items-center gap-3 flex-wrap">
                     @foreach ($this->days() as $iso => $label)
                         <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-                            <input type="checkbox" wire:click="toggleBulkSkipDay({{ $iso }})" @checked(in_array($iso, $bulkSkipDays)) class="rounded border-gray-300 h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500">
+                            <input type="checkbox" wire:click="toggleBulkSkipDay({{ $iso }})" @checked(in_array($iso, $bulkSkipDays)) class="rounded border-gray-300 h-3.5 w-3.5 text-primary-600 focus:ring-primary-500">
                             {{ $label }}
                         </label>
                     @endforeach
@@ -122,7 +122,7 @@
                             <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $slot->label }}</td>
                             <td class="py-2 pr-4 text-right space-x-3 whitespace-nowrap">
                                 @unless ($examSession->isFinalized())
-                                    <button type="button" wire:click="editSlot({{ $slot->id }})" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
+                                    <button type="button" wire:click="editSlot({{ $slot->id }})" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
                                     <button type="button" wire:click="deleteSlot({{ $slot->id }})" wire:confirm="Delete this time slot?" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                                 @endunless
                             </td>

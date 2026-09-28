@@ -39,7 +39,7 @@
                         <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Slots</label>
                         @foreach ($slotsForDate as $slot)
                             <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg px-2 py-1">
-                                <input type="checkbox" wire:model.live="filterSlotIds" value="{{ $slot->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <input type="checkbox" wire:model.live="filterSlotIds" value="{{ $slot->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                 {{ substr($slot->start_time, 0, 5) }}&ndash;{{ substr($slot->end_time, 0, 5) }}
                             </label>
                         @endforeach
@@ -48,7 +48,7 @@
 
                 @if ($config['flagLabel'])
                     <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                        <input type="checkbox" wire:model.live="showFlag" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <input type="checkbox" wire:model.live="showFlag" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                         {{ $config['flagLabel'] }}
                     </label>
                 @endif

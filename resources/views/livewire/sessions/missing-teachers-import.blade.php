@@ -21,7 +21,7 @@
                 <div class="flex items-center gap-2">
                     <span @class([
                         'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                        'bg-indigo-600 text-white' => $idx <= $currentIndex,
+                        'bg-primary-600 text-white' => $idx <= $currentIndex,
                         'bg-gray-100 dark:bg-gray-700 text-gray-400' => $idx > $currentIndex,
                     ])>
                         @if ($idx < $currentIndex)
@@ -33,7 +33,7 @@
                     <span class="text-xs font-medium {{ $idx <= $currentIndex ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400' }} hidden sm:inline">{{ $label }}</span>
                 </div>
                 @if (! $loop->last)
-                    <div class="flex-1 h-px mx-3 {{ $idx < $currentIndex ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700' }}"></div>
+                    <div class="flex-1 h-px mx-3 {{ $idx < $currentIndex ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-700' }}"></div>
                 @endif
             </div>
         @endforeach
@@ -44,8 +44,8 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Upload File</h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload an Excel or CSV file with a teacher name, course and section per row. The first row must be column headers.</p>
 
-            <div class="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-between gap-4">
-                <p class="text-sm text-indigo-700 dark:text-indigo-300">Not sure of the format? Download a template pre-filled with this session's {{ $scopeIgnored ? 'ignored' : 'pending' }} pairs — just fill in Teacher Name.</p>
+            <div class="mt-4 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg flex items-center justify-between gap-4">
+                <p class="text-sm text-primary-700 dark:text-primary-300">Not sure of the format? Download a template pre-filled with this session's {{ $scopeIgnored ? 'ignored' : 'pending' }} pairs — just fill in Teacher Name.</p>
                 <a href="{{ route('sessions.missing-teachers.template', ['examSession' => $examSession, 'ignored' => $scopeIgnored ? 1 : null]) }}">
                     <x-btn variant="secondary" size="sm" icon="download">Download Template</x-btn>
                 </a>

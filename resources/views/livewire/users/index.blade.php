@@ -57,7 +57,7 @@
             <div class="px-4 sm:px-6 py-4">
                 <div class="flex items-center justify-between gap-4 flex-wrap">
                     <div class="flex items-center gap-3 min-w-0">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 text-sm font-semibold uppercase">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300 text-sm font-semibold uppercase">
                             {{ Str::substr($user->name, 0, 1) }}
                         </span>
                         <div class="min-w-0">
@@ -78,7 +78,7 @@
                             <option value="staff" @selected($user->role === 'staff')>Staff</option>
                             <option value="head" @selected($user->role === 'head')>Head</option>
                         </select>
-                        <button type="button" wire:click="toggleExpand({{ $user->id }})" class="text-sm font-medium text-indigo-600 hover:underline whitespace-nowrap">
+                        <button type="button" wire:click="toggleExpand({{ $user->id }})" class="text-sm font-medium text-primary-600 hover:underline whitespace-nowrap">
                             {{ $expandedUserId === $user->id ? 'Hide permissions' : 'Permissions' }}
                             @if ($user->permissionOverrides->isNotEmpty())
                                 <span class="text-xs text-gray-400">({{ $user->permissionOverrides->count() }})</span>

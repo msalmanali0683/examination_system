@@ -44,7 +44,7 @@
                 <x-badge :color="$examSession->isReportFinal() ? 'green' : 'yellow'">{{ $examSession->reportStampLabel() }}</x-badge>
             </div>
             @if (! $editingDetails && ! $examSession->isFinalized())
-                <button type="button" wire:click="editDetails" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
+                <button type="button" wire:click="editDetails" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
             @endif
         </div>
 
@@ -95,31 +95,31 @@
 
     <x-card :padded="false">
         <div class="border-b border-gray-100 dark:border-gray-700 px-4 sm:px-6 flex gap-1 overflow-x-auto">
-            <button type="button" @click="tab = 'rooms'" :class="tab === 'rooms' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+            <button type="button" @click="tab = 'rooms'" :class="tab === 'rooms' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="door" class="h-4 w-4" /> Rooms
             </button>
-            <button type="button" @click="tab = 'teachers'" :class="tab === 'teachers' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+            <button type="button" @click="tab = 'teachers'" :class="tab === 'teachers' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="cap" class="h-4 w-4" /> Teachers
             </button>
-            <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+            <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="calendar" class="h-4 w-4" /> Time Slots
             </button>
-            <button type="button" @click="tab = 'enrollments'" :class="tab === 'enrollments' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+            <button type="button" @click="tab = 'enrollments'" :class="tab === 'enrollments' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="users" class="h-4 w-4" /> Enrollments
             </button>
             @can('view_reports')
-                <button type="button" @click="tab = 'lookup'" :class="tab === 'lookup' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                <button type="button" @click="tab = 'lookup'" :class="tab === 'lookup' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="search" class="h-4 w-4" /> Find Student
                 </button>
-                <button type="button" @click="tab = 'reports'" :class="tab === 'reports' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                <button type="button" @click="tab = 'reports'" :class="tab === 'reports' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="download" class="h-4 w-4" /> Reports
                 </button>
             @endcan
-            <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+            <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                 <x-icon name="clipboard" class="h-4 w-4" /> Activity
             </button>
             @can('generate_roster')
-                <button type="button" @click="tab = 'capacity'" :class="tab === 'capacity' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                <button type="button" @click="tab = 'capacity'" :class="tab === 'capacity' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="chart-bar" class="h-4 w-4" /> Check Capacity
                 </button>
             @endcan
@@ -167,7 +167,7 @@
                                         <span class="text-xs text-gray-400 ml-1">{{ $room->capacity }} seats{{ $room->is_active ? '' : ' &middot; inactive' }}</span>
                                     </div>
                                     @can('manage_rooms')
-                                        <a href="{{ route('sessions.availability', [$examSession, 'rooms', $room->id]) }}" wire:navigate class="text-xs font-medium text-indigo-600 hover:underline">
+                                        <a href="{{ route('sessions.availability', [$examSession, 'rooms', $room->id]) }}" wire:navigate class="text-xs font-medium text-primary-600 hover:underline">
                                             Specific slots @if ($room->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $room->unavailable_slots_count }} off)</span>@endif
                                         </a>
                                     @endcan

@@ -22,7 +22,7 @@ new class extends Component
 >
     <div class="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-white/10">
         <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-3 min-w-0">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-500/20 text-primary-300">
                 <x-application-logo class="h-5 w-5 fill-current" />
             </span>
             <span class="min-w-0">
@@ -37,15 +37,15 @@ new class extends Component
 
     <nav class="flex-1 overflow-y-auto px-3 py-5 space-y-1">
         <a href="{{ route('dashboard') }}" wire:navigate
-           class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('dashboard') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-            <x-icon name="home" class="h-5 w-5 shrink-0 {{ request()->routeIs('dashboard') ? 'text-indigo-400' : 'text-slate-400' }}" />
+           class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('dashboard') ? 'bg-primary-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+            <x-icon name="home" class="h-5 w-5 shrink-0 {{ request()->routeIs('dashboard') ? 'text-primary-400' : 'text-slate-400' }}" />
             {{ __('Dashboard') }}
         </a>
 
         @can('manage_sessions')
             <a href="{{ route('sessions.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('sessions.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="calendar" class="h-5 w-5 shrink-0 {{ request()->routeIs('sessions.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
+               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('sessions.*') ? 'bg-primary-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+                <x-icon name="calendar" class="h-5 w-5 shrink-0 {{ request()->routeIs('sessions.*') ? 'text-primary-400' : 'text-slate-400' }}" />
                 {{ __('Exam Sessions') }}
             </a>
         @endcan
@@ -68,8 +68,8 @@ new class extends Component
                 @foreach ($sessionLinks as $link)
                     @can($link['can'])
                         <a href="{{ route($link['route'], $navSession) }}" wire:navigate
-                           class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition {{ request()->routeIs($link['match']) ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                            <x-icon :name="$link['icon']" class="h-4 w-4 shrink-0 {{ request()->routeIs($link['match']) ? 'text-indigo-400' : 'text-slate-400' }}" />
+                           class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition {{ request()->routeIs($link['match']) ? 'bg-primary-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+                            <x-icon :name="$link['icon']" class="h-4 w-4 shrink-0 {{ request()->routeIs($link['match']) ? 'text-primary-400' : 'text-slate-400' }}" />
                             {{ $link['label'] }}
                         </a>
                     @endcan
@@ -79,16 +79,27 @@ new class extends Component
 
         @can('manage_users')
             <a href="{{ route('users.index') }}" wire:navigate
-               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('users.*') ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
-                <x-icon name="users" class="h-5 w-5 shrink-0 {{ request()->routeIs('users.*') ? 'text-indigo-400' : 'text-slate-400' }}" />
+               class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('users.*') ? 'bg-primary-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
+                <x-icon name="users" class="h-5 w-5 shrink-0 {{ request()->routeIs('users.*') ? 'text-primary-400' : 'text-slate-400' }}" />
                 {{ __('Users') }}
             </a>
         @endcan
     </nav>
 
-    <div class="border-t border-white/10 p-3" x-data="{ open: false }" @click.outside="open = false">
+    <div class="relative border-t border-white/10 px-3 pt-3" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+        <button type="button" @click="open = ! open" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white transition">
+            <x-icon name="palette" class="h-5 w-5 shrink-0 text-slate-400" />
+            {{ __('Theme & appearance') }}
+        </button>
+        <div x-show="open" x-transition style="display: none;"
+            class="absolute bottom-full left-3 right-3 mb-2 rounded-xl bg-white p-4 shadow-xl ring-1 ring-black/10 dark:bg-gray-800 z-50">
+            <x-theme-picker />
+        </div>
+    </div>
+
+    <div class="p-3" x-data="{ open: false }" @click.outside="open = false">
         <button @click="open = ! open" type="button" class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-left">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-white text-sm font-semibold uppercase">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white text-sm font-semibold uppercase">
                 {{ Str::substr(auth()->user()->name, 0, 1) }}
             </span>
             <span class="min-w-0 flex-1">

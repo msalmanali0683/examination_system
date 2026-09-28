@@ -15,7 +15,7 @@
         <div class="p-4 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent Sessions</h3>
             @can('manage_sessions')
-                <a href="{{ route('sessions.index') }}" wire:navigate class="text-xs font-medium text-indigo-600 hover:underline">View all</a>
+                <a href="{{ route('sessions.index') }}" wire:navigate class="text-xs font-medium text-primary-600 hover:underline">View all</a>
             @endcan
         </div>
 

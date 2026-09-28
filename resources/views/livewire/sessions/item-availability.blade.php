@@ -52,7 +52,7 @@
                     @if ($dayOff)
                         <span class="text-xs text-gray-500 dark:text-gray-400">Off every {{ $carbon->format('l') }} &mdash; set on the Teachers tab</span>
                     @else
-                        <button type="button" wire:click="toggleDay('{{ $date }}')" class="text-xs font-medium text-indigo-600 hover:underline">
+                        <button type="button" wire:click="toggleDay('{{ $date }}')" class="text-xs font-medium text-primary-600 hover:underline">
                             {{ $allOff ? 'Make the whole day available' : 'Mark the whole day unavailable' }}
                         </button>
                     @endif
@@ -66,7 +66,7 @@
                             'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30' => ! $dayOff,
                             'opacity-60 cursor-not-allowed' => $dayOff,
                         ])>
-                            <input type="checkbox" wire:click="toggleSlot({{ $slot->id }})" @checked(! $isOff) @disabled($dayOff) class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <input type="checkbox" wire:click="toggleSlot({{ $slot->id }})" @checked(! $isOff) @disabled($dayOff) class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                             <span class="text-sm font-medium text-gray-900 dark:text-gray-100">Slot {{ $loop->iteration }}</span>
                             <span class="text-sm text-gray-500 dark:text-gray-400">{{ substr($slot->start_time, 0, 5) }} &ndash; {{ substr($slot->end_time, 0, 5) }}{{ $slot->label ? ' ('.$slot->label.')' : '' }}</span>
                             @if ($isOff)

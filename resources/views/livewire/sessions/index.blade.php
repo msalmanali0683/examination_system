@@ -46,9 +46,9 @@
     @endif
 
     @if ($duplicatingId)
-        <form wire:submit="confirmDuplicate" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700 bg-indigo-50/50 dark:bg-indigo-900/10 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4">
+        <form wire:submit="confirmDuplicate" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700 bg-primary-50/50 dark:bg-primary-900/10 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4">
             <div class="sm:col-span-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
-                <x-icon name="download" class="h-4 w-4 text-indigo-500" />
+                <x-icon name="download" class="h-4 w-4 text-primary-500" />
                 Duplicating rooms and teacher constraints into a new session. Enrollments and generated data are not copied.
             </div>
             <div class="sm:col-span-3">
@@ -81,7 +81,7 @@
                 <div class="relative flex items-center justify-between gap-4 px-4 sm:px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition">
                     <a href="{{ route('sessions.show', $session) }}" wire:navigate class="absolute inset-0" aria-label="Open {{ $session->name }}"></a>
                     <div class="flex items-center gap-3 min-w-0 pointer-events-none">
-                        <span class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                        <span class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                             <x-icon name="calendar" class="h-4 w-4" />
                         </span>
                         <div class="min-w-0">
@@ -95,7 +95,7 @@
                         <x-badge :color="match($session->status) { 'generated' => 'blue', 'finalized' => 'green', default => 'gray' }">
                             {{ ucfirst($session->status) }}
                         </x-badge>
-                        <button type="button" wire:click="startDuplicate({{ $session->id }})" title="Duplicate this session's rooms and teacher constraints" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                        <button type="button" wire:click="startDuplicate({{ $session->id }})" title="Duplicate this session's rooms and teacher constraints" class="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
                             <x-icon name="document" class="h-4 w-4" />
                         </button>
                         @if ($session->status !== 'finalized')

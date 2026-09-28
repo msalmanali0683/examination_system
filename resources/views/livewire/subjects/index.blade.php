@@ -20,7 +20,7 @@
 <x-modal name="merge-subjects" :show="$showMergeModal" focusable max-width="lg">
     <div class="p-6">
         <div class="flex items-start gap-3">
-            <x-icon name="document" class="h-6 w-6 text-indigo-600 shrink-0" />
+            <x-icon name="document" class="h-6 w-6 text-primary-600 shrink-0" />
             <div>
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Merge Subjects</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pick which subject survives &mdash; every other selected subject is merged into it. Enrollments and pinned slots in sessions that aren't finalized move onto the survivor; finalized sessions keep their original historical record untouched.</p>
@@ -29,7 +29,7 @@
         <div class="mt-4 space-y-2">
             @foreach ($examSession->subjects()->whereIn('id', $selected)->orderBy('code')->get() as $subject)
                 <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 cursor-pointer">
-                    <input type="radio" wire:model="survivorId" value="{{ $subject->id }}" class="text-indigo-600 focus:ring-indigo-500">
+                    <input type="radio" wire:model="survivorId" value="{{ $subject->id }}" class="text-primary-600 focus:ring-primary-500">
                     <span class="font-medium">{{ $subject->code }}</span>
                     <span class="text-gray-500 dark:text-gray-400">&mdash; {{ $subject->title }}</span>
                 </label>
@@ -56,8 +56,8 @@
     </div>
 
     @if (count($selected) > 0)
-        <div class="flex items-center gap-3 mb-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-            <span class="text-sm text-indigo-700 dark:text-indigo-300">{{ count($selected) }} selected</span>
+        <div class="flex items-center gap-3 mb-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+            <span class="text-sm text-primary-700 dark:text-primary-300">{{ count($selected) }} selected</span>
             <x-btn wire:click="openMergeModal" variant="dark" size="sm" icon="document">Merge Selected</x-btn>
             <button type="button" wire:click="clearSelection" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
         </div>
@@ -75,7 +75,7 @@
                 <thead>
                     <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         <th class="py-2.5 pl-4 sm:pl-6 pr-2 w-8">
-                            <input type="checkbox" wire:click="toggleSelectAllOnPage({{ Illuminate\Support\Js::from($pageIds) }})" @checked($allOnPageSelected) title="Select all mergeable subjects on this page" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <input type="checkbox" wire:click="toggleSelectAllOnPage({{ Illuminate\Support\Js::from($pageIds) }})" @checked($allOnPageSelected) title="Select all mergeable subjects on this page" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                         </th>
                         <th class="py-2.5 pr-4">Code</th>
                         <th class="py-2.5 pr-4">Title</th>
@@ -88,7 +88,7 @@
                         <tr @class(['opacity-60' => $subject->isMerged(), 'hover:bg-gray-50 dark:hover:bg-gray-900/30' => ! $subject->isMerged()])>
                             <td class="py-3 pl-4 sm:pl-6 pr-2">
                                 @unless ($subject->isMerged())
-                                    <input type="checkbox" wire:model.live="selected" value="{{ $subject->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <input type="checkbox" wire:model.live="selected" value="{{ $subject->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                 @endunless
                             </td>
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $subject->code }}</td>

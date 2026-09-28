@@ -55,7 +55,7 @@
                 <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ $source->name }}</h3>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Tick the {{ $label }}s to import, or tick the box at the top for all of them.</p>
             </div>
-            <button type="button" wire:click="chooseAnother" class="text-sm font-medium text-indigo-600 hover:underline">&larr; Choose a different session</button>
+            <button type="button" wire:click="chooseAnother" class="text-sm font-medium text-primary-600 hover:underline">&larr; Choose a different session</button>
         </div>
 
         @if ($rows->isEmpty())
@@ -66,7 +66,7 @@
                     <thead>
                         <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                             <th class="py-2.5 pl-4 sm:pl-6 pr-2 w-8">
-                                <input type="checkbox" wire:click="toggleSelectAll" @checked($allSelected) @disabled($availableCount === 0) title="Select all" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <input type="checkbox" wire:click="toggleSelectAll" @checked($allSelected) @disabled($availableCount === 0) title="Select all" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                             </th>
                             <th class="py-2.5 pr-4">Name</th>
                             @if ($type === 'rooms')
@@ -86,7 +86,7 @@
                             @php $isThere = $alreadyThere->has($row->id); @endphp
                             <tr @class(['hover:bg-gray-50 dark:hover:bg-gray-900/30', 'opacity-60' => $isThere])>
                                 <td class="py-3 pl-4 sm:pl-6 pr-2">
-                                    <input type="checkbox" wire:model.live="selected" value="{{ $row->id }}" @disabled($isThere) class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <input type="checkbox" wire:model.live="selected" value="{{ $row->id }}" @disabled($isThere) class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                 </td>
                                 <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $row->name }}</td>
                                 @if ($type === 'rooms')
@@ -119,7 +119,7 @@
 
                 @if ($type === 'teachers')
                     <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                        <input type="checkbox" wire:model="withConstraints" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <input type="checkbox" wire:model="withConstraints" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                         Also bring their duty limits, unavailable days and exclusions
                     </label>
                 @endif

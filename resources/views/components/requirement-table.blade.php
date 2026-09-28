@@ -61,7 +61,7 @@
                             @if (! empty($r->alertDetails))
                                 <div class="mt-1 space-y-0.5 max-w-xs">
                                     @foreach ($r->alertDetails as $detail)
-                                        <p class="text-xs text-blue-700 dark:text-blue-400">{{ $detail }}</p>
+                                        <p class="text-xs text-primary-700 dark:text-primary-400">{{ $detail }}</p>
                                     @endforeach
                                 </div>
                             @endif

@@ -58,13 +58,13 @@
         </div>
         <div class="flex items-end">
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-2">
-                <input type="checkbox" wire:model="teacher_subject_exclusion" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <input type="checkbox" wire:model="teacher_subject_exclusion" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                 Avoid assigning a teacher to invigilate their own subject
             </label>
         </div>
         <div class="flex items-end">
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-2">
-                <input type="checkbox" wire:model="respect_room_capacity" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <input type="checkbox" wire:model="respect_room_capacity" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                 Keep each slot within active room capacity when generating the timetable
             </label>
         </div>
@@ -78,9 +78,9 @@
     <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Generation Steps</h3>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <a href="{{ route('sessions.missing-teachers', $examSession) }}" wire:navigate class="block">
-            <x-card class="h-full hover:ring-2 hover:ring-indigo-500 transition">
+            <x-card class="h-full hover:ring-2 hover:ring-primary-500 transition">
                 <div class="flex items-start gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                         <x-icon name="user-group" class="h-5 w-5" />
                     </span>
                     <div>
@@ -99,9 +99,9 @@
         </a>
 
         <a href="{{ route('sessions.timetable', $examSession) }}" wire:navigate class="block">
-            <x-card class="h-full hover:ring-2 hover:ring-indigo-500 transition">
+            <x-card class="h-full hover:ring-2 hover:ring-primary-500 transition">
                 <div class="flex items-start gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                         <x-icon name="calendar" class="h-5 w-5" />
                     </span>
                     <div>
@@ -119,9 +119,9 @@
         </a>
 
         <a href="{{ route('sessions.show', ['examSession' => $examSession, 'tab' => 'capacity']) }}" wire:navigate class="block">
-            <x-card class="h-full hover:ring-2 hover:ring-indigo-500 transition">
+            <x-card class="h-full hover:ring-2 hover:ring-primary-500 transition">
                 <div class="flex items-start gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                         <x-icon name="search" class="h-5 w-5" />
                     </span>
                     <div>
@@ -133,9 +133,9 @@
         </a>
 
         <a href="{{ route('sessions.seating', $examSession) }}" wire:navigate class="block">
-            <x-card class="h-full hover:ring-2 hover:ring-indigo-500 transition">
+            <x-card class="h-full hover:ring-2 hover:ring-primary-500 transition">
                 <div class="flex items-start gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                         <x-icon name="grid" class="h-5 w-5" />
                     </span>
                     <div>
@@ -151,9 +151,9 @@
         </a>
 
         <a href="{{ route('sessions.duties', $examSession) }}" wire:navigate class="block">
-            <x-card class="h-full hover:ring-2 hover:ring-indigo-500 transition">
+            <x-card class="h-full hover:ring-2 hover:ring-primary-500 transition">
                 <div class="flex items-start gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
                         <x-icon name="clipboard" class="h-5 w-5" />
                     </span>
                     <div>

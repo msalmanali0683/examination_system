@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * @tailwindcss/forms hard-codes a blue focus ring and blue checked
+ * checkboxes/radios; point them at the theme's accent instead so form
+ * controls follow the chosen colour theme like everything else.
+ */
+@layer base {
+    [type='text']:focus,
+    [type='email']:focus,
+    [type='url']:focus,
+    [type='password']:focus,
+    [type='number']:focus,
+    [type='date']:focus,
+    [type='datetime-local']:focus,
+    [type='month']:focus,
+    [type='search']:focus,
+    [type='tel']:focus,
+    [type='time']:focus,
+    [type='week']:focus,
+    [multiple]:focus,
+    textarea:focus,
+    select:focus {
+        --tw-ring-color: rgb(var(--primary-600));
+        border-color: rgb(var(--primary-600));
+    }
+
+    [type='checkbox'],
+    [type='radio'] {
+        color: rgb(var(--primary-600));
+    }
+
+    [type='checkbox']:focus,
+    [type='radio']:focus {
+        --tw-ring-color: rgb(var(--primary-600));
+    }
+}

@@ -10,12 +10,12 @@ $sizes = [
 ];
 
 $variants = [
-    'primary' => 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 focus:ring-indigo-500',
-    'secondary' => 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 ring-1 ring-gray-300 dark:ring-gray-600 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-indigo-500',
+    'primary' => 'bg-primary-600 text-white shadow-sm hover:bg-primary-500 focus:ring-primary-500',
+    'secondary' => 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 ring-1 ring-gray-300 dark:ring-gray-600 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-primary-500',
     'dark' => 'bg-gray-900 dark:bg-gray-700 text-white shadow-sm hover:bg-gray-700 dark:hover:bg-gray-600 focus:ring-gray-500',
     'danger' => 'bg-white dark:bg-gray-700 text-red-600 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-900 shadow-sm hover:bg-red-50 dark:hover:bg-red-900/30 focus:ring-red-500',
     'danger-solid' => 'bg-red-600 text-white shadow-sm hover:bg-red-500 focus:ring-red-500',
-    'ghost' => 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 focus:ring-indigo-500',
+    'ghost' => 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 focus:ring-primary-500',
 ];
 
 $classes = $base . ' ' . ($sizes[$size] ?? $sizes['md']) . ' ' . ($variants[$variant] ?? $variants['primary']);

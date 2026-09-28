@@ -118,7 +118,7 @@
                             <tr @class(['hover:bg-gray-50 dark:hover:bg-gray-900/30', 'opacity-50' => $excluded])>
                                 @can('manage_subjects')
                                     <td class="py-2.5 pl-4 sm:pl-6 pr-2">
-                                        <input type="checkbox" wire:model.live="mergeSelected" value="{{ $subject->id }}" title="Select to merge with another subject below" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                        <input type="checkbox" wire:model.live="mergeSelected" value="{{ $subject->id }}" title="Select to merge with another subject below" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                     </td>
                                 @endcan
                                 <td class="py-2.5 pr-4 text-gray-900 dark:text-gray-100 {{ auth()->user()->can('manage_subjects') ? '' : 'pl-4 sm:pl-6' }}">
@@ -144,7 +144,7 @@
                                         {{ $assignment->timeSlot->date->format('d M') }} {{ substr($assignment->timeSlot->start_time, 0, 5) }}
                                         @if ($assignment->conflict_note)
                                             @php $isBlockingClash = \App\Services\Generation\ConflictNoteClassifier::isBlockingClash($assignment->conflict_note); @endphp
-                                            <button type="button" wire:click="showClashDetails({{ $subject->id }})" title="Click to see the students causing this {{ $isBlockingClash ? 'clash' : 'alert' }}" @class(['underline decoration-dotted', 'text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300' => $isBlockingClash, 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300' => ! $isBlockingClash])>&#9888;</button>
+                                            <button type="button" wire:click="showClashDetails({{ $subject->id }})" title="Click to see the students causing this {{ $isBlockingClash ? 'clash' : 'alert' }}" @class(['underline decoration-dotted', 'text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300' => $isBlockingClash, 'text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300' => ! $isBlockingClash])>&#9888;</button>
                                         @endif
                                     @else
                                         <span class="text-gray-400">Not yet generated</span>
@@ -177,7 +177,7 @@
                                     </div>
                                 </td>
                                 <td class="py-2.5 pr-4">
-                                    <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) @disabled($excluded) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">
+                                    <input type="checkbox" wire:click="toggleDutyMatchesSections({{ $subject->id }})" @checked($assignment?->duty_matches_sections) @disabled($excluded) title="A teacher who teaches N sections of this subject gets exactly N duties this session." class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50">
                                 </td>
                                 <td class="py-2.5 pr-4 sm:pr-6">
                                     <input type="checkbox" wire:click="toggleSubjectExcluded({{ $subject->id }})" @checked($excluded)
@@ -192,8 +192,8 @@
 
             @can('manage_subjects')
                 @if (count($mergeSelected) > 0)
-                    <div class="mt-3 flex items-center gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                        <span class="text-sm text-indigo-700 dark:text-indigo-300">{{ count($mergeSelected) }} selected</span>
+                    <div class="mt-3 flex items-center gap-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                        <span class="text-sm text-primary-700 dark:text-primary-300">{{ count($mergeSelected) }} selected</span>
                         <x-btn wire:click="openSubjectMergeModal" variant="dark" size="sm" icon="document">Merge Selected</x-btn>
                         <button type="button" wire:click="$set('mergeSelected', [])" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
                     </div>
@@ -211,7 +211,7 @@
 <x-modal name="merge-subjects" :show="$showSubjectMergeModal" focusable max-width="lg">
     <div class="p-6">
         <div class="flex items-start gap-3">
-            <x-icon name="document" class="h-6 w-6 text-indigo-600 shrink-0" />
+            <x-icon name="document" class="h-6 w-6 text-primary-600 shrink-0" />
             <div>
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Merge Subjects</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pick which subject survives &mdash; every other selected subject is merged into it, catalog-wide. Enrollments and pinned slots in sessions that aren't finalized move onto the survivor; finalized sessions keep their original historical record untouched.</p>
@@ -220,7 +220,7 @@
         <div class="mt-4 space-y-2">
             @foreach (\App\Models\Subject::whereIn('id', $mergeSelected)->orderBy('code')->get() as $subject)
                 <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 cursor-pointer">
-                    <input type="radio" wire:model="mergeSurvivorId" value="{{ $subject->id }}" class="text-indigo-600 focus:ring-indigo-500">
+                    <input type="radio" wire:model="mergeSurvivorId" value="{{ $subject->id }}" class="text-primary-600 focus:ring-primary-500">
                     <span class="font-medium">{{ $subject->code }}</span>
                     <span class="text-gray-500 dark:text-gray-400">&mdash; {{ $subject->title }}</span>
                 </label>
@@ -261,7 +261,7 @@
         </p>
         <ul class="mt-4 space-y-2">
             @foreach ($alerts as $assignment)
-                <li class="text-sm text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                <li class="text-sm text-primary-700 dark:text-primary-400 flex items-start gap-2">
                     <x-icon name="warning" class="h-4 w-4 mt-0.5 shrink-0" />
                     <button type="button" wire:click="showClashDetails({{ $assignment->subject_id }})" class="text-left hover:underline decoration-dotted">{{ $assignment->conflict_note }}</button>
                 </li>

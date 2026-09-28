@@ -37,7 +37,7 @@
                     <button type="button" wire:click="selectSlot({{ $slot->id }})"
                         @class([
                             'px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition',
-                            'bg-indigo-600 text-white shadow-sm' => $activeSlotId === $slot->id,
+                            'bg-primary-600 text-white shadow-sm' => $activeSlotId === $slot->id,
                             'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600' => $activeSlotId !== $slot->id,
                         ])>
                         {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }}
@@ -88,7 +88,7 @@
                                                     'seat-card' => ! $seat->is_locked,
                                                     'seat-card-locked' => $seat->is_locked,
                                                     'h-full rounded p-1 text-[11px] leading-tight cursor-move select-none border',
-                                                    'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-200 dark:border-indigo-800' => ! $seat->is_locked,
+                                                    'bg-primary-50 dark:bg-primary-900/40 border-primary-200 dark:border-primary-800' => ! $seat->is_locked,
                                                     'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 cursor-default' => $seat->is_locked,
                                                 ])
                                                 data-enrollment-id="{{ $seat->enrollment_id }}"

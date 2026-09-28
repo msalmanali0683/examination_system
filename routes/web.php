@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppearanceController;
 use App\Http\Controllers\MissingTeacherTemplateController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Livewire\Dashboard;
@@ -32,6 +33,10 @@ Route::redirect('/', '/dashboard');
 Route::get('dashboard', Dashboard::class)
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+
+Route::post('appearance', [AppearanceController::class, 'update'])
+    ->middleware(['auth'])
+    ->name('appearance.update');
 
 Route::view('profile', 'profile')
     ->middleware(['auth'])

@@ -39,7 +39,7 @@
                     <input type="checkbox"
                         wire:click="toggleDayForAll({{ $iso }}, $event.target.checked)"
                         @checked($allAvailableByDay[$iso])
-                        class="rounded border-gray-300 h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500">
+                        class="rounded border-gray-300 h-3.5 w-3.5 text-primary-600 focus:ring-primary-500">
                     {{ $label }}
                 </label>
             @endforeach
@@ -101,7 +101,7 @@
                         @endforeach
 
                         <span class="text-xs text-gray-300 dark:text-gray-600">|</span>
-                        <a href="{{ route('sessions.availability', [$examSession, 'teachers', $teacher->id]) }}" wire:navigate class="text-xs font-medium text-indigo-600 hover:underline">
+                        <a href="{{ route('sessions.availability', [$examSession, 'teachers', $teacher->id]) }}" wire:navigate class="text-xs font-medium text-primary-600 hover:underline">
                             Specific slots @if ($teacher->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $teacher->unavailable_slots_count }} off)</span>@endif
                         </a>
                     </div>

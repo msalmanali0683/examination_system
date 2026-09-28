@@ -16,7 +16,7 @@
                 <div class="flex items-center gap-2">
                     <span @class([
                         'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                        'bg-indigo-600 text-white' => $idx <= $currentIndex,
+                        'bg-primary-600 text-white' => $idx <= $currentIndex,
                         'bg-gray-100 dark:bg-gray-700 text-gray-400' => $idx > $currentIndex,
                     ])>
                         @if ($idx < $currentIndex)
@@ -28,7 +28,7 @@
                     <span class="text-xs font-medium {{ $idx <= $currentIndex ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400' }} hidden sm:inline">{{ $label }}</span>
                 </div>
                 @if (! $loop->last)
-                    <div class="flex-1 h-px mx-3 {{ $idx < $currentIndex ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700' }}"></div>
+                    <div class="flex-1 h-px mx-3 {{ $idx < $currentIndex ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-700' }}"></div>
                 @endif
             </div>
         @endforeach
