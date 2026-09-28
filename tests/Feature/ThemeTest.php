@@ -2,12 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Students\Index;
+use App\Models\ExamSession;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\Reports\ReportCatalog;
 use App\Support\Themes;
 use FilesystemIterator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use Livewire\Livewire;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Tests\TestCase;
@@ -208,6 +212,34 @@ class ThemeTest extends TestCase
         }
 
         $this->assertSame([], $offenders, "Hard-coded accent colours found (use primary-*):\n".implode("\n", $offenders));
+    }
+
+    /**
+     * Paginated lists render Livewire's own pagination view, which ships with a
+     * fixed blue accent — that would be the one part of every list ignoring the
+     * theme. The app overrides it (resources/views/vendor), so it must follow
+     * the accent instead.
+     */
+    public function test_pagination_controls_follow_the_theme_instead_of_a_fixed_blue(): void
+    {
+        $session = ExamSession::factory()->create();
+        Student::factory()->for($session)->count(30)->create();
+
+        $page = Livewire::actingAs($this->user())->test(Index::class, ['examSession' => $session]);
+
+        $page->assertSee('aria-label="Pagination Navigation"', false)
+            ->assertSee('primary-', false)
+            ->assertDontSee('border-blue', false)
+            ->assertDontSee('ring-blue', false)
+            ->assertDontSee('text-blue', false);
+
+        foreach (['livewire', 'pagination'] as $namespace) {
+            foreach (['tailwind', 'simple-tailwind'] as $view) {
+                $path = resource_path("views/vendor/{$namespace}/{$view}.blade.php");
+                $this->assertFileExists($path);
+                $this->assertStringNotContainsString('blue-', file_get_contents($path), "{$namespace}/{$view} still hard-codes blue");
+            }
+        }
     }
 
     public function test_the_report_catalog_no_longer_carries_per_report_colours(): void
