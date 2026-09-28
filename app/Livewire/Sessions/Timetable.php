@@ -14,6 +14,7 @@ use App\Services\Generation\ConflictGraphBuilder;
 use App\Services\Generation\ConflictNoteClassifier;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SemesterExtractor;
+use App\Services\Generation\SlotAvailability;
 use App\Services\Generation\TimetableGenerator;
 use App\Services\SubjectMergeService;
 use Illuminate\Support\Facades\DB;
@@ -615,11 +616,18 @@ class Timetable extends Component
             ->all();
 
         $strategy = (new SeatAllocationService)->strategyFor($this->examSession->seating_strategy, $this->examSession->mixed_subjects_per_room);
+        $roomsOffBySlot = SlotAvailability::roomsOffBySlot($this->examSession);
 
-        return function (array $subjectIdsInSlot) use ($enrollmentsBySubject, $roomTemplate, $strategy): bool {
+        // A room can be switched off for one particular slot, so fit is
+        // judged against the rooms usable in the slot being considered.
+        return function (array $subjectIdsInSlot, ?int $slotId = null) use ($enrollmentsBySubject, $roomTemplate, $roomsOffBySlot, $strategy): bool {
             $subset = collect($subjectIdsInSlot)->flatMap(fn ($id) => $enrollmentsBySubject->get($id) ?? collect());
+            $off = $slotId === null ? [] : ($roomsOffBySlot[$slotId] ?? []);
+            $rooms = $off === []
+                ? $roomTemplate
+                : array_values(array_filter($roomTemplate, fn ($room) => ! in_array($room['room_id'], $off, true)));
 
-            return $strategy->allocate($subset, $roomTemplate)->warnings->where('type', 'unseated')->isEmpty();
+            return $strategy->allocate($subset, $rooms)->warnings->where('type', 'unseated')->isEmpty();
         };
     }
 
@@ -673,13 +681,20 @@ class Timetable extends Component
 
         $subjects = $subjects->sortBy(fn (Subject $s) => (int) ($semesterBySubject->get($s->id, collect())->first() ?? 999))->values();
 
-        // Every active room is available in every slot (rooms aren't
-        // restricted per slot in this app), so total seat capacity is one
-        // constant number; what varies per slot is how much of it other
-        // subjects already assigned there are using — that's what the Pin
-        // dropdown needs to show so the admin can see, before picking a
-        // slot, whether it still has room for this subject's students.
-        $seatsAvailableTotal = $this->examSession->rooms()->where('is_active', true)->sum('capacity');
+        // Every active room is usable in every slot unless it's been
+        // switched off for that particular slot (see SlotAvailability), so
+        // a slot's seat capacity is the active rooms' total minus any
+        // switched off for it; what varies on top of that is how much of
+        // it other subjects already assigned there are using — that's
+        // what the Pin dropdown needs to show so the admin can see, before
+        // picking a slot, whether it still has room for this subject's
+        // students.
+        $activeRooms = $this->examSession->rooms()->where('is_active', true)->get(['id', 'capacity']);
+        $seatsAvailableTotal = $activeRooms->sum('capacity');
+        $roomsOffBySlot = SlotAvailability::roomsOffBySlot($this->examSession);
+        $seatsAvailableBySlot = collect($roomsOffBySlot)->map(
+            fn ($offIds) => $activeRooms->reject(fn ($room) => in_array($room->id, $offIds, true))->sum('capacity')
+        );
 
         $seatsUsedPerSlot = $subjects
             ->filter(fn (Subject $s) => $assignments->get($s->id)?->time_slot_id !== null && ! $assignments->get($s->id)?->is_excluded)
@@ -802,6 +817,7 @@ class Timetable extends Component
             'sectionBreakdown' => $sectionBreakdown,
             'semesterBySubject' => $semesterBySubject,
             'seatsAvailableTotal' => $seatsAvailableTotal,
+            'seatsAvailableBySlot' => $seatsAvailableBySlot,
             'seatsUsedPerSlot' => $seatsUsedPerSlot,
             'clashingDaysBySubject' => $clashingDaysBySubject,
             'clashingSlotsBySubject' => $clashingSlotsBySubject,

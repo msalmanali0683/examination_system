@@ -11,6 +11,7 @@ use App\Livewire\Sessions\EnrollmentImport;
 use App\Livewire\Sessions\GenerationConstraints;
 use App\Livewire\Sessions\IgnoredMissingTeachers;
 use App\Livewire\Sessions\Index as SessionsIndex;
+use App\Livewire\Sessions\ItemAvailability;
 use App\Livewire\Sessions\MissingTeachers;
 use App\Livewire\Sessions\MissingTeachersImport;
 use App\Livewire\Sessions\ReportShow;
@@ -76,6 +77,12 @@ Route::get('sessions/{examSession}/copy/{type}', CopyFromSession::class)
     ->middleware(['auth'])
     ->whereIn('type', ['rooms', 'teachers'])
     ->name('sessions.copy');
+
+Route::get('sessions/{examSession}/availability/{type}/{item}', ItemAvailability::class)
+    ->middleware(['auth'])
+    ->whereIn('type', ['rooms', 'teachers'])
+    ->whereNumber('item')
+    ->name('sessions.availability');
 
 Route::get('sessions/{examSession}/enrollments/import', EnrollmentImport::class)
     ->middleware(['auth'])

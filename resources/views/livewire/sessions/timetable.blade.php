@@ -158,13 +158,14 @@
                                                 @php
                                                     $alreadyThere = $assignment?->time_slot_id === $slot->id;
                                                     $used = $seatsUsedPerSlot->get($slot->id, 0);
+                                                    $seatsHere = $seatsAvailableBySlot->get($slot->id, $seatsAvailableTotal);
                                                     $projected = $alreadyThere ? $used : $used + $subject->enrollments_count;
                                                     $wouldClashExactSlot = $clashingSlotsBySubject->get($subject->id, collect())->contains($slot->id);
                                                     $wouldAlertSameDay = ! $wouldClashExactSlot && $clashingDaysBySubject->get($subject->id, collect())->contains($slot->id);
                                                     $clashLabel = $wouldClashExactSlot ? ' &mdash; &#9888; clash (same slot)' : ($wouldAlertSameDay ? ' &mdash; &#9888; alert (same day)' : '');
                                                 @endphp
-                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsAvailableTotal || $wouldClashExactSlot, 'color: #b45309' => $wouldAlertSameDay && ! ($projected > $seatsAvailableTotal)])>
-                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsAvailableTotal }} seats{!! $clashLabel !!}
+                                                <option value="{{ $slot->id }}" @selected($assignment?->is_pinned && $assignment->time_slot_id === $slot->id) @style(['color: #dc2626' => $projected > $seatsHere || $wouldClashExactSlot, 'color: #b45309' => $wouldAlertSameDay && ! ($projected > $seatsHere)])>
+                                                    {{ $slot->date->format('d M') }} {{ substr($slot->start_time, 0, 5) }} {{ $slot->label ? "({$slot->label})" : '' }} &mdash; {{ $projected }}/{{ $seatsHere }} seats{!! $clashLabel !!}
                                                 </option>
                                             @endforeach
                                         </select>

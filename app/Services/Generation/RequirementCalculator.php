@@ -34,14 +34,18 @@ class RequirementCalculator
         $allRoomsPreview = $this->seatAllocationService->previewAgainstAllRooms($session, $strategyOverride)->keyBy(fn ($p) => $p['slot']->id);
 
         $activeSessionRooms = $session->rooms()->where('is_active', true)->get();
-        $roomsAvailable = $activeSessionRooms->count();
-        $seatsAvailable = $activeSessionRooms->sum('capacity');
-        $roomsAvailableSystemWide = $this->seatAllocationService->totalSystemRoomsCount($session);
+        $allRoomIds = $session->rooms()->pluck('id');
+
+        // Rooms and teachers can be switched off for individual slots
+        // (see SlotAvailability), so what's available differs slot by slot.
+        $roomsOffBySlot = SlotAvailability::roomsOffBySlot($session);
+        $teachersOffBySlot = SlotAvailability::teachersOffBySlot($session);
 
         // Every active teacher is available by default; a constraint row
         // only exists where the admin explicitly excluded them or marked
         // specific days unavailable (see TeacherConstraints::apply()).
-        $activeTeacherCount = $session->teachers()->where('is_active', true)->count();
+        $activeTeacherIds = $session->teachers()->where('is_active', true)->pluck('id');
+        $activeTeacherCount = $activeTeacherIds->count();
         $constraints = SessionTeacherConstraint::where('exam_session_id', $session->id)->get();
         $excludedCount = $constraints->where('is_excluded', true)->count();
         $constrainedNotExcluded = $constraints->where('is_excluded', false);
@@ -65,8 +69,15 @@ class RequirementCalculator
             fn ($rows) => $rows->pluck('conflict_note')->reject(ConflictNoteClassifier::isBlockingClash(...))->unique()->values()->all()
         );
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $roomsAvailable, $roomsAvailableSystemWide, $seatsAvailable, $activeTeacherCount, $excludedCount, $constrainedNotExcluded, $clashDetailsBySlot, $alertDetailsBySlot, $session, $strategyOverride) {
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $activeSessionRooms, $allRoomIds, $roomsOffBySlot, $teachersOffBySlot, $activeTeacherIds, $activeTeacherCount, $excludedCount, $constraints, $constrainedNotExcluded, $clashDetailsBySlot, $alertDetailsBySlot, $session, $strategyOverride) {
             $slot = $active['slot'];
+
+            $roomsOff = $roomsOffBySlot[$slot->id] ?? [];
+            $roomsForSlot = $activeSessionRooms->reject(fn ($room) => in_array($room->id, $roomsOff, true));
+            $roomsAvailable = $roomsForSlot->count();
+            $seatsAvailable = $roomsForSlot->sum('capacity');
+            $roomsAvailableSystemWide = $allRoomIds->reject(fn ($id) => in_array($id, $roomsOff, true))->count();
+
             $unseated = $active['result']->warnings->where('type', 'unseated');
             $studentCount = collect($active['result']->placements)->count() + $unseated->count();
 
@@ -99,7 +110,18 @@ class RequirementCalculator
             }
 
             $unavailableThisDay = $constrainedNotExcluded->filter(fn ($c) => ! $c->isAvailableOn($slot->date))->count();
-            $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay;
+
+            // Teachers switched off for just this slot, not already counted
+            // above as excluded or off for the whole day.
+            $alreadyOut = $constraints
+                ->filter(fn ($c) => $c->is_excluded || ! $c->isAvailableOn($slot->date))
+                ->pluck('teacher_id');
+            $unavailableThisSlot = collect($teachersOffBySlot[$slot->id] ?? [])
+                ->intersect($activeTeacherIds)
+                ->diff($alreadyOut)
+                ->count();
+
+            $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay - $unavailableThisSlot;
             $clashDetails = $clashDetailsBySlot->get($slot->id, []);
             $alertDetails = $alertDetailsBySlot->get($slot->id, []);
 

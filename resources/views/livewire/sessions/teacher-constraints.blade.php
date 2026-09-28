@@ -99,6 +99,11 @@
                                 {{ $label }}
                             </label>
                         @endforeach
+
+                        <span class="text-xs text-gray-300 dark:text-gray-600">|</span>
+                        <a href="{{ route('sessions.availability', [$examSession, 'teachers', $teacher->id]) }}" wire:navigate class="text-xs font-medium text-indigo-600 hover:underline">
+                            Specific slots @if ($teacher->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $teacher->unavailable_slots_count }} off)</span>@endif
+                        </a>
                     </div>
                 </div>
             @endforeach

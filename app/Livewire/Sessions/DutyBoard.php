@@ -10,6 +10,7 @@ use App\Models\SessionTeacherConstraint;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Services\Generation\DutyAllocationService;
+use App\Services\Generation\SlotAvailability;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
@@ -100,6 +101,12 @@ class DutyBoard extends Component
 
         if ($constraint && ! $constraint->isAvailableOn($duty->timeSlot->date)) {
             session()->flash('error', "{$teacher->name} is marked unavailable on this day.");
+
+            return;
+        }
+
+        if (in_array($newTeacherId, SlotAvailability::teachersOffBySlot($this->examSession)[$duty->time_slot_id] ?? [], true)) {
+            session()->flash('error', "{$teacher->name} is marked unavailable for this slot.");
 
             return;
         }
@@ -277,13 +284,15 @@ class DutyBoard extends Component
                 ->get()
                 ->keyBy('teacher_id');
 
+            $teachersOffThisSlot = SlotAvailability::teachersOffBySlot($this->examSession)[$slot->id] ?? [];
+
             $candidates = $this->examSession->teachers()->where('is_active', true)
                 ->orderBy('name')
                 ->get()
-                ->filter(function (Teacher $teacher) use ($constraints, $slot) {
+                ->filter(function (Teacher $teacher) use ($constraints, $slot, $teachersOffThisSlot) {
                     $constraint = $constraints->get($teacher->id);
 
-                    if ($constraint?->is_excluded) {
+                    if ($constraint?->is_excluded || in_array($teacher->id, $teachersOffThisSlot, true)) {
                         return false;
                     }
 
@@ -297,6 +306,13 @@ class DutyBoard extends Component
                     $options = $candidates->reject(
                         fn (Teacher $t) => $t->id !== $duty->teacher_id && $teacherIdsThisSlot->contains($t->id)
                     );
+
+                    // Whoever already holds this duty stays in the list even if
+                    // they've since been switched off, so the dropdown still
+                    // shows the real current assignee.
+                    if (! $options->contains('id', $duty->teacher_id)) {
+                        $options = $options->push($duty->teacher)->sortBy('name')->values();
+                    }
 
                     return [
                         'duty' => $duty,

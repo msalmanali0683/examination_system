@@ -163,7 +163,7 @@ class Index extends Component
     public function render()
     {
         return view('livewire.rooms.index', [
-            'rooms' => $this->examSession->rooms()->orderBy('name')->paginate($this->perPage),
+            'rooms' => $this->examSession->rooms()->withCount('unavailableSlots')->orderBy('name')->paginate($this->perPage),
         ]);
     }
 }

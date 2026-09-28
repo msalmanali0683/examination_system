@@ -61,9 +61,11 @@ class TimetableGenerator
      *                                        from this map default to being their own day, so callers that
      *                                        don't care about day-grouping (or existing tests) get plain
      *                                        slot-level behavior unchanged.
-     * @param  ?callable(int[]): bool  $roomsFit  optional: given the subject IDs that would share a slot,
-     *                                            returns whether the active rooms can seat them all. Omit to
-     *                                            skip room-capacity awareness entirely (prior behavior).
+     * @param  ?callable(int[], ?int): bool  $roomsFit  optional: given the subject IDs that would share a
+     *                                                  slot (and that slot's id, since a room can be switched off
+     *                                                  for individual slots), returns whether the rooms usable
+     *                                                  there can seat them all. Omit to skip room-capacity
+     *                                                  awareness entirely (prior behavior).
      * @param  array<int, int[]>  $semesterBySubject  subject_id => the semester number(s) it belongs to
      *                                                (a subject can span more than one, e.g. mixed sections).
      *                                                Missing/empty for a subject means "unknown" — treated as
@@ -160,7 +162,7 @@ class TimetableGenerator
                         'day' => $day,
                         'slot' => $slotId,
                         'slotClashFree' => $this->clashWeight($conflictGraph, $subjectId, $slotOccupantIds) === 0,
-                        'fits' => $roomsFit === null || $roomsFit([...$slotOccupantIds, $subjectId]),
+                        'fits' => $roomsFit === null || $roomsFit([...$slotOccupantIds, $subjectId], $slotId),
                         'sameSemesterDayWeight' => $sameSemesterDayWeight,
                         'gapScore' => $gapScore,
                         'dayLoad' => $dayLoad,
@@ -461,7 +463,7 @@ class TimetableGenerator
         $targetOccupants = array_values(array_diff($slotOccupants[$targetSlotId] ?? [], [$subjectId]));
 
         if (empty($targetOccupants)) {
-            if ($roomsFit !== null && ! $roomsFit([$subjectId])) {
+            if ($roomsFit !== null && ! $roomsFit([$subjectId], $targetSlotId)) {
                 return false;
             }
 
@@ -488,7 +490,7 @@ class TimetableGenerator
             }
         }
 
-        if ($roomsFit !== null && (! $roomsFit([$subjectId]) || ! $roomsFit([...$currentOccupantsWithoutSubject, $displaced]))) {
+        if ($roomsFit !== null && (! $roomsFit([$subjectId], $targetSlotId) || ! $roomsFit([...$currentOccupantsWithoutSubject, $displaced], $currentSlotId))) {
             return false;
         }
 

@@ -103,6 +103,9 @@
                                 </button>
                             </td>
                             <td class="py-3 pr-4 sm:pr-6 text-right space-x-3 whitespace-nowrap">
+                                <a href="{{ route('sessions.availability', [$examSession, 'rooms', $room->id]) }}" wire:navigate class="text-sm font-medium text-gray-600 dark:text-gray-300 hover:underline">
+                                    Availability @if ($room->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $room->unavailable_slots_count }} off)</span>@endif
+                                </a>
                                 <button type="button" wire:click="editRoom({{ $room->id }})" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
                                 <button type="button" wire:click="deleteRoom({{ $room->id }})" wire:confirm="Delete room {{ $room->name }}?" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                             </td>

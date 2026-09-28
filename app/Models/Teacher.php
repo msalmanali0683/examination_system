@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Teacher extends Model
@@ -29,6 +30,15 @@ class Teacher extends Model
     public function examSession(): BelongsTo
     {
         return $this->belongsTo(ExamSession::class);
+    }
+
+    /**
+     * Time slots this teacher can't do duty in (see SlotAvailability) —
+     * finer than the whole-weekday rule on SessionTeacherConstraint.
+     */
+    public function unavailableSlots(): BelongsToMany
+    {
+        return $this->belongsToMany(TimeSlot::class, 'teacher_unavailable_slots')->withTimestamps();
     }
 
     public function sessionConstraints(): HasMany

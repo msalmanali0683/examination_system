@@ -67,6 +67,8 @@ class DutyAllocationService
 
         $constraints = SessionTeacherConstraint::where('exam_session_id', $session->id)->get()->keyBy('teacher_id');
 
+        $slotUnavailable = SlotAvailability::teachersOffBySlot($session);
+
         $timeSlots = $session->timeSlots()->orderBy('date')->orderBy('start_time')->get();
         $adjacentSlotIds = $this->adjacentSlotIdsMap($timeSlots);
 
@@ -85,7 +87,7 @@ class DutyAllocationService
             $slots[] = [
                 'id' => $slot->id,
                 'roomIds' => $roomIds,
-                'unavailableTeacherIds' => array_values(array_unique(array_merge($dayUnavailable, $subjectExcluded))),
+                'unavailableTeacherIds' => array_values(array_unique(array_merge($dayUnavailable, $subjectExcluded, $slotUnavailable[$slot->id] ?? []))),
                 'adjacentSlotIds' => $adjacentSlotIds[$slot->id] ?? [],
             ];
         }

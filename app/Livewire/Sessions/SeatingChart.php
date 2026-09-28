@@ -10,6 +10,7 @@ use App\Models\SeatAssignment;
 use App\Models\TimeSlot;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
+use App\Services\Generation\SlotAvailability;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -73,6 +74,12 @@ class SeatingChart extends Component
 
         if (! $room) {
             session()->flash('error', 'That room is not active for this session.');
+
+            return;
+        }
+
+        if (in_array($room->id, SlotAvailability::roomsOffBySlot($this->examSession)[$seat->time_slot_id] ?? [], true)) {
+            session()->flash('error', 'That room is marked unavailable for this slot.');
 
             return;
         }

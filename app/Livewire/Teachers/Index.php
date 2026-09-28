@@ -198,7 +198,7 @@ class Index extends Component
     public function render()
     {
         return view('livewire.teachers.index', [
-            'teachers' => $this->examSession->teachers()->when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
+            'teachers' => $this->examSession->teachers()->withCount('unavailableSlots')->when($this->search, fn ($q) => $q->where(fn ($q2) => $q2
                 ->where('name', 'like', "%{$this->search}%")
                 ->orWhere('email', 'like', "%{$this->search}%")
             ))

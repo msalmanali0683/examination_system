@@ -125,7 +125,10 @@ class SeatAllocationService
             return 0;
         }
 
-        $pool = $this->allRoomsPool($session);
+        $pool = $this->withoutUnavailableRooms(
+            $this->allRoomsPool($session),
+            SlotAvailability::roomsOffBySlot($session)[$slot->id] ?? []
+        );
         $largest = $pool->sortByDesc('capacity')->first();
 
         if ($largest === null) {
@@ -205,6 +208,7 @@ class SeatAllocationService
             ->whereNotNull('time_slot_id')
             ->pluck('time_slot_id', 'subject_id');
 
+        $roomsOff = SlotAvailability::roomsOffBySlot($session);
         $pairs = collect();
 
         foreach ($session->timeSlots as $slot) {
@@ -214,10 +218,27 @@ class SeatAllocationService
                 continue;
             }
 
-            $pairs->push([$slot, $this->allocateForSlot($session, $slot, $subjectIds, $roomPool, $strategy)]);
+            $slotPool = $this->withoutUnavailableRooms($roomPool, $roomsOff[$slot->id] ?? []);
+
+            $pairs->push([$slot, $this->allocateForSlot($session, $slot, $subjectIds, $slotPool, $strategy)]);
         }
 
         return $pairs;
+    }
+
+    /**
+     * The rooms usable in one particular slot: the pool minus any room
+     * switched off for it (see SlotAvailability).
+     *
+     * @param  Collection<int, array{room_id: int, rows: int, columns: int, capacity: int}>  $pool
+     * @param  int[]  $unavailableRoomIds
+     * @return Collection<int, array{room_id: int, rows: int, columns: int, capacity: int}>
+     */
+    private function withoutUnavailableRooms(Collection $pool, array $unavailableRoomIds): Collection
+    {
+        return $unavailableRoomIds === []
+            ? $pool
+            : $pool->reject(fn ($room) => in_array($room['room_id'], $unavailableRoomIds, true))->values();
     }
 
     /**

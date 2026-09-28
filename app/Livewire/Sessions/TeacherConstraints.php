@@ -190,7 +190,7 @@ class TeacherConstraints extends Component
         );
 
         return view('livewire.sessions.teacher-constraints', [
-            'teachers' => $this->examSession->teachers()->where('is_active', true)->orderBy('name')->get(),
+            'teachers' => $this->examSession->teachers()->where('is_active', true)->withCount('unavailableSlots')->orderBy('name')->get(),
             'constraints' => $constraints,
             'allAvailableByDay' => $allAvailableByDay,
         ]);
