@@ -6,6 +6,7 @@ use App\Livewire\Rooms\Index as RoomsIndex;
 use App\Livewire\Sessions\DutyBoard;
 use App\Livewire\Sessions\ItemAvailability;
 use App\Livewire\Sessions\SeatingChart;
+use App\Livewire\Sessions\Show;
 use App\Livewire\Sessions\TeacherConstraints;
 use App\Livewire\Sessions\Timetable;
 use App\Models\DutyAssignment;
@@ -281,6 +282,23 @@ class SlotAvailabilityTest extends TestCase
         Livewire::actingAs($this->staff())->test(TeacherConstraints::class, ['examSession' => $session])
             ->assertSee(route('sessions.availability', [$session, 'teachers', $teacher->id]), false)
             ->assertSee('(1 off)');
+    }
+
+    public function test_the_sessions_rooms_tab_lists_each_room_with_a_link_to_its_slots(): void
+    {
+        $session = ExamSession::factory()->create();
+        [$slot1, $slot2] = $this->threeSlots($session);
+        $offRoom = Room::factory()->for($session)->create(['name' => 'ROOM-OFF-1']);
+        $plainRoom = Room::factory()->for($session)->create(['name' => 'ROOM-PLAIN-2']);
+        $offRoom->unavailableSlots()->attach([$slot1->id, $slot2->id]);
+
+        Livewire::actingAs($this->staff())->test(Show::class, ['examSession' => $session])
+            ->assertSee('ROOM-OFF-1')
+            ->assertSee('ROOM-PLAIN-2')
+            ->assertSee(route('sessions.availability', [$session, 'rooms', $offRoom->id]), false)
+            ->assertSee(route('sessions.availability', [$session, 'rooms', $plainRoom->id]), false)
+            ->assertSee('Specific slots')
+            ->assertSee('(2 off)');
     }
 
     // ------------------------------------------------------- what it changes

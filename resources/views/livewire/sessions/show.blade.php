@@ -154,6 +154,28 @@
                         <div class="text-xs text-gray-500 dark:text-gray-400">Seats in active rooms</div>
                     </div>
                 </div>
+
+                @if ($rooms->isNotEmpty())
+                    <div class="mt-6">
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Switch a room off for specific slots</h4>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Open a room's slots to mark it unavailable for individual time slots &mdash; for example free on Monday except the 2nd slot.</p>
+                        <div class="mt-3 max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 rounded-lg ring-1 ring-gray-100 dark:ring-gray-700/60">
+                            @foreach ($rooms as $room)
+                                <div class="px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <span class="font-medium text-gray-900 dark:text-gray-100">{{ $room->name }}</span>
+                                        <span class="text-xs text-gray-400 ml-1">{{ $room->capacity }} seats{{ $room->is_active ? '' : ' &middot; inactive' }}</span>
+                                    </div>
+                                    @can('manage_rooms')
+                                        <a href="{{ route('sessions.availability', [$examSession, 'rooms', $room->id]) }}" wire:navigate class="text-xs font-medium text-indigo-600 hover:underline">
+                                            Specific slots @if ($room->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $room->unavailable_slots_count }} off)</span>@endif
+                                        </a>
+                                    @endcan
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             </div>
             <div x-show="tab === 'teachers'" class="space-y-6">
                 <div class="flex items-start justify-between gap-4 flex-wrap">

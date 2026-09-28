@@ -144,6 +144,7 @@ class Show extends Component
             'subjectCount' => $this->examSession->subjects()->count(),
             'roomCount' => $this->examSession->rooms()->count(),
             'activeRoomCount' => $this->examSession->rooms()->where('is_active', true)->count(),
+            'rooms' => $this->examSession->rooms()->withCount('unavailableSlots')->orderBy('name')->get(),
             'seatCount' => (int) $this->examSession->rooms()->where('is_active', true)->sum('capacity'),
             'teacherCount' => $this->examSession->teachers()->count(),
             'activityLogs' => $this->examSession->activityLogs()->with('user')->latest('created_at')->take(50)->get(),

@@ -117,7 +117,7 @@
                             </td>
                             <td class="py-3 pr-4 sm:pr-6 text-right space-x-3 whitespace-nowrap">
                                 <a href="{{ route('sessions.availability', [$examSession, 'teachers', $teacher->id]) }}" wire:navigate class="text-sm font-medium text-gray-600 dark:text-gray-300 hover:underline">
-                                    Availability @if ($teacher->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $teacher->unavailable_slots_count }} off)</span>@endif
+                                    Specific slots @if ($teacher->unavailable_slots_count > 0) <span class="text-amber-600 dark:text-amber-400">({{ $teacher->unavailable_slots_count }} off)</span>@endif
                                 </a>
                                 <button type="button" wire:click="editTeacher({{ $teacher->id }})" class="text-sm font-medium text-indigo-600 hover:underline">Edit</button>
                                 <button type="button" wire:click="deleteTeacher({{ $teacher->id }})" wire:confirm="Delete {{ $teacher->name }}?" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
