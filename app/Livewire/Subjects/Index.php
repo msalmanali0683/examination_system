@@ -3,8 +3,15 @@
 namespace App\Livewire\Subjects;
 
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
+use App\Models\DutyAssignment;
+use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\SeatAssignment;
+use App\Models\Subject;
+use App\Models\SubjectSlotAssignment;
 use App\Services\SubjectMergeService;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -23,6 +30,12 @@ class Index extends Component
     public int $perPage = 25;
 
     public string $search = '';
+
+    /**
+     * Set once subjects have been deleted from a session that already had a timetable, seating plan or duties:
+     * those no longer match the remaining subjects, so the page shows the regenerate-in-order banner.
+     */
+    public bool $needsRegeneration = false;
 
     /**
      * Subject IDs checked for a merge — bound directly to each row's
@@ -75,6 +88,98 @@ class Index extends Component
     public function clearSelection(): void
     {
         $this->selected = [];
+    }
+
+    /**
+     * Deletes one subject of this session. Its enrollments go with it (and so do their seats), as does its
+     * timetable slot — fine while the session can still be regenerated, which is why a finalized session
+     * refuses it outright. Students themselves are kept.
+     */
+    public function deleteSubject(int $id): void
+    {
+        $this->authorize('manage_subjects');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $this->removeSubjects($this->examSession->subjects()->whereKey($id)->get());
+    }
+
+    /**
+     * Deletes every ticked subject (only this session's own — ids come from the browser).
+     */
+    public function bulkDelete(): void
+    {
+        $this->authorize('manage_subjects');
+
+        if ($this->blockedByFinalization($this->examSession)) {
+            return;
+        }
+
+        $subjects = $this->examSession->subjects()->whereIn('id', array_map('intval', $this->selected))->get();
+
+        if ($subjects->isEmpty()) {
+            session()->flash('error', 'Select at least one subject to delete.');
+
+            return;
+        }
+
+        $this->removeSubjects($subjects);
+        $this->selected = [];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Subject>  $subjects
+     */
+    private function removeSubjects($subjects): void
+    {
+        if ($subjects->isEmpty()) {
+            session()->flash('error', 'That subject no longer exists — the list may be out of date.');
+
+            return;
+        }
+
+        $ids = $subjects->pluck('id')->all();
+
+        // Subjects that were merged INTO a deleted one are only retired aliases of it (their enrollments moved
+        // onto it), so they go too rather than resurfacing as empty "Active" subjects.
+        $aliases = $this->examSession->subjects()->whereIn('merged_into_id', $ids)->whereNotIn('id', $ids)->get();
+        $all = $subjects->merge($aliases);
+        $allIds = $all->pluck('id')->all();
+
+        $enrollmentCount = Enrollment::where('exam_session_id', $this->examSession->id)->whereIn('subject_id', $allIds)->count();
+
+        // Judged before deleting: was there anything generated that is about to stop matching?
+        $hadSchedule = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->whereNotNull('time_slot_id')->exists()
+            || SeatAssignment::where('exam_session_id', $this->examSession->id)->exists()
+            || DutyAssignment::where('exam_session_id', $this->examSession->id)->exists();
+
+        DB::transaction(fn () => Subject::whereIn('id', $allIds)->delete());
+
+        if ($hadSchedule) {
+            // Same rule as removing every enrollment: what was generated no longer matches the data, so the
+            // session is a draft again until timetable, seating and duties are regenerated.
+            if ($this->examSession->status === 'generated') {
+                $this->examSession->update(['status' => 'draft']);
+            }
+
+            $this->needsRegeneration = true;
+        }
+
+        $label = $subjects->count() === 1 ? $subjects->first()->code : $subjects->count().' subjects';
+
+        ActivityLog::record($this->examSession, 'subjects.deleted', "Deleted {$label} with {$enrollmentCount} enrollment(s).");
+
+        $this->resetPage();
+
+        session()->flash(
+            'status',
+            'Deleted '.($subjects->count() === 1 ? "subject {$subjects->first()->code}" : "{$subjects->count()} subjects")
+                .($aliases->isNotEmpty() ? " (and {$aliases->count()} retired merged code(s))" : '')
+                ." and {$enrollmentCount} enrollment(s)."
+                .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : '')
+        );
     }
 
     public function openMergeModal(): void

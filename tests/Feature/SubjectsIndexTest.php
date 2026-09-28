@@ -5,6 +5,10 @@ namespace Tests\Feature;
 use App\Livewire\Subjects\Index;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\SeatAssignment;
+use App\Models\SubjectSlotAssignment;
+use App\Models\TimeSlot;
+use App\Models\Room;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
@@ -148,5 +152,220 @@ class SubjectsIndexTest extends TestCase
 
         $this->assertEqualsCanonicalizing($pageIds, $component->get('selected'));
         $this->assertNotContains($merged->id, $component->get('selected'));
+    }
+
+    /** A subject with one student, a timetable slot and a seat, in the given session. */
+    private function fullSubject(ExamSession $session, string $code): array
+    {
+        $subject = Subject::factory()->for($session)->create(['code' => $code]);
+        $student = Student::factory()->for($session)->create();
+        $enrollment = Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+        $room = Room::factory()->for($session)->create();
+        SeatAssignment::create(['exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1]);
+
+        return [$subject, $student, $enrollment];
+    }
+
+    public function test_deleting_a_subject_removes_its_enrollments_seats_and_slot_but_keeps_the_students_and_other_subjects(): void
+    {
+        $session = ExamSession::factory()->create();
+        [$doomed, $student, $enrollment] = $this->fullSubject($session, 'DEL101|11');
+        [$kept, $keptStudent, $keptEnrollment] = $this->fullSubject($session, 'KEEP202|11');
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $doomed->id)
+            ->assertSee('Deleted subject DEL101|11 and 1 enrollment');
+
+        $this->assertNull(Subject::find($doomed->id));
+        $this->assertNull(Enrollment::find($enrollment->id));
+        $this->assertSame(0, SeatAssignment::where('enrollment_id', $enrollment->id)->count());
+        $this->assertSame(0, SubjectSlotAssignment::where('subject_id', $doomed->id)->count());
+        $this->assertNotNull(Student::find($student->id), 'the student stays');
+
+        $this->assertNotNull(Subject::find($kept->id));
+        $this->assertNotNull(Enrollment::find($keptEnrollment->id));
+        $this->assertSame(1, SeatAssignment::where('enrollment_id', $keptEnrollment->id)->count());
+        $this->assertSame(1, SubjectSlotAssignment::where('subject_id', $kept->id)->count());
+
+        $this->assertDatabaseHas('activity_logs', ['exam_session_id' => $session->id, 'action' => 'subjects.deleted']);
+    }
+
+    public function test_bulk_delete_removes_every_ticked_subject_only(): void
+    {
+        $session = ExamSession::factory()->create();
+        $a = Subject::factory()->for($session)->create(['code' => 'A|11']);
+        $b = Subject::factory()->for($session)->create(['code' => 'B|11']);
+        $c = Subject::factory()->for($session)->create(['code' => 'C|11']);
+        $foreign = Subject::factory()->for(ExamSession::factory()->create())->create(['code' => 'F|11']);
+
+        $page = Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->set('selected', [(string) $a->id, (string) $b->id, (string) $foreign->id])
+            ->call('bulkDelete')
+            ->assertSet('selected', [])
+            ->assertSee('Deleted 2 subjects');
+
+        $this->assertNull(Subject::find($a->id));
+        $this->assertNull(Subject::find($b->id));
+        $this->assertNotNull(Subject::find($c->id));
+        $this->assertNotNull(Subject::find($foreign->id), "another session's subject is never touched");
+    }
+
+    public function test_bulk_delete_with_nothing_ticked_says_so(): void
+    {
+        $session = ExamSession::factory()->create();
+        Subject::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('bulkDelete')
+            ->assertSee('Select at least one subject');
+
+        $this->assertSame(1, $session->subjects()->count());
+    }
+
+    public function test_a_subject_of_another_session_cannot_be_deleted_from_here(): void
+    {
+        $mine = ExamSession::factory()->create();
+        $theirs = ExamSession::factory()->create();
+        $foreign = Subject::factory()->for($theirs)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $mine])
+            ->call('deleteSubject', $foreign->id)
+            ->assertSee('no longer exists');
+
+        $this->assertNotNull(Subject::find($foreign->id));
+    }
+
+    public function test_deleting_a_survivor_also_removes_the_retired_codes_merged_into_it(): void
+    {
+        $session = ExamSession::factory()->create();
+        $survivor = Subject::factory()->for($session)->create(['code' => 'EE07205|11']);
+        $alias = Subject::factory()->for($session)->create(['code' => 'EES07104|11', 'merged_into_id' => $survivor->id]);
+        $other = Subject::factory()->for($session)->create(['code' => 'OTHER|11']);
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $survivor->id)
+            ->assertSee('and 1 retired merged code');
+
+        $this->assertNull(Subject::find($survivor->id));
+        $this->assertNull(Subject::find($alias->id), 'no empty "Active" ghost is left behind');
+        $this->assertNotNull(Subject::find($other->id));
+    }
+
+    public function test_deleting_a_retired_merged_code_leaves_its_survivor_alone(): void
+    {
+        $session = ExamSession::factory()->create();
+        $survivor = Subject::factory()->for($session)->create();
+        $alias = Subject::factory()->for($session)->create(['merged_into_id' => $survivor->id]);
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $alias->id);
+
+        $this->assertNull(Subject::find($alias->id));
+        $this->assertNotNull(Subject::find($survivor->id));
+    }
+
+    public function test_deleting_is_blocked_on_a_finalized_session(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'finalized']);
+        $subject = Subject::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $subject->id)
+            ->set('selected', [(string) $subject->id])
+            ->call('bulkDelete');
+
+        $this->assertNotNull(Subject::find($subject->id));
+    }
+
+    public function test_a_user_without_manage_subjects_cannot_delete(): void
+    {
+        $staff = $this->staff();
+        $staff->permissionOverrides()->create(['permission' => 'manage_subjects', 'granted' => false]);
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
+
+        $this->actingAs($staff)->get(route('sessions.subjects.index', $session))->assertForbidden();
+
+        try {
+            Livewire::actingAs($staff)->test(Index::class, ['examSession' => $session])->call('deleteSubject', $subject->id);
+        } catch (\Throwable) {
+            // refusing is the expected outcome
+        }
+
+        $this->assertNotNull(Subject::find($subject->id));
+    }
+
+    public function test_the_page_offers_delete_per_row_and_for_the_selection(): void
+    {
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->for($session)->create(['code' => 'CS-500']);
+
+        $page = Livewire::actingAs($this->staff())->test(Index::class, ['examSession' => $session]);
+
+        $page->assertSee('aria-label="Delete CS-500"', false);
+        $page->assertDontSee('Delete Selected');
+        $page->set('selected', [(string) $subject->id])->assertSee('Delete Selected');
+    }
+
+    public function test_deleting_from_a_generated_session_sends_it_back_to_draft_and_says_to_regenerate(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        [$doomed] = $this->fullSubject($session, 'DEL303|11');
+        $this->fullSubject($session, 'STAY404|11');
+
+        $page = Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $doomed->id)
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated')
+            ->assertSee('Regenerate them in this order');
+
+        $this->assertSame('draft', $session->fresh()->status, 'a generated session drops back to draft, like after removing all enrollments');
+
+        // the banner walks through the pipeline in the right order, with working links
+        $html = $page->html();
+        $this->assertStringContainsString(route('sessions.timetable', $session), $html);
+        $this->assertStringContainsString(route('sessions.seating', $session), $html);
+        $this->assertStringContainsString(route('sessions.duties', $session), $html);
+        $this->assertLessThan(strpos($html, route('sessions.seating', $session)), strpos($html, route('sessions.timetable', $session)));
+        $this->assertLessThan(strpos($html, route('sessions.duties', $session)), strpos($html, route('sessions.seating', $session)));
+    }
+
+    public function test_deleting_when_only_a_timetable_exists_still_asks_for_regeneration(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'draft']);
+        $subject = Subject::factory()->for($session)->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+        $other = Subject::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $other->id)
+            ->assertSet('needsRegeneration', true);
+
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_deleting_from_a_session_with_nothing_generated_does_not_nag_about_regeneration(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'draft']);
+        $subject = Subject::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteSubject', $subject->id)
+            ->assertSet('needsRegeneration', false)
+            ->assertDontSee('Regenerate them in this order')
+            ->assertDontSee('need to be regenerated');
     }
 }

@@ -17,6 +17,19 @@
     </div>
 @endif
 
+@if ($needsRegeneration)
+    <div class="p-4 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm space-y-2" role="alert">
+        <p class="font-medium">Subjects were deleted, so the timetable, seating plan and duties no longer match.</p>
+        <p>Regenerate them in this order:
+            <a href="{{ route('sessions.timetable', $examSession) }}" wire:navigate class="font-semibold underline">1. Timetable</a>
+            &rarr;
+            <a href="{{ route('sessions.seating', $examSession) }}" wire:navigate class="font-semibold underline">2. Seating plan</a>
+            &rarr;
+            <a href="{{ route('sessions.duties', $examSession) }}" wire:navigate class="font-semibold underline">3. Duties</a>
+        </p>
+    </div>
+@endif
+
 <x-modal name="merge-subjects" :show="$showMergeModal" focusable max-width="lg">
     <div class="p-6">
         <div class="flex items-start gap-3">
@@ -59,6 +72,7 @@
         <div class="flex items-center gap-3 mb-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
             <span class="text-sm text-primary-700 dark:text-primary-300">{{ count($selected) }} selected</span>
             <x-btn wire:click="openMergeModal" variant="dark" size="sm" icon="document">Merge Selected</x-btn>
+            <x-btn wire:click="bulkDelete" wire:confirm="Delete {{ count($selected) }} subject(s)? This also removes their enrollments, the seats assigned for them and their timetable slots in this session. Students are kept. This cannot be undone." variant="danger" size="sm" icon="trash">Delete Selected</x-btn>
             <button type="button" wire:click="clearSelection" class="text-sm text-gray-500 dark:text-gray-400 hover:underline">Clear selection</button>
         </div>
     @endif
@@ -80,7 +94,8 @@
                         <th class="py-2.5 pr-4">Code</th>
                         <th class="py-2.5 pr-4">Title</th>
                         <th class="py-2.5 pr-4">Credit Hours</th>
-                        <th class="py-2.5 pr-4 sm:pr-6">Status</th>
+                        <th class="py-2.5 pr-4">Status</th>
+                        <th class="py-2.5 pr-4 sm:pr-6"><span class="sr-only">Actions</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -94,12 +109,15 @@
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $subject->code }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->title }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->credit_hours ?? '—' }}</td>
-                            <td class="py-3 pr-4 sm:pr-6">
+                            <td class="py-3 pr-4">
                                 @if ($subject->isMerged())
                                     <x-badge color="gray">Merged into {{ $subject->mergedInto->code }}</x-badge>
                                 @else
                                     <x-badge color="green">Active</x-badge>
                                 @endif
+                            </td>
+                            <td class="py-3 pr-4 sm:pr-6 text-right whitespace-nowrap">
+                                <button type="button" wire:click="deleteSubject({{ $subject->id }})" wire:confirm="Delete {{ $subject->code }} — {{ $subject->title }}? This also removes its enrollments, the seats assigned for it and its timetable slot in this session. Students are kept. This cannot be undone." aria-label="Delete {{ $subject->code }}" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                             </td>
                         </tr>
                     @endforeach
