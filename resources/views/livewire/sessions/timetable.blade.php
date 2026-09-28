@@ -152,7 +152,7 @@
                                 </td>
                                 <td class="py-2.5 pr-4">
                                     <div class="flex items-center gap-1.5">
-                                        <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" @disabled($excluded) class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm disabled:opacity-50">
+                                        <select wire:change="updatePin({{ $subject->id }}, $event.target.value)" aria-label="Pin {{ $subject->code }} to a time slot" @disabled($excluded) class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm disabled:opacity-50">
                                             <option value="">Auto</option>
                                             @foreach ($timeSlots as $slot)
                                                 @php

@@ -101,7 +101,7 @@
                                 @if ($duty->is_locked)
                                     <span class="flex-1 text-sm text-gray-900 dark:text-gray-100">{{ $duty->teacher->name }}</span>
                                 @else
-                                    <select wire:change="reassignDuty({{ $duty->id }}, $event.target.value)" class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                    <select wire:change="reassignDuty({{ $duty->id }}, $event.target.value)" aria-label="Invigilator for {{ $entry['room']->name }} (currently {{ $duty->teacher->name }})" class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                                         @foreach ($row['options'] as $option)
                                             <option value="{{ $option->id }}" @selected($option->id === $duty->teacher_id)>{{ $option->name }}</option>
                                         @endforeach

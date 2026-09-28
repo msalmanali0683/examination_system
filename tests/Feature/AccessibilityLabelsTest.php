@@ -98,4 +98,30 @@ class AccessibilityLabelsTest extends TestCase
         $users = $this->actingAs($head)->get(route('users.index'))->assertOk()->getContent();
         $this->assertStringContainsString('aria-label="Role for '.e($head->name).'"', $users);
     }
+
+    public function test_report_cards_that_are_not_ready_are_not_links_to_nowhere(): void
+    {
+        $head = User::factory()->create(['role' => 'head']);
+        $session = ExamSession::factory()->create();
+
+        $html = $this->actingAs($head)->get(route('sessions.show', $session))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('href="#"', $html, 'a disabled report card must not be an anchor to "#"');
+        $this->assertStringContainsString('aria-disabled="true"', $html);
+        $this->assertStringContainsString('Generate seating first.', $html);
+    }
+
+    public function test_the_per_row_pin_and_invigilator_selects_are_named(): void
+    {
+        $head = User::factory()->create(['role' => 'head']);
+        $session = ExamSession::factory()->create();
+        $subject = \App\Models\Subject::factory()->for($session)->create(['code' => 'CS-777']);
+        $student = \App\Models\Student::factory()->for($session)->create();
+        \App\Models\Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+        \App\Models\TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+
+        $timetable = $this->actingAs($head)->get(route('sessions.timetable', $session))->assertOk()->getContent();
+
+        $this->assertStringContainsString('aria-label="Pin CS-777 to a time slot"', $timetable);
+    }
 }
