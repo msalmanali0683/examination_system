@@ -31,11 +31,14 @@ class StrictSeatingStrategy implements SeatingStrategy
     }
 
     /**
-     * Groups are processed largest-first. Each group prefers the smallest
-     * still-available room it fits into whole (minimizing wasted capacity);
-     * when it doesn't fit anywhere whole, it's split starting from the
-     * largest available room (minimizing how many rooms the split needs).
-     * This makes room selection independent of the order rooms are given in.
+     * Groups are processed largest-first. Each group prefers the room with the
+     * fewest free seats that still hold it whole (minimizing wasted
+     * capacity); when it doesn't fit anywhere whole, it's split starting from
+     * the room with the most free seats (minimizing how many rooms the split
+     * needs). "Free" means within the room's capacity and not already held by
+     * a locked seat, so a manually placed student never makes a group lose
+     * out on a room it would otherwise have fit. This makes room selection
+     * independent of the order rooms are given in.
      *
      * @param  Collection<string, int[]>  $groups
      * @param  array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>  $rooms
@@ -45,22 +48,23 @@ class StrictSeatingStrategy implements SeatingStrategy
         $placements = [];
         $warnings = collect();
         $available = array_keys($rooms);
+        $free = array_map(fn (array $room) => $this->filler->freeSeats($room['rows'], $room['columns'], $room['capacity'], $room['occupied'] ?? []), $rooms);
 
         foreach ($groups->sortByDesc(fn (array $ids) => count($ids)) as $groupKey => $itemIds) {
             $bestFit = null;
 
             foreach ($available as $index) {
-                if ($rooms[$index]['capacity'] >= count($itemIds)
-                    && ($bestFit === null || $rooms[$index]['capacity'] < $rooms[$bestFit]['capacity'])) {
+                if ($free[$index] >= count($itemIds)
+                    && ($bestFit === null || $free[$index] < $free[$bestFit])) {
                     $bestFit = $index;
                 }
             }
 
             $order = $bestFit !== null
                 ? [$bestFit]
-                : (function () use ($available, $rooms) {
+                : (function () use ($available, $free) {
                     $indexes = $available;
-                    usort($indexes, fn ($a, $b) => $rooms[$b]['capacity'] <=> $rooms[$a]['capacity']);
+                    usort($indexes, fn ($a, $b) => $free[$b] <=> $free[$a]);
 
                     return $indexes;
                 })();
@@ -71,7 +75,7 @@ class StrictSeatingStrategy implements SeatingStrategy
                 }
 
                 $room = $rooms[$index];
-                $result = $this->filler->fillRoom($itemIds, $room['rows'], $room['columns'], $room['capacity'], $room['occupied']);
+                $result = $this->filler->fillRoom($itemIds, $room['rows'], $room['columns'], $room['capacity'], $room['occupied'] ?? []);
 
                 foreach ($result['placements'] as $p) {
                     $placements[] = new SeatPlacement($p['item_id'], $room['room_id'], $p['row'], $p['column']);

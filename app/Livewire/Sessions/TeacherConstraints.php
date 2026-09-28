@@ -48,9 +48,16 @@ class TeacherConstraints extends Component
             return;
         }
 
-        $this->apply($this->constraintFor($teacherId), [
-            'min_duties' => $value === '' ? null : max(0, (int) $value),
-        ]);
+        $constraint = $this->constraintFor($teacherId);
+        $min = $value === '' ? null : max(0, (int) $value);
+
+        if ($this->contradictsMax($min, $constraint->max_duties)) {
+            session()->flash('error', "Min duties ({$min}) cannot be greater than this teacher's max ({$constraint->max_duties}).");
+
+            return;
+        }
+
+        $this->apply($constraint, ['min_duties' => $min]);
     }
 
     public function updateMaxDuties(int $teacherId, string $value): void
@@ -59,9 +66,25 @@ class TeacherConstraints extends Component
             return;
         }
 
-        $this->apply($this->constraintFor($teacherId), [
-            'max_duties' => $value === '' ? null : max(0, (int) $value),
-        ]);
+        $constraint = $this->constraintFor($teacherId);
+        $max = $value === '' ? null : max(0, (int) $value);
+
+        if ($this->contradictsMax($constraint->min_duties, $max)) {
+            session()->flash('error', "Max duties ({$max}) cannot be less than this teacher's min ({$constraint->min_duties}).");
+
+            return;
+        }
+
+        $this->apply($constraint, ['max_duties' => $max]);
+    }
+
+    /**
+     * Only an explicit contradiction (both limits set by hand, min above max) is refused; a max below the
+     * session-wide default minimum is a legitimate "this teacher only does one duty".
+     */
+    private function contradictsMax(?int $min, ?int $max): bool
+    {
+        return $min !== null && $max !== null && $min > $max;
     }
 
     /**
@@ -89,7 +112,7 @@ class TeacherConstraints extends Component
 
         DB::transaction(function () use ($min, $max) {
             foreach ($this->examSession->teachers()->where('is_active', true)->pluck('id') as $teacherId) {
-                $this->apply($this->constraintFor($teacherId), [
+                $this->apply($this->constraintFor($teacherId, verified: true), [
                     'min_duties' => $min,
                     'max_duties' => $max,
                 ]);
@@ -133,7 +156,7 @@ class TeacherConstraints extends Component
 
         DB::transaction(function () use ($day, $available) {
             foreach ($this->examSession->teachers()->where('is_active', true)->pluck('id') as $teacherId) {
-                $constraint = $this->constraintFor($teacherId);
+                $constraint = $this->constraintFor($teacherId, verified: true);
                 $unavailable = $constraint->unavailable_days ?? [];
 
                 $unavailable = $available
@@ -147,9 +170,15 @@ class TeacherConstraints extends Component
         session()->flash('status', 'Day availability updated for every teacher.');
     }
 
-    private function constraintFor(int $teacherId): SessionTeacherConstraint
+    /**
+     * $verified is for the bulk actions, which loop over this session's own teachers and so have already
+     * established ownership; single-teacher actions take an id from the browser and must check it.
+     */
+    private function constraintFor(int $teacherId, bool $verified = false): SessionTeacherConstraint
     {
         $this->authorize('manage_sessions');
+
+        abort_unless($verified || $this->examSession->teachers()->whereKey($teacherId)->exists(), 404);
 
         return SessionTeacherConstraint::firstOrNew([
             'exam_session_id' => $this->examSession->id,

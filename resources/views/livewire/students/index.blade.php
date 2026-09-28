@@ -27,22 +27,22 @@
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Roll No / SAP No</label>
-                <input type="text" wire:model="roll_no" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="students-index-roll-no" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Roll No / SAP No</label>
+                <input id="students-index-roll-no" type="text" wire:model="roll_no" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('roll_no') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="students-index-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <input id="students-index-name" type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Program</label>
-                <input type="text" wire:model="program" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="students-index-program" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Program</label>
+                <input id="students-index-program" type="text" wire:model="program" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Admission Year</label>
-                <input type="text" wire:model="admission_year" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="students-index-admission-year" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Admission Year</label>
+                <input id="students-index-admission-year" type="text" wire:model="admission_year" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div class="sm:col-span-2 flex items-center gap-3">
                 <x-btn type="submit" icon="check">Save Student</x-btn>
@@ -54,7 +54,7 @@
     <div class="flex items-center justify-between mb-2 gap-3">
         <div class="relative w-full max-w-xs">
             <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search roll no or name"
+            <input type="text" wire:model.live.debounce.300ms="search" aria-label="Search students by roll number or name" placeholder="Search roll no or name"
                 class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
         </div>
         <div class="flex items-center gap-3">
@@ -100,7 +100,7 @@
                     @foreach ($students as $student)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
                             <td class="py-3 pl-4 sm:pl-6 pr-2">
-                                <input type="checkbox" wire:model.live="selected" value="{{ $student->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                <input type="checkbox" wire:model.live="selected" value="{{ $student->id }}" aria-label="Select {{ $student->name }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                             </td>
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $student->roll_no }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $student->name }}</td>

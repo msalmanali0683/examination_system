@@ -23,7 +23,7 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'section' => 'BSAI 1B']);
@@ -38,7 +38,7 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
 
         $component = Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session]);
 
@@ -61,7 +61,7 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         // Already pinned to a slot before being excluded — exclusion should
@@ -99,8 +99,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
 
-        $excludedSubject = Subject::factory()->create();
-        $includedSubject = Subject::factory()->create();
+        $excludedSubject = Subject::factory()->for($session)->create();
+        $includedSubject = Subject::factory()->for($session)->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $excludedSubject->id]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $includedSubject->id]);
 
@@ -136,7 +136,7 @@ class TimetableTest extends TestCase
         }
 
         foreach (range(1, 6) as $i) {
-            $subject = Subject::factory()->create();
+            $subject = Subject::factory()->for($session)->create();
             Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id]);
         }
 
@@ -166,8 +166,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '11:00']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-21', 'start_time' => '09:00']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $student = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subjectA->id]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subjectB->id]);
@@ -205,8 +205,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '09:00']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-09-20', 'start_time' => '11:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS-A']);
-        $subjectB = Subject::factory()->create(['code' => 'CS-B']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS-A']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'CS-B']);
 
         // Subject A: mostly semester 2, one repeater from semester 4.
         for ($i = 0; $i < 5; $i++) {
@@ -242,8 +242,8 @@ class TimetableTest extends TestCase
         $room = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         foreach ([$subjectA, $subjectB] as $subject) {
             for ($i = 0; $i < 3; $i++) {
                 $student = Student::factory()->create();
@@ -271,8 +271,8 @@ class TimetableTest extends TestCase
         $room = Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         foreach ([$subjectA, $subjectB] as $subject) {
             for ($i = 0; $i < 3; $i++) {
                 $student = Student::factory()->create();
@@ -305,8 +305,8 @@ class TimetableTest extends TestCase
         $room = Room::factory()->for($session)->create(['rows' => 6, 'columns' => 1, 'capacity' => 6]);
         TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         foreach ([$subjectA, $subjectB] as $subject) {
             for ($i = 0; $i < 3; $i++) {
                 $student = Student::factory()->create();
@@ -336,8 +336,8 @@ class TimetableTest extends TestCase
         $sameDayOtherSlot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
         $freeDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS999']);
-        $subjectB = Subject::factory()->create(['code' => 'MAT888']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS999']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'MAT888']);
         // Different semesters (2 and 4) — a repeater/backlog student sitting
         // both, not two subjects of the same cohort.
         $sharedStudent = Student::factory()->create();
@@ -411,8 +411,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
         $freeDay = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS111']);
-        $subjectB = Subject::factory()->create(['code' => 'MAT111']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS111']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'MAT111']);
         // Both semester 2 (BSAI 2A / BSAI 2B) — no shared student required,
         // the semester itself is enough to flag the day.
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
@@ -446,8 +446,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS111']);
-        $subjectB = Subject::factory()->create(['code' => 'MAT111']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS111']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'MAT111']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 2B']);
 
@@ -471,7 +471,7 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         $component = Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session]);
@@ -496,8 +496,8 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slot->id, 'is_pinned' => true, 'conflict_note' => 'x']);
@@ -526,8 +526,8 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
 
         SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slot->id, 'is_pinned' => true]);
@@ -551,8 +551,8 @@ class TimetableTest extends TestCase
         $slotA = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
         $slotB = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS111', 'title' => 'Repeater Subject']);
-        $subjectB = Subject::factory()->create(['code' => 'MAT222', 'title' => 'Fresh Subject']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS111', 'title' => 'Repeater Subject']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'MAT222', 'title' => 'Fresh Subject']);
 
         $shared = Student::factory()->create(['roll_no' => '00000001', 'name' => 'Shared Student']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $shared->id, 'subject_id' => $subjectA->id]);
@@ -560,7 +560,7 @@ class TimetableTest extends TestCase
 
         // A third subject on the same day with no shared student — must
         // not show up in the clash detail list at all.
-        $subjectC = Subject::factory()->create(['code' => 'ENG333']);
+        $subjectC = Subject::factory()->for($session)->create(['code' => 'ENG333']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectC->id]);
 
         SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id, 'time_slot_id' => $slotA->id, 'is_pinned' => true, 'conflict_note' => 'x']);
@@ -581,8 +581,8 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $keep = Subject::factory()->create(['code' => 'EE07205|11', 'title' => 'Digital Logic and Design']);
-        $mergeAway = Subject::factory()->create(['code' => 'EES07104|11', 'title' => 'Digital Logic Design']);
+        $keep = Subject::factory()->for($session)->create(['code' => 'EE07205|11', 'title' => 'Digital Logic and Design']);
+        $mergeAway = Subject::factory()->for($session)->create(['code' => 'EES07104|11', 'title' => 'Digital Logic Design']);
         $student = Student::factory()->create();
         $enrollment = Enrollment::factory()->create([
             'exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $mergeAway->id,
@@ -617,7 +617,7 @@ class TimetableTest extends TestCase
     {
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
 
         Livewire::actingAs($staff)
             ->test(Timetable::class, ['examSession' => $session])
@@ -642,8 +642,8 @@ class TimetableTest extends TestCase
         $midday = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $sharedStudent = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
@@ -678,8 +678,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '11:30']);
         $lastSlot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '14:00']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $sharedStudent = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
@@ -705,8 +705,8 @@ class TimetableTest extends TestCase
         $day1 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
         $day2 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $sharedStudent = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id]);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id]);
@@ -735,8 +735,8 @@ class TimetableTest extends TestCase
         $morning = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
         $afternoon = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '13:00']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
         $sharedStudent = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 4A']);
@@ -761,8 +761,8 @@ class TimetableTest extends TestCase
         $session = ExamSession::factory()->create();
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
 
-        $subjectA = Subject::factory()->create(['code' => 'CS111']);
-        $subjectB = Subject::factory()->create(['code' => 'MAT222']);
+        $subjectA = Subject::factory()->for($session)->create(['code' => 'CS111']);
+        $subjectB = Subject::factory()->for($session)->create(['code' => 'MAT222']);
         $sharedStudent = Student::factory()->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectA->id, 'section' => 'BSAI 2A']);
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $sharedStudent->id, 'subject_id' => $subjectB->id, 'section' => 'BSAI 4A']);
@@ -790,8 +790,8 @@ class TimetableTest extends TestCase
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
         TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
 
-        $subjectA = Subject::factory()->create();
-        $subjectB = Subject::factory()->create();
+        $subjectA = Subject::factory()->for($session)->create();
+        $subjectB = Subject::factory()->for($session)->create();
 
         // Different students in each subject — no shared enrollment, no conflict.
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subjectA->id]);
@@ -820,7 +820,7 @@ class TimetableTest extends TestCase
         $slot1 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '09:00']);
         $slot2 = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'start_time' => '11:00']);
 
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id]);
 
         $component = Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session]);
@@ -880,7 +880,7 @@ class TimetableTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $staff->permissionOverrides()->create(['permission' => 'generate_roster', 'granted' => false]);
         $session = ExamSession::factory()->create();
-        $subject = Subject::factory()->create();
+        $subject = Subject::factory()->for($session)->create();
         Enrollment::factory()->create(['exam_session_id' => $session->id, 'subject_id' => $subject->id]);
 
         Livewire::actingAs($staff)
@@ -900,5 +900,61 @@ class TimetableTest extends TestCase
         $this->actingAs($staff)
             ->get(route('sessions.timetable', $session))
             ->assertForbidden();
+    }
+
+    /**
+     * Subject and slot ids arrive from the browser; a crafted request must not be able to reach another
+     * session's data through this session's page.
+     */
+    public function test_timetable_actions_ignore_another_sessions_subjects_and_slots(): void
+    {
+        $user = User::factory()->create(['role' => 'head']);
+        $mine = ExamSession::factory()->create();
+        $theirs = ExamSession::factory()->create();
+
+        $mySubject = Subject::factory()->for($mine)->create();
+        $myStudent = Student::factory()->for($mine)->create();
+        Enrollment::factory()->create(['exam_session_id' => $mine->id, 'student_id' => $myStudent->id, 'subject_id' => $mySubject->id]);
+        $mySlot = TimeSlot::factory()->create(['exam_session_id' => $mine->id]);
+
+        $foreignSubject = Subject::factory()->for($theirs)->create();
+        $foreignSlot = TimeSlot::factory()->create(['exam_session_id' => $theirs->id]);
+
+        $page = Livewire::actingAs($user)->test(Timetable::class, ['examSession' => $mine]);
+
+        $page->call('updatePin', $foreignSubject->id, (string) $mySlot->id)
+            ->call('toggleSubjectExcluded', $foreignSubject->id)
+            ->call('toggleDutyMatchesSections', $foreignSubject->id)
+            ->call('removeSlot', $foreignSubject->id)
+            ->call('showClashDetails', $foreignSubject->id);
+
+        $this->assertSame(0, SubjectSlotAssignment::where('subject_id', $foreignSubject->id)->count(), "no row may be created for another session's subject");
+
+        $page->call('updatePin', $mySubject->id, (string) $foreignSlot->id);
+        $this->assertSame(0, SubjectSlotAssignment::where('exam_session_id', $mine->id)->where('time_slot_id', $foreignSlot->id)->count(), "a slot of another session can't be pinned to");
+
+        $page->call('updatePin', $mySubject->id, (string) $mySlot->id);
+        $this->assertTrue((bool) SubjectSlotAssignment::where('exam_session_id', $mine->id)->where('subject_id', $mySubject->id)->value('is_pinned'), 'the session\'s own subject and slot still work');
+    }
+
+    public function test_merging_never_reaches_a_subject_of_another_session(): void
+    {
+        $user = User::factory()->create(['role' => 'head']);
+        $mine = ExamSession::factory()->create();
+        $theirs = ExamSession::factory()->create();
+        $mySubject = Subject::factory()->for($mine)->create();
+        $foreignSubject = Subject::factory()->for($theirs)->create();
+
+        Livewire::actingAs($user)
+            ->test(Timetable::class, ['examSession' => $mine])
+            ->set('mergeSelected', [(string) $mySubject->id, (string) $foreignSubject->id])
+            ->call('openSubjectMergeModal')
+            ->assertSet('showSubjectMergeModal', false)
+            ->set('mergeSelected', [(string) $mySubject->id, (string) $foreignSubject->id])
+            ->set('mergeSurvivorId', (string) $mySubject->id)
+            ->call('confirmSubjectMerge');
+
+        $this->assertNull($foreignSubject->fresh()->merged_into_id);
+        $this->assertNull($mySubject->fresh()->merged_into_id);
     }
 }

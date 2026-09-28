@@ -13,31 +13,31 @@
         <form wire:submit="generateBulkSlots" class="mb-6 space-y-5 border-b border-gray-100 dark:border-gray-700 pb-6">
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Slots per day</label>
-                    <input type="number" min="1" max="10" wire:model.live="bulkSlotsPerDay" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-time-slots-bulkslotsperday" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Slots per day</label>
+                    <input id="sessions-time-slots-bulkslotsperday" type="number" min="1" max="10" wire:model.live="bulkSlotsPerDay" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('bulkSlotsPerDay') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start date</label>
-                    <input type="date" wire:model="bulkStartDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-time-slots-bulkstartdate" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start date</label>
+                    <input id="sessions-time-slots-bulkstartdate" type="date" wire:model="bulkStartDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('bulkStartDate') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of exam dates</label>
-                    <input type="number" min="1" max="60" wire:model="bulkDateCount" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-time-slots-bulkdatecount" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of exam dates</label>
+                    <input id="sessions-time-slots-bulkdatecount" type="number" min="1" max="60" wire:model="bulkDateCount" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('bulkDateCount') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Slot timings <span class="text-xs text-gray-400 font-normal">(applied to every generated date)</span></label>
-                <div class="space-y-2">
+                <span id="time-slots-bulk-timings" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Slot timings <span class="text-xs text-gray-400 font-normal">(applied to every generated date)</span></span>
+                <div class="space-y-2" role="group" aria-labelledby="time-slots-bulk-timings">
                     @for ($i = 0; $i < $bulkSlotsPerDay; $i++)
                         <div class="flex items-center gap-3">
                             <span class="text-xs text-gray-400 w-14 shrink-0">Slot {{ $i + 1 }}</span>
-                            <input type="time" wire:model="bulkSlotTimes.{{ $i }}.start" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                            <input type="time" aria-label="Slot {{ $i + 1 }} start time" wire:model="bulkSlotTimes.{{ $i }}.start" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                             <span class="text-gray-400 text-sm">&ndash;</span>
-                            <input type="time" wire:model="bulkSlotTimes.{{ $i }}.end" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                            <input type="time" aria-label="Slot {{ $i + 1 }} end time" wire:model="bulkSlotTimes.{{ $i }}.end" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                         </div>
                         @error("bulkSlotTimes.{$i}.start") <p class="text-sm text-red-600 ml-[4.5rem]">{{ $message }}</p> @enderror
                         @error("bulkSlotTimes.{$i}.end") <p class="text-sm text-red-600 ml-[4.5rem]">{{ $message }}</p> @enderror
@@ -46,8 +46,8 @@
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Skip these days of the week <span class="text-xs text-gray-400 font-normal">(optional)</span></label>
-                <div class="flex items-center gap-3 flex-wrap">
+                <span id="time-slots-skip-days" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Skip these days of the week <span class="text-xs text-gray-400 font-normal">(optional)</span></span>
+                <div class="flex items-center gap-3 flex-wrap" role="group" aria-labelledby="time-slots-skip-days">
                     @foreach ($this->days() as $iso => $label)
                         <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                             <input type="checkbox" wire:click="toggleBulkSkipDay({{ $iso }})" @checked(in_array($iso, $bulkSkipDays)) class="rounded border-gray-300 h-3.5 w-3.5 text-primary-600 focus:ring-primary-500">
@@ -74,23 +74,23 @@
     @if ($showForm)
         <form wire:submit="save" class="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                <input type="date" wire:model="date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-time-slots-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
+                <input id="sessions-time-slots-date" type="date" wire:model="date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('date') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Time</label>
-                <input type="time" wire:model="start_time" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-time-slots-start-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Time</label>
+                <input id="sessions-time-slots-start-time" type="time" wire:model="start_time" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('start_time') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Time</label>
-                <input type="time" wire:model="end_time" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-time-slots-end-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Time</label>
+                <input id="sessions-time-slots-end-time" type="time" wire:model="end_time" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('end_time') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Label (optional)</label>
-                <input type="text" wire:model="label" placeholder="Morning" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-time-slots-label" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Label (optional)</label>
+                <input id="sessions-time-slots-label" type="text" wire:model="label" placeholder="Morning" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div class="sm:col-span-4 flex items-center gap-3">
                 <x-btn type="submit" icon="check">Save Slot</x-btn>

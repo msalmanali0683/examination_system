@@ -102,7 +102,7 @@ class EnrollmentImport extends Component
         $this->authorize('manage_enrollments');
         $this->raiseResourceLimits();
 
-        $this->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']]);
+        $this->validate(['file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:20480']]);
 
         $this->storeUploadedFile();
         $this->detectBestSheet();
@@ -152,8 +152,11 @@ class EnrollmentImport extends Component
 
         $this->raiseResourceLimits();
 
-        $existingSubjects = $this->examSession->subjects()->pluck('id', 'code');
-        $existingStudents = $this->examSession->students()->pluck('id', 'roll_no');
+        // Looked up in lower case: the unique indexes on subjects.code and students.roll_no compare
+        // case-insensitively (MySQL's default collation), so "cs01|11" and "CS01|11" are ONE subject there and
+        // creating the second one would abort the whole import with a duplicate-key error.
+        $existingSubjects = $this->examSession->subjects()->pluck('id', 'code')->mapWithKeys(fn ($id, $code) => [mb_strtolower((string) $code) => $id]);
+        $existingStudents = $this->examSession->students()->pluck('id', 'roll_no')->mapWithKeys(fn ($id, $roll) => [mb_strtolower((string) $roll) => $id]);
         $teacherCache = [];
         $created = 0;
         $updated = 0;
@@ -170,8 +173,9 @@ class EnrollmentImport extends Component
                     continue;
                 }
 
-                $student = $existingStudents->has($data['roll_no'])
-                    ? $this->examSession->students()->find($existingStudents[$data['roll_no']])
+                $rollKey = mb_strtolower($data['roll_no']);
+                $student = $existingStudents->has($rollKey)
+                    ? $this->examSession->students()->find($existingStudents[$rollKey])
                     : null;
 
                 if ($student) {
@@ -187,25 +191,26 @@ class EnrollmentImport extends Component
                         'program' => $data['program'],
                         'admission_year' => $data['admission_year'],
                     ]);
-                    $existingStudents[$data['roll_no']] = $student->id;
+                    $existingStudents[$rollKey] = $student->id;
                 }
 
                 $code = $data['course_code'];
+                $codeKey = mb_strtolower($code);
 
-                if ($existingSubjects->has($code)) {
+                if ($existingSubjects->has($codeKey)) {
                     // A subject merged away (see SubjectMergeService) keeps
                     // its row and code, so a future file using that same
                     // code still resolves it — but to the surviving
                     // subject, not the retired one, so both codes stay
                     // treated as one course going forward.
-                    $subject = $this->examSession->subjects()->find($existingSubjects[$code])->canonical();
+                    $subject = $this->examSession->subjects()->find($existingSubjects[$codeKey])->canonical();
                 } else {
                     $subject = $this->examSession->subjects()->create([
                         'code' => $code,
                         'title' => $data['course_title'],
                         'credit_hours' => $data['credit_hours'],
                     ]);
-                    $existingSubjects[$code] = $subject->id;
+                    $existingSubjects[$codeKey] = $subject->id;
                 }
 
                 $teacherId = null;
@@ -282,8 +287,8 @@ class EnrollmentImport extends Component
 
     private function buildReport(): array
     {
-        $existingSubjectCodes = $this->examSession->subjects()->pluck('code')->flip();
-        $existingRollNos = $this->examSession->students()->pluck('roll_no')->flip();
+        $existingSubjectCodes = $this->examSession->subjects()->pluck('code')->map(fn ($code) => mb_strtolower((string) $code))->flip();
+        $existingRollNos = $this->examSession->students()->pluck('roll_no')->map(fn ($roll) => mb_strtolower((string) $roll))->flip();
 
         $errors = [];
         $seenPairs = [];
@@ -311,7 +316,7 @@ class EnrollmentImport extends Component
                 continue;
             }
 
-            $pairKey = $data['roll_no'].'|'.$data['course_code'];
+            $pairKey = mb_strtolower($data['roll_no'].'|'.$data['course_code']);
 
             if (isset($seenPairs[$pairKey])) {
                 $duplicateInFile++;
@@ -327,12 +332,12 @@ class EnrollmentImport extends Component
                 $blankTeacher++;
             }
 
-            if (! $existingSubjectCodes->has($data['course_code'])) {
-                $newSubjectCodes[$data['course_code']] = true;
+            if (! $existingSubjectCodes->has(mb_strtolower($data['course_code']))) {
+                $newSubjectCodes[mb_strtolower($data['course_code'])] ??= $data['course_code'];
             }
 
-            if (! $existingRollNos->has($data['roll_no'])) {
-                $newRollNos[$data['roll_no']] = true;
+            if (! $existingRollNos->has(mb_strtolower($data['roll_no']))) {
+                $newRollNos[mb_strtolower($data['roll_no'])] = true;
             }
 
             $valid++;
@@ -344,7 +349,7 @@ class EnrollmentImport extends Component
             'missingRequired' => $missingRequired,
             'duplicateInFile' => $duplicateInFile,
             'blankTeacher' => $blankTeacher,
-            'newSubjects' => array_keys($newSubjectCodes),
+            'newSubjects' => array_values($newSubjectCodes),
             'newStudentsCount' => count($newRollNos),
             'errors' => array_slice($errors, 0, 50),
             'errorsTruncated' => count($errors) > 50,

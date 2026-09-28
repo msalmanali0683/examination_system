@@ -21,7 +21,7 @@
     <div class="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700">
         <div class="relative w-full max-w-xs">
             <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search subject code or title"
+            <input type="text" wire:model.live.debounce.300ms="search" aria-label="Search sections by subject code or title" placeholder="Search subject code or title"
                 class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
         </div>
     </div>
@@ -58,7 +58,7 @@
                                 </td>
                                 <td class="py-2.5 pr-4 sm:pr-6">
                                     <div class="flex items-center gap-2">
-                                        <select wire:model="selection.{{ $row->subject_id }}.{{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                        <select wire:model="selection.{{ $row->subject_id }}.{{ $row->section }}" aria-label="Teacher for {{ $row->code }} {{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                                             <option value="">Select teacher&hellip;</option>
                                             @foreach ($activeTeachers as $teacher)
                                                 <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>

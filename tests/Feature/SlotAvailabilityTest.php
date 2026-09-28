@@ -493,4 +493,28 @@ class SlotAvailabilityTest extends TestCase
         $this->assertSame(20, $page->viewData('seatsAvailableBySlot')->get($slot2->id));
         $this->assertNull($page->viewData('seatsAvailableBySlot')->get($slot1->id)); // untouched slots use the total
     }
+
+    public function test_teacher_constraint_actions_ignore_another_sessions_teacher(): void
+    {
+        $user = User::factory()->create(['role' => 'head']);
+        $mine = ExamSession::factory()->create();
+        $theirs = ExamSession::factory()->create();
+        $foreign = Teacher::factory()->for($theirs)->create();
+        $own = Teacher::factory()->for($mine)->create();
+
+        foreach ([['toggleExcluded'], ['updateMinDuties', '3'], ['updateMaxDuties', '4'], ['toggleDayAvailable', 2]] as $call) {
+            // a refused action (404) ends that component's request, so each attempt gets a fresh one
+            try {
+                Livewire::actingAs($user)->test(TeacherConstraints::class, ['examSession' => $mine])
+                    ->call($call[0], $foreign->id, ...array_slice($call, 1));
+            } catch (\Throwable) {
+                // refusing is the expected outcome
+            }
+        }
+
+        $this->assertSame(0, SessionTeacherConstraint::where('teacher_id', $foreign->id)->count(), "no constraint row may point at another session's teacher");
+
+        Livewire::actingAs($user)->test(TeacherConstraints::class, ['examSession' => $mine])->call('toggleExcluded', $own->id);
+        $this->assertTrue((bool) SessionTeacherConstraint::where('exam_session_id', $mine->id)->where('teacher_id', $own->id)->value('is_excluded'));
+    }
 }

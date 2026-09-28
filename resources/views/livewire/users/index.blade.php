@@ -25,23 +25,23 @@
     @if ($showCreateForm)
         <form wire:submit="createUser" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="users-index-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <input id="users-index-name" type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-                <input type="email" wire:model="email" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="users-index-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                <input id="users-index-email" type="email" wire:model="email" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('email') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Temporary Password</label>
-                <input type="text" wire:model="password" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="users-index-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Temporary Password</label>
+                <input id="users-index-password" type="text" wire:model="password" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('password') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                <select wire:model="role" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="users-index-role" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
+                <select id="users-index-role" wire:model="role" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     <option value="staff">Staff</option>
                     <option value="head">Head</option>
                 </select>
@@ -73,6 +73,7 @@
                     <div class="flex items-center gap-3">
                         <select
                             class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm"
+                            aria-label="Role for {{ $user->name }}"
                             wire:change="updateRole({{ $user->id }}, $event.target.value)"
                         >
                             <option value="staff" @selected($user->role === 'staff')>Staff</option>

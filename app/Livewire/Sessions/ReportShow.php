@@ -260,7 +260,14 @@ class ReportShow extends Component
             return ['state' => 'in_progress', 'generatedAt' => null, 'error' => null];
         }
 
-        $generatedAt = $rows->where('status', ReportFile::STATUS_READY)->max('generated_at');
+        $ready = $rows->where('status', ReportFile::STATUS_READY);
+
+        // A file built before the schedule last changed is outdated; it is rebuilt automatically on the next download.
+        if ($ready->contains(fn ($row) => $row->is_stale)) {
+            return ['state' => 'stale', 'generatedAt' => $ready->max('generated_at'), 'error' => null];
+        }
+
+        $generatedAt = $ready->max('generated_at');
 
         if ($generatedAt) {
             return ['state' => 'ready', 'generatedAt' => $generatedAt, 'error' => null];

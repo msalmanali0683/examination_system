@@ -248,4 +248,47 @@ class MixedSeatingStrategyTest extends TestCase
             $this->columnsUsedBySubject($result->placements, $subjectByEnrollmentId, 200)
         );
     }
+
+    public function test_neighbouring_columns_hold_different_subjects_when_another_subject_is_waiting(): void
+    {
+        // Subject 100 has two big sections, subject 200 one smaller one. Pairing "the two largest groups" would
+        // seat both sections of 100 side by side - students beside classmates sitting the SAME paper. The room
+        // must pair a section of 100 with the section of 200 instead.
+        $nextId = 1;
+        $a1 = collect($this->enrollments(6, 100, $nextId))->map(fn ($e) => (object) [...(array) $e, 'section' => 'A']);
+        $a2 = collect($this->enrollments(6, 100, $nextId))->map(fn ($e) => (object) [...(array) $e, 'section' => 'B']);
+        $b = collect($this->enrollments(4, 200, $nextId))->map(fn ($e) => (object) [...(array) $e, 'section' => 'A']);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate(collect([...$a1, ...$a2, ...$b]), [$this->room(1, 3, 4), $this->room(2, 3, 4)]);
+
+        $this->assertTrue($result->warnings->isEmpty());
+        $subjectByEnrollmentId = $this->subjectByEnrollmentId([...$a1, ...$a2, ...$b]);
+
+        // the first room fills before the second, so it is the one that had all three groups to choose from
+        $firstRoom = collect($result->placements)->where('roomId', 1);
+        $subjectsInFirstRoom = $firstRoom->map(fn ($p) => $subjectByEnrollmentId[$p->enrollmentId])->unique()->sort()->values()->all();
+        $this->assertSame([100, 200], $subjectsInFirstRoom, 'the first room should mix both subjects');
+
+        $columns = $firstRoom->groupBy('column')->keys()->sort()->values();
+        foreach ($columns as $i => $column) {
+            if ($i === 0) {
+                continue;
+            }
+            $left = $firstRoom->where('column', $column - 1)->map(fn ($p) => $subjectByEnrollmentId[$p->enrollmentId])->unique();
+            $right = $firstRoom->where('column', $column)->map(fn ($p) => $subjectByEnrollmentId[$p->enrollmentId])->unique();
+            $this->assertEmpty($left->intersect($right)->all(), 'columns '.($column - 1)." and $column sit the same subject");
+        }
+    }
+
+    public function test_it_still_pairs_same_subject_sections_when_nothing_else_is_left(): void
+    {
+        $nextId = 1;
+        $a1 = collect($this->enrollments(3, 100, $nextId))->map(fn ($e) => (object) [...(array) $e, 'section' => 'A']);
+        $a2 = collect($this->enrollments(3, 100, $nextId))->map(fn ($e) => (object) [...(array) $e, 'section' => 'B']);
+
+        $result = (new MixedSeatingStrategy(groupSize: 2))->allocate(collect([...$a1, ...$a2]), [$this->room(1, 3, 2)]);
+
+        $this->assertTrue($result->warnings->isEmpty(), 'unavoidable same-subject neighbours must not cost anyone a seat');
+        $this->assertCount(6, $result->placements);
+    }
 }

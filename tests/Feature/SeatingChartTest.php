@@ -271,4 +271,23 @@ class SeatingChartTest extends TestCase
 
         $this->assertDatabaseCount('seat_assignments', 1);
     }
+
+    public function test_the_board_survives_its_selected_slot_losing_every_seat(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->for($session)->create();
+        $first = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-11-02']);
+        $second = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-11-03']);
+        $this->seat($session, $first, $room, 1, 1);
+        $lastSeat = $this->seat($session, $second, $room, 1, 1);
+
+        $page = Livewire::actingAs($staff)
+            ->test(SeatingChart::class, ['examSession' => $session])
+            ->call('selectSlot', $second->id);
+
+        $lastSeat->delete();
+
+        $page->call('$refresh')->assertSet('activeSlotId', $first->id)->assertOk();
+    }
 }

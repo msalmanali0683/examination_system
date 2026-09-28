@@ -46,6 +46,8 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
         $groups = $this->buildGroups($enrollments);
         $placements = [];
         $available = array_keys($rooms);
+        // Free seats, not nominal capacity: a locked seat inside a room must count against it (see RoomFiller::freeSeats()).
+        $free = array_map(fn (array $room) => $this->filler->freeSeats($room['rows'], $room['columns'], $room['capacity'], $room['occupied'] ?? []), $rooms);
 
         $order = array_keys($groups);
         usort($order, fn ($a, $b) => count($groups[$b]['ids']) <=> count($groups[$a]['ids']));
@@ -53,8 +55,8 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
         foreach ($order as $key) {
             while (! empty($groups[$key]['ids']) && ! empty($available)) {
                 $itemIds = $groups[$key]['ids'];
-                $index = $this->bestFitRoom($available, $rooms, count($itemIds))
-                    ?? $this->largestAvailableRoom($available, $rooms);
+                $index = $this->bestFitRoom($available, $free, count($itemIds))
+                    ?? $this->largestAvailableRoom($available, $free);
 
                 $room = $rooms[$index];
                 $result = $this->filler->fillRoom($itemIds, $room['rows'], $room['columns'], $room['capacity'], $room['occupied']);
@@ -108,7 +110,7 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
     private function fillOverflow(array $room, array $occupied, int $primarySubjectId, string $primaryKey, array &$groups, array &$placements): void
     {
         while (true) {
-            $candidateKey = $this->bestOverflowCandidate($groups, $primarySubjectId, $primaryKey, $room['capacity'] - count($occupied));
+            $candidateKey = $this->bestOverflowCandidate($groups, $primarySubjectId, $primaryKey, $this->filler->freeSeats($room['rows'], $room['columns'], $room['capacity'], $occupied));
 
             if ($candidateKey === null) {
                 return;
@@ -178,15 +180,15 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
 
     /**
      * @param  int[]  $available
-     * @param  array<int, array{capacity:int}>  $rooms
+     * @param  array<int, int>  $free  room index => free seats
      */
-    private function bestFitRoom(array $available, array $rooms, int $count): ?int
+    private function bestFitRoom(array $available, array $free, int $count): ?int
     {
         $bestFit = null;
 
         foreach ($available as $index) {
-            if ($rooms[$index]['capacity'] >= $count
-                && ($bestFit === null || $rooms[$index]['capacity'] < $rooms[$bestFit]['capacity'])) {
+            if ($free[$index] >= $count
+                && ($bestFit === null || $free[$index] < $free[$bestFit])) {
                 $bestFit = $index;
             }
         }
@@ -196,12 +198,12 @@ class GroupedWithOverflowStrategy implements SeatingStrategy
 
     /**
      * @param  int[]  $available
-     * @param  array<int, array{capacity:int}>  $rooms
+     * @param  array<int, int>  $free  room index => free seats
      */
-    private function largestAvailableRoom(array $available, array $rooms): int
+    private function largestAvailableRoom(array $available, array $free): int
     {
         $indexes = $available;
-        usort($indexes, fn ($a, $b) => $rooms[$b]['capacity'] <=> $rooms[$a]['capacity']);
+        usort($indexes, fn ($a, $b) => $free[$b] <=> $free[$a]);
 
         return $indexes[0];
     }

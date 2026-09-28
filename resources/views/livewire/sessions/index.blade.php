@@ -24,18 +24,18 @@
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
             <div class="sm:col-span-3">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session Name</label>
-                <input type="text" wire:model="name" placeholder="e.g. Midterm Spring 2026" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session Name</label>
+                <input id="sessions-index-name" type="text" wire:model="name" placeholder="e.g. Midterm Spring 2026" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
-                <input type="date" wire:model="start_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-start-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+                <input id="sessions-index-start-date" type="date" wire:model="start_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('start_date') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
-                <input type="date" wire:model="end_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-end-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+                <input id="sessions-index-end-date" type="date" wire:model="end_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('end_date') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div class="sm:col-span-3 flex items-center gap-3">
@@ -52,18 +52,18 @@
                 Duplicating rooms and teacher constraints into a new session. Enrollments and generated data are not copied.
             </div>
             <div class="sm:col-span-3">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Session Name</label>
-                <input type="text" wire:model="duplicateName" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-duplicatename" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Session Name</label>
+                <input id="sessions-index-duplicatename" type="text" wire:model="duplicateName" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('duplicateName') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
-                <input type="date" wire:model="duplicateStartDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-duplicatestartdate" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+                <input id="sessions-index-duplicatestartdate" type="date" wire:model="duplicateStartDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('duplicateStartDate') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
-                <input type="date" wire:model="duplicateEndDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-index-duplicateenddate" class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+                <input id="sessions-index-duplicateenddate" type="date" wire:model="duplicateEndDate" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('duplicateEndDate') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div class="sm:col-span-3 flex items-center gap-3">

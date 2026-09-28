@@ -76,6 +76,10 @@ class Timetable extends Component
             return;
         }
 
+        if (! $this->ownsSubject($subjectId)) {
+            return;
+        }
+
         if ($value === '') {
             SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
                 ->where('subject_id', $subjectId)
@@ -85,6 +89,11 @@ class Timetable extends Component
         }
 
         $slotId = (int) $value;
+
+        // A slot of some other session must never be pinned to — ids arrive from the browser.
+        if (! $this->examSession->timeSlots()->whereKey($slotId)->exists()) {
+            return;
+        }
 
         SubjectSlotAssignment::updateOrCreate(
             ['exam_session_id' => $this->examSession->id, 'subject_id' => $subjectId],
@@ -104,7 +113,7 @@ class Timetable extends Component
     {
         $this->authorize('manage_sessions');
 
-        if ($this->blockedByFinalization($this->examSession)) {
+        if ($this->blockedByFinalization($this->examSession) || ! $this->ownsSubject($subjectId)) {
             return;
         }
 
@@ -276,7 +285,7 @@ class Timetable extends Component
     {
         $this->authorize('manage_sessions');
 
-        $subject = Subject::find($subjectId);
+        $subject = $this->examSession->subjects()->find($subjectId);
         $assignment = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)
             ->where('subject_id', $subjectId)
             ->first();
@@ -350,7 +359,7 @@ class Timetable extends Component
     {
         $this->authorize('manage_sessions');
 
-        if ($this->blockedByFinalization($this->examSession)) {
+        if ($this->blockedByFinalization($this->examSession) || ! $this->ownsSubject($subjectId)) {
             return;
         }
 
@@ -380,7 +389,7 @@ class Timetable extends Component
     {
         $this->authorize('manage_sessions');
 
-        if ($this->blockedByFinalization($this->examSession)) {
+        if ($this->blockedByFinalization($this->examSession) || ! $this->ownsSubject($subjectId)) {
             return;
         }
 
@@ -403,6 +412,8 @@ class Timetable extends Component
     public function openSubjectMergeModal(): void
     {
         $this->authorize('manage_subjects');
+
+        $this->mergeSelected = $this->onlyOwnSubjectIds($this->mergeSelected);
 
         if (count($this->mergeSelected) < 2) {
             $this->flashError('Select at least two subjects to merge.');
@@ -441,7 +452,7 @@ class Timetable extends Component
         // is an array of strings — normalize before comparing against the
         // (int)-cast survivor id, or a strict in_array() check here would
         // wrongly reject a genuinely selected survivor every time.
-        $selectedIds = array_map('intval', $this->mergeSelected);
+        $selectedIds = $this->onlyOwnSubjectIds($this->mergeSelected);
         $survivorId = (int) $this->mergeSurvivorId;
 
         if (! in_array($survivorId, $selectedIds, true)) {
@@ -450,7 +461,7 @@ class Timetable extends Component
             return;
         }
 
-        $keep = Subject::find($survivorId);
+        $keep = $this->examSession->subjects()->find($survivorId);
         $mergeAwayIds = array_values(array_diff($selectedIds, [$survivorId]));
 
         if (! $keep || empty($mergeAwayIds)) {
@@ -464,7 +475,7 @@ class Timetable extends Component
         $merged = 0;
 
         foreach ($mergeAwayIds as $mergeAwayId) {
-            $mergeAway = Subject::find($mergeAwayId);
+            $mergeAway = $this->examSession->subjects()->find($mergeAwayId);
 
             if (! $mergeAway || $mergeAway->isMerged()) {
                 continue;
@@ -629,6 +640,26 @@ class Timetable extends Component
 
             return $strategy->allocate($subset, $rooms)->warnings->where('type', 'unseated')->isEmpty();
         };
+    }
+
+    /**
+     * Subject and slot ids come from the browser, so every action checks they belong to THIS session before
+     * touching anything — a crafted request must not be able to pin, exclude or merge another session's data.
+     */
+    private function ownsSubject(int $subjectId): bool
+    {
+        return $this->examSession->subjects()->whereKey($subjectId)->exists();
+    }
+
+    /**
+     * @param  array<int|string>  $ids
+     * @return int[]
+     */
+    private function onlyOwnSubjectIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        return $this->examSession->subjects()->whereIn('id', $ids)->pluck('id')->map(fn ($id) => (int) $id)->intersect($ids)->values()->all();
     }
 
     /**

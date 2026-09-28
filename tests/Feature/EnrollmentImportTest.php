@@ -321,4 +321,40 @@ class EnrollmentImportTest extends TestCase
         $this->assertSame($mine->id, $session->teachers()->where('name', 'Ahmed Iftikhar')->value('id'));
         $this->assertSame(1, $other->teachers()->count());
     }
+
+    /**
+     * MySQL's unique indexes on subjects.code and students.roll_no ignore letter case, so a file that spells one
+     * course "CS01|11" and "cs01|11" (or one student "ab-1" and "AB-1") used to abort the whole import with a
+     * duplicate-key error there — invisible on SQLite, which compares case-sensitively. They are one subject
+     * and one student.
+     */
+    public function test_codes_and_roll_numbers_that_differ_only_in_letter_case_are_one_subject_and_one_student(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        $content = <<<'CSV'
+        SapNo,Name,Program Title,AdmissonYear,Course Code,Course Title,Cr.Hrs,Section,Teacher,PERNR,EMAIL
+        ab-1,Ali Raza,BSSE,2024,CS01|11,Intro,3,BSSE 1A,,,
+        AB-1,Ali Raza,BSSE,2024,cs01|11,Intro,3,BSSE 1A,,,
+        ab-2,Bina Shah,BSSE,2024,cs01|11,Intro,3,BSSE 1A,,,
+        ab-2,Bina Shah,BSSE,2024,CS02|11,Databases,3,BSSE 1A,,,
+        CSV;
+
+        $page = Livewire::actingAs($staff)
+            ->test(EnrollmentImport::class, ['examSession' => $session])
+            ->set('file', UploadedFile::fake()->createWithContent('enrollments.csv', $content))
+            ->call('confirmMapping');
+
+        $report = $page->get('report');
+        $this->assertSame(1, $report['duplicateInFile'], 'the ab-1 / AB-1 repeat of CS01 is recognised as a duplicate row');
+        $this->assertSame(['CS01|11', 'CS02|11'], $report['newSubjects']);
+        $this->assertSame(2, $report['newStudentsCount']);
+
+        $page->call('commitImport')->assertSet('step', 'done');
+
+        $this->assertSame(2, $session->students()->count());
+        $this->assertSame(2, $session->subjects()->count());
+        $this->assertSame(3, $session->enrollments()->count());
+    }
 }

@@ -34,6 +34,7 @@ class ReportFile extends Model
         'exam_session_id',
         'report_key',
         'filters_hash',
+        'data_stamp',
         'filters',
         'status',
         'error',

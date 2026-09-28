@@ -51,19 +51,19 @@
         @if ($editingDetails)
             <form wire:submit="saveDetails" class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-gray-100 dark:border-gray-700 pt-4">
                 <div class="sm:col-span-3">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session Name</label>
-                    <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session Name</label>
+                    <input id="sessions-show-name" type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div class="sm:col-span-3">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Department Name</label>
-                    <input type="text" wire:model="department_name" placeholder="{{ config('exam.department_name') }}" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-department-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Department Name</label>
+                    <input id="sessions-show-department-name" type="text" wire:model="department_name" placeholder="{{ config('exam.department_name') }}" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     <p class="mt-1 text-xs text-gray-400">Printed on every report and export for this session. Leave blank to use the default above.</p>
                     @error('department_name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Report Status</label>
-                    <select wire:model="report_status" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-report-status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Report Status</label>
+                    <select id="sessions-show-report-status" wire:model="report_status" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                         <option value="tentative">Tentative</option>
                         <option value="final">Final</option>
                     </select>
@@ -71,18 +71,18 @@
                     @error('report_status') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Version Label <span class="text-xs text-gray-400 font-normal">(optional)</span></label>
-                    <input type="text" wire:model="report_version" placeholder="e.g. v2, Revised 20 Apr" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-report-version" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Version Label <span class="text-xs text-gray-400 font-normal">(optional)</span></label>
+                    <input id="sessions-show-report-version" type="text" wire:model="report_version" placeholder="e.g. v2, Revised 20 Apr" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('report_version') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
-                    <input type="date" wire:model="start_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-start-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+                    <input id="sessions-show-start-date" type="date" wire:model="start_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('start_date') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
-                    <input type="date" wire:model="end_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <label for="sessions-show-end-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+                    <input id="sessions-show-end-date" type="date" wire:model="end_date" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     @error('end_date') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div class="sm:col-span-3 flex items-center gap-3">

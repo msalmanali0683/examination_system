@@ -31,7 +31,7 @@ class TeacherDutySheetMail extends Mailable
 
     public function content(): Content
     {
-        return new Content(view: 'emails.teacher-duty-sheet');
+        return new Content(markdown: 'emails.teacher-duty-sheet');
     }
 
     public function attachments(): array

@@ -30,7 +30,7 @@ new class extends Component
                 <span class="block text-xs text-slate-400 truncate">Faculty of Information Technology</span>
             </span>
         </a>
-        <button @click="sidebarOpen = false" class="ml-auto lg:hidden p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white">
+        <button type="button" @click="sidebarOpen = false" aria-label="Close navigation menu" class="ml-auto lg:hidden p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white">
             <x-icon name="x" class="h-5 w-5" />
         </button>
     </div>

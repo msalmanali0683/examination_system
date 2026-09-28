@@ -192,6 +192,10 @@ class SeatingChart extends Component
 
         $rooms = collect();
 
+        if ($this->activeSlotId && ! $slots->contains('id', $this->activeSlotId)) {
+            $this->activeSlotId = $slots->first()?->id;
+        }
+
         if ($this->activeSlotId) {
             $seats = SeatAssignment::where('exam_session_id', $this->examSession->id)
                 ->where('time_slot_id', $this->activeSlotId)

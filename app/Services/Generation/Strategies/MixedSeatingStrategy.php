@@ -17,7 +17,9 @@ use Illuminate\Support\Collection;
  * this is simpler and more predictable to invigilate than per-seat mixing.
  *
  * Groups are matched to a room's column-group capacities by size (largest
- * remaining group to the largest capacity slot) to minimize wasted seats.
+ * remaining group to the largest capacity slot) to minimize wasted seats —
+ * except that each room prefers groups of DIFFERENT subjects, so neighbouring
+ * columns don't sit the same paper whenever another subject is still waiting.
  * A group larger than its assigned slot carries its overflow to the next
  * room; a room with fewer waiting groups than `groupSize` simply leaves
  * the unmatched column-groups empty rather than inventing a group.
@@ -69,15 +71,24 @@ class MixedSeatingStrategy implements SeatingStrategy
             arsort($capacities); // largest column-group slot first, keys preserved
 
             $order = $this->queueIndicesLargestFirst($queue);
+            $pickedIndices = [];
+            $pickedSubjects = [];
 
-            $pairIndex = 0;
             foreach (array_keys($capacities) as $groupIndex) {
-                if ($pairIndex >= count($order)) {
+                $remaining = array_values(array_diff($order, $pickedIndices));
+
+                if (empty($remaining)) {
                     break;
                 }
 
-                $queueIndex = $order[$pairIndex];
-                $pairIndex++;
+                // Neighbouring column bands are the whole point of Mixed: a student's left and right neighbours
+                // should be sitting a DIFFERENT paper. So take the largest waiting group whose subject isn't
+                // already in this room; only when nothing else is left (say, only sections of one subject remain)
+                // does it fall back to the largest group, same subject or not.
+                $queueIndex = collect($remaining)->first(fn (int $i) => ! in_array($queue[$i]['subject_id'], $pickedSubjects, true)) ?? $remaining[0];
+
+                $pickedIndices[] = $queueIndex;
+                $pickedSubjects[] = $queue[$queueIndex]['subject_id'];
 
                 $result = $this->filler->fillColumns(
                     $queue[$queueIndex]['ids'],

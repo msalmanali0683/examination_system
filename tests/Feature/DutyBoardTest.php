@@ -232,4 +232,43 @@ class DutyBoardTest extends TestCase
         $fairness = $component->viewData('dutyFairness')->firstWhere('teacher.id', $teacher->id);
         $this->assertSame(1, $fairness->count);
     }
+
+    public function test_the_board_survives_its_selected_slot_losing_every_duty(): void
+    {
+        // A board left open on a slot whose duties then disappear (regenerated with fewer teachers, say) used to
+        // crash on render with "Attempt to read property id on null".
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->for($session)->create();
+        $first = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-11-02']);
+        $second = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-11-03']);
+        $teacher = Teacher::factory()->for($session)->create(['is_active' => true]);
+        $this->duty($session, $first, $room, $teacher);
+        $lastDuty = $this->duty($session, $second, $room, $teacher);
+
+        $page = Livewire::actingAs($staff)
+            ->test(DutyBoard::class, ['examSession' => $session])
+            ->call('selectSlot', $second->id)
+            ->assertSet('activeSlotId', $second->id);
+
+        $lastDuty->delete();
+
+        $page->call('$refresh')
+            ->assertSet('activeSlotId', $first->id)
+            ->assertOk();
+    }
+
+    public function test_the_board_renders_with_no_duties_at_all_after_they_are_wiped(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $room = Room::factory()->for($session)->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $duty = $this->duty($session, $slot, $room, Teacher::factory()->for($session)->create(['is_active' => true]));
+
+        $page = Livewire::actingAs($staff)->test(DutyBoard::class, ['examSession' => $session]);
+        $duty->delete();
+
+        $page->call('$refresh')->assertSet('activeSlotId', null)->assertOk();
+    }
 }

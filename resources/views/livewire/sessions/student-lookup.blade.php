@@ -13,7 +13,7 @@
 
     <div class="relative max-w-sm">
         <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input type="text" wire:model.live.debounce.300ms="query" placeholder="Roll number or student name&hellip;"
+        <input type="text" wire:model.live.debounce.300ms="query" aria-label="Search by roll number or student name" placeholder="Roll number or student name&hellip;"
             class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
     </div>
 

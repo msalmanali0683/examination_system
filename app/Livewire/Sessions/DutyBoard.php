@@ -270,6 +270,12 @@ class DutyBoard extends Component
 
         $rooms = collect();
 
+        // The slot this board was open on can lose all its duties (a regeneration with fewer teachers, changed
+        // availability, a new timetable) — fall back to the first slot that still has some rather than failing.
+        if ($this->activeSlotId && ! $slots->contains('id', $this->activeSlotId)) {
+            $this->activeSlotId = $slots->first()?->id;
+        }
+
         if ($this->activeSlotId) {
             $slot = $slots->firstWhere('id', $this->activeSlotId);
 

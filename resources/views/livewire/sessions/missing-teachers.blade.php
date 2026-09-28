@@ -45,7 +45,7 @@
 
         <div class="px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 flex flex-wrap items-center gap-2">
             <span class="text-sm text-gray-600 dark:text-gray-300">All {{ $missingTeacherSections->count() }} row{{ $missingTeacherSections->count() === 1 ? '' : 's' }} below:</span>
-            <select wire:model="bulkMissingTeacherId" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+            <select wire:model="bulkMissingTeacherId" aria-label="Teacher to assign to every listed section" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                 <option value="">Select teacher&hellip;</option>
                 @foreach ($activeTeachers as $teacher)
                     <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
@@ -75,7 +75,7 @@
                                 <td class="py-2.5 pr-4 sm:pr-6">
                                     @php $suggested = $suggestedTeachersBySubject->get($row->subject_id, collect()); @endphp
                                     <div class="flex items-center gap-2">
-                                        <select wire:model="missingTeacherSelection.{{ $row->subject_id }}.{{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                        <select wire:model="missingTeacherSelection.{{ $row->subject_id }}.{{ $row->section }}" aria-label="Teacher for {{ $row->code }} {{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                                             <option value="">Select teacher&hellip;</option>
                                             @if ($suggested->isNotEmpty())
                                                 <optgroup label="Already teaches {{ $row->code }}">

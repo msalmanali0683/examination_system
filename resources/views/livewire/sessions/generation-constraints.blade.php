@@ -29,8 +29,8 @@
 
     <form wire:submit="saveSettings" class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Seating Strategy</label>
-            <select wire:model.live="seating_strategy" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+            <label for="sessions-generation-constraints-seating-strategy" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Seating Strategy</label>
+            <select id="sessions-generation-constraints-seating-strategy" wire:model.live="seating_strategy" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 <optgroup label="Basic">
                     <option value="strict">Strict (one room per subject+section)</option>
                     <option value="combine_sections">Combine sections of the same subject</option>
@@ -47,14 +47,14 @@
         </div>
         @if ($seating_strategy === 'mixed')
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Subjects per Room</label>
-                <input type="number" min="2" max="10" wire:model="mixed_subjects_per_room" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-generation-constraints-mixed-subjects-per-room" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Subjects per Room</label>
+                <input id="sessions-generation-constraints-mixed-subjects-per-room" type="number" min="2" max="10" wire:model="mixed_subjects_per_room" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Columns alternate between this many subjects/sections, e.g. 2 means columns 1,3,5.. are one subject and 2,4,6.. are another.</p>
             </div>
         @endif
         <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Invigilators per Room</label>
-            <input type="number" min="1" max="10" wire:model="invigilators_per_room" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+            <label for="sessions-generation-constraints-invigilators-per-room" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Invigilators per Room</label>
+            <input id="sessions-generation-constraints-invigilators-per-room" type="number" min="1" max="10" wire:model="invigilators_per_room" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
         </div>
         <div class="flex items-end">
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-2">

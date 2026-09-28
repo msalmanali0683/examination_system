@@ -50,7 +50,7 @@ class Import extends Component
     {
         $this->authorize('manage_rooms');
 
-        $this->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
+        $this->validate(['file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:10240']]);
 
         $this->storeUploadedFile();
         $this->detectBestSheet();

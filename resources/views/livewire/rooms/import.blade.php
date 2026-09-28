@@ -40,7 +40,7 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload an Excel or CSV file. The first row must be column headers.</p>
 
             <div class="mt-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
-                <input type="file" wire:model="file" accept=".xlsx,.xls,.csv" class="block w-full text-sm text-gray-700 dark:text-gray-300">
+                <input type="file" wire:model="file" aria-label="Choose a spreadsheet file to upload" accept=".xlsx,.xls,.csv" class="block w-full text-sm text-gray-700 dark:text-gray-300">
                 <div wire:loading wire:target="file" class="mt-2 text-sm text-gray-500">Uploading&hellip;</div>
                 @error('file') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
@@ -53,10 +53,10 @@
 
             @if (! empty($availableSheets))
                 <div class="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg flex items-center justify-between gap-4">
-                    <label class="text-sm text-gray-700 dark:text-gray-300">
+                    <label for="rooms-import-selectsheet" class="text-sm text-gray-700 dark:text-gray-300">
                         This file has multiple sheets &mdash; using the one that looks like the real data:
                     </label>
-                    <select wire:change="selectSheet($event.target.value)" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                    <select id="rooms-import-selectsheet" wire:change="selectSheet($event.target.value)" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                         @foreach ($availableSheets as $index => $label)
                             <option value="{{ $index }}" @selected($index === $selectedSheetIndex)>{{ $label }}</option>
                         @endforeach

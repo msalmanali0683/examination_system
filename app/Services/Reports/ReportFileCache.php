@@ -23,6 +23,12 @@ class ReportFileCache
 {
     private const DISK = 'local';
 
+    /**
+     * Every table whose rows show up in some report. A cached file is only as good as the data it was built
+     * from, so each table contributes its row count, id sum and newest update time to the stamp.
+     */
+    private const STAMPED_TABLES = ['time_slots', 'subject_slot_assignments', 'seat_assignments', 'duty_assignments', 'enrollments', 'rooms', 'teachers', 'students', 'subjects'];
+
     private const DIR = 'reports';
 
     /**
@@ -65,13 +71,13 @@ class ReportFileCache
                 return [$record, false];
             }
 
-            if (! $forceFresh && $record && $record->status === ReportFile::STATUS_READY && Storage::disk(self::DISK)->exists($record->disk_path)) {
+            if (! $forceFresh && $record && $record->status === ReportFile::STATUS_READY && Storage::disk(self::DISK)->exists($record->disk_path) && ! $this->isStale($record, $session)) {
                 return [$record, false];
             }
 
             $record = ReportFile::updateOrCreate(
                 ['exam_session_id' => $session->id, 'report_key' => $reportKey, 'filters_hash' => $hash],
-                ['filters' => $filters, 'status' => ReportFile::STATUS_QUEUED, 'error' => null, 'disk_path' => null, 'generated_at' => null]
+                ['filters' => $filters, 'status' => ReportFile::STATUS_QUEUED, 'error' => null, 'disk_path' => null, 'generated_at' => null, 'data_stamp' => null]
             );
 
             return [$record, true];
@@ -107,10 +113,61 @@ class ReportFileCache
      */
     public function statuses(ExamSession $session, array $reportKeys, array $filters): Collection
     {
+        $stamp = $this->currentStamp($session);
+
         return ReportFile::where('exam_session_id', $session->id)
             ->whereIn('report_key', $reportKeys)
             ->where('filters_hash', $this->hash($filters))
-            ->get();
+            ->get()
+            ->each(fn (ReportFile $row) => $row->setAttribute('is_stale', $row->status === ReportFile::STATUS_READY && $row->data_stamp !== $stamp));
+    }
+
+    /**
+     * A fingerprint of everything a report is built from: the details printed in its header plus, for each
+     * table it draws on, how many rows the session has, their id sum and the newest update. Moving one seat,
+     * reassigning one duty, renaming a room or flipping the session to "Final" all change it; merely finalizing
+     * or unlocking the session does not, since no report prints that.
+     */
+    public function currentStamp(ExamSession $session): string
+    {
+        $parts = [DB::table('exam_sessions')->where('id', $session->id)->first(['name', 'department_name', 'report_status', 'report_version', 'start_date', 'end_date'])];
+
+        foreach (self::STAMPED_TABLES as $table) {
+            $checksum = $this->contentChecksum($table);
+            $row = DB::table($table)->where('exam_session_id', $session->id)
+                ->selectRaw('count(*) as c, coalesce(sum(id), 0) as s, max(updated_at) as m, '.$checksum.' as x')
+                ->first();
+            $parts[] = [$table, (int) $row->c, (string) $row->s, $row->m, (string) $row->x];
+        }
+
+        return md5(json_encode($parts));
+    }
+
+    /**
+     * updated_at only has one-second resolution, so two changes inside the same second could leave it — and the
+     * row count and id sum — unchanged. For the tables where WHO sits WHERE is the whole report, a sum over the
+     * columns that carry that (multiplied together, so swapping two students' seats or two teachers' rooms still
+     * changes it) closes that gap.
+     */
+    private function contentChecksum(string $table): string
+    {
+        $g = DB::connection()->getQueryGrammar();
+        $col = fn (string $name) => $g->wrap($name);
+
+        $expression = match ($table) {
+            'seat_assignments' => $col('enrollment_id').' * ('.$col('row_number').' * 1000 + '.$col('column_number').') + '.$col('room_id').' * 17 + '.$col('time_slot_id').' * 13',
+            'duty_assignments' => $col('teacher_id').' * ('.$col('room_id').' * 1000 + '.$col('time_slot_id').')',
+            'subject_slot_assignments' => $col('subject_id').' * (coalesce('.$col('time_slot_id').', 0) + 1) + '.$col('is_excluded').' * 7',
+            'enrollments' => $col('student_id').' * 7 + '.$col('subject_id').' * 13 + coalesce('.$col('teacher_id').', 0) * 17',
+            default => null,
+        };
+
+        return $expression === null ? '0' : 'coalesce(sum('.$expression.'), 0)';
+    }
+
+    private function isStale(ReportFile $record, ExamSession $session): bool
+    {
+        return $record->data_stamp === null || $record->data_stamp !== $this->currentStamp($session);
     }
 
     /**
@@ -138,7 +195,8 @@ class ReportFileCache
         }
 
         if (Storage::disk(self::DISK)->exists($record->disk_path)) {
-            return $record;
+            // The schedule changed after this file was built: serving it would hand out an outdated report.
+            return $this->isStale($record, $session) ? null : $record;
         }
 
         // The DB record survived but the file itself is gone (e.g. the
@@ -177,6 +235,7 @@ class ReportFileCache
     {
         $hash = $this->hash($filters);
         $relativePath = self::DIR."/{$session->id}/".pathinfo($reportKey, PATHINFO_FILENAME)."-{$hash}.".pathinfo($reportKey, PATHINFO_EXTENSION);
+        $stamp = $this->currentStamp($session);
 
         Storage::disk(self::DISK)->makeDirectory(self::DIR."/{$session->id}");
 
@@ -184,7 +243,7 @@ class ReportFileCache
 
         return ReportFile::updateOrCreate(
             ['exam_session_id' => $session->id, 'report_key' => $reportKey, 'filters_hash' => $hash],
-            ['filters' => $filters, 'disk_path' => $relativePath, 'generated_at' => now(), 'status' => ReportFile::STATUS_READY, 'error' => null]
+            ['filters' => $filters, 'data_stamp' => $stamp, 'disk_path' => $relativePath, 'generated_at' => now(), 'status' => ReportFile::STATUS_READY, 'error' => null]
         );
     }
 

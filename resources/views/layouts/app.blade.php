@@ -37,7 +37,7 @@
                 <!-- Topbar -->
                 <header class="sticky top-0 z-20 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800">
                     <div class="flex items-center gap-3 px-4 sm:px-6 lg:px-8 py-4">
-                        <button @click="sidebarOpen = true" class="lg:hidden -ml-1 p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                        <button type="button" @click="sidebarOpen = true" aria-label="Open navigation menu" class="lg:hidden -ml-1 p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                             <x-icon name="menu" class="h-5 w-5" />
                         </button>
 

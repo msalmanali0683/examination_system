@@ -132,6 +132,36 @@ class ExamSessionsTest extends TestCase
         ]);
     }
 
+    public function test_an_individual_min_above_the_same_teachers_max_is_refused(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
+
+        $component = Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session]);
+        $component->call('updateMaxDuties', $teacher->id, '2');
+        $component->call('updateMinDuties', $teacher->id, '5');
+
+        $constraint = SessionTeacherConstraint::where('teacher_id', $teacher->id)->first();
+        $this->assertSame(2, $constraint->max_duties);
+        $this->assertNull($constraint->min_duties, 'the contradictory min was not stored');
+
+        $component->call('updateMinDuties', $teacher->id, '1');
+        $component->call('updateMaxDuties', $teacher->id, '0');
+        $this->assertSame(2, $constraint->fresh()->max_duties, 'a max below the min is refused too');
+    }
+
+    public function test_a_max_below_the_default_minimum_is_allowed_for_a_teacher_who_only_does_one_duty(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
+
+        Livewire::actingAs($staff)->test(TeacherConstraints::class, ['examSession' => $session])->call('updateMaxDuties', $teacher->id, '1');
+
+        $this->assertSame(1, SessionTeacherConstraint::where('teacher_id', $teacher->id)->value('max_duties'));
+    }
+
     public function test_bulk_apply_sets_min_and_max_duties_for_every_active_teacher(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);

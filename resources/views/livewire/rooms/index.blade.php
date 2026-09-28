@@ -33,35 +33,35 @@
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
             <div class="sm:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Room Name</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="rooms-index-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Room Name</label>
+                <input id="rooms-index-name" type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Room Type</label>
-                <select wire:model="room_type" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="rooms-index-room-type" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Room Type</label>
+                <select id="rooms-index-room-type" wire:model="room_type" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                     <option value="regular">Regular</option>
                     <option value="lab">Lab</option>
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Rows</label>
-                <input type="number" min="1" wire:model="rows" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="rooms-index-rows" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Rows</label>
+                <input id="rooms-index-rows" type="number" min="1" wire:model="rows" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('rows') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Columns</label>
-                <input type="number" min="1" wire:model="columns" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="rooms-index-columns" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Columns</label>
+                <input id="rooms-index-columns" type="number" min="1" wire:model="columns" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('columns') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label for="rooms-index-capacity" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Capacity
                     @if ($rows && $columns)
                         <span class="text-xs text-gray-400">(max {{ $rows * $columns }})</span>
                     @endif
                 </label>
-                <input type="number" min="1" wire:model="capacity" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <input id="rooms-index-capacity" type="number" min="1" wire:model="capacity" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('capacity') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div class="sm:col-span-3 flex items-center gap-3">

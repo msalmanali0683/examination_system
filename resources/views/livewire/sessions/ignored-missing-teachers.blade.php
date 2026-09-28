@@ -56,7 +56,7 @@
                                 <td class="py-2.5 pr-4 sm:pr-6">
                                     @php $suggested = $suggestedTeachersBySubject->get($row->subject_id, collect()); @endphp
                                     <div class="flex items-center gap-2">
-                                        <select wire:model="selection.{{ $row->subject_id }}.{{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                                        <select wire:model="selection.{{ $row->subject_id }}.{{ $row->section }}" aria-label="Teacher for {{ $row->code }} {{ $row->section }}" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                                             <option value="">Select teacher&hellip;</option>
                                             @if ($suggested->isNotEmpty())
                                                 <optgroup label="Already teaches {{ $row->code }}">

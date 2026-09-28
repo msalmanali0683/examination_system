@@ -25,8 +25,8 @@
         <x-card>
             <div class="flex items-center gap-6 flex-wrap">
                 <div class="flex items-center gap-2">
-                    <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Date</label>
-                    <select wire:model.live="filterDate" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                    <label for="sessions-report-show-filterdate" class="text-xs font-medium text-gray-500 dark:text-gray-400">Date</label>
+                    <select id="sessions-report-show-filterdate" wire:model.live="filterDate" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                         <option value="">All dates (whole exam)</option>
                         @foreach ($availableDates as $date)
                             <option value="{{ $date->toDateString() }}">{{ $date->format('d M Y (D)') }}</option>
@@ -35,8 +35,8 @@
                 </div>
 
                 @if ($filterDate !== '' && $slotsForDate->isNotEmpty())
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Slots</label>
+                    <div class="flex items-center gap-2 flex-wrap" role="group" aria-labelledby="report-show-slots">
+                        <span id="report-show-slots" class="text-xs font-medium text-gray-500 dark:text-gray-400">Slots</span>
                         @foreach ($slotsForDate as $slot)
                             <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg px-2 py-1">
                                 <input type="checkbox" wire:model.live="filterSlotIds" value="{{ $slot->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">

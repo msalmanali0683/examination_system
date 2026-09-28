@@ -20,12 +20,12 @@
         <div class="mb-4 p-3.5 bg-gray-50 dark:bg-gray-900/50 rounded-xl flex items-center gap-4 flex-wrap ring-1 ring-gray-100 dark:ring-gray-800">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Set for every teacher:</span>
             <div class="flex items-center gap-1">
-                <label class="text-xs text-gray-500 dark:text-gray-400">Min</label>
-                <input type="number" min="0" wire:model="bulkMinDuties" placeholder="{{ config('exam.default_min_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <label for="teacher-constraints-bulk-min" class="text-xs text-gray-500 dark:text-gray-400">Min</label>
+                <input id="teacher-constraints-bulk-min" type="number" min="0" wire:model="bulkMinDuties" placeholder="{{ config('exam.default_min_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
             </div>
             <div class="flex items-center gap-1">
-                <label class="text-xs text-gray-500 dark:text-gray-400">Max</label>
-                <input type="number" min="0" wire:model="bulkMaxDuties" placeholder="{{ config('exam.default_max_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
+                <label for="teacher-constraints-bulk-max" class="text-xs text-gray-500 dark:text-gray-400">Max</label>
+                <input id="teacher-constraints-bulk-max" type="number" min="0" wire:model="bulkMaxDuties" placeholder="{{ config('exam.default_max_duties') }}" class="w-16 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
             </div>
             <x-btn wire:click="applyBulkDuties" wire:confirm="Apply these min/max duties to every teacher in this session, overwriting their current values?" variant="dark" size="sm">
                 Apply to All
@@ -71,16 +71,16 @@
                             </label>
 
                             <div class="flex items-center gap-1">
-                                <label class="text-xs text-gray-500 dark:text-gray-400">Min</label>
-                                <input type="number" min="0" value="{{ $constraint?->min_duties }}"
+                                <label for="teacher-constraints-min-{{ $teacher->id }}" class="text-xs text-gray-500 dark:text-gray-400">Min</label>
+                                <input id="teacher-constraints-min-{{ $teacher->id }}" aria-label="Minimum duties for {{ $teacher->name }}" type="number" min="0" value="{{ $constraint?->min_duties }}"
                                     placeholder="{{ config('exam.default_min_duties') }}"
                                     wire:change="updateMinDuties({{ $teacher->id }}, $event.target.value)"
                                     class="w-16 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
                             </div>
 
                             <div class="flex items-center gap-1">
-                                <label class="text-xs text-gray-500 dark:text-gray-400">Max</label>
-                                <input type="number" min="0" value="{{ $constraint?->max_duties }}"
+                                <label for="teacher-constraints-max-{{ $teacher->id }}" class="text-xs text-gray-500 dark:text-gray-400">Max</label>
+                                <input id="teacher-constraints-max-{{ $teacher->id }}" aria-label="Maximum duties for {{ $teacher->name }}" type="number" min="0" value="{{ $constraint?->max_duties }}"
                                     placeholder="{{ config('exam.default_max_duties') }}"
                                     wire:change="updateMaxDuties({{ $teacher->id }}, $event.target.value)"
                                     class="w-16 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">

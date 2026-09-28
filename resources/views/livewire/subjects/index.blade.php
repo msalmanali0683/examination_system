@@ -49,7 +49,7 @@
     <div class="flex items-center justify-between mb-2 gap-3">
         <div class="relative w-full max-w-xs">
             <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search code or title"
+            <input type="text" wire:model.live.debounce.300ms="search" aria-label="Search subjects by code or title" placeholder="Search code or title"
                 class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
         </div>
         <x-per-page-selector />
@@ -88,7 +88,7 @@
                         <tr @class(['opacity-60' => $subject->isMerged(), 'hover:bg-gray-50 dark:hover:bg-gray-900/30' => ! $subject->isMerged()])>
                             <td class="py-3 pl-4 sm:pl-6 pr-2">
                                 @unless ($subject->isMerged())
-                                    <input type="checkbox" wire:model.live="selected" value="{{ $subject->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                    <input type="checkbox" wire:model.live="selected" value="{{ $subject->id }}" aria-label="Select {{ $subject->code }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                 @endunless
                             </td>
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $subject->code }}</td>

@@ -14,6 +14,12 @@
         <button type="button" wire:click="regenerate" wire:loading.attr="disabled" wire:target="regenerate" class="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50">
             Retry
         </button>
+    @elseif ($status['state'] === 'stale')
+        <span class="text-xs text-amber-600 dark:text-amber-400" title="Built {{ $status['generatedAt']->format('d M Y H:i') }}">Out of date &mdash; the schedule changed after this was built. The next download builds a fresh one.</span>
+        <button type="button" wire:click="regenerate" wire:loading.attr="disabled" wire:target="regenerate" class="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50">
+            <span wire:loading.remove wire:target="regenerate">Rebuild now</span>
+            <span wire:loading wire:target="regenerate">Rebuilding&hellip;</span>
+        </button>
     @else
         @if ($status['generatedAt'])
             <span class="text-xs text-gray-400" title="{{ $status['generatedAt']->format('d M Y H:i') }}">Generated {{ $status['generatedAt']->diffForHumans() }}</span>

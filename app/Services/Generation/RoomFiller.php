@@ -69,6 +69,40 @@ class RoomFiller
     }
 
     /**
+     * How many students fillRoom() could still seat in this room: the seats
+     * within its capacity that are not already held by a locked (manually
+     * placed) student. Strategies must pick rooms by THIS number, not by
+     * nominal capacity — otherwise a locked seat in the room a group "just
+     * fits" leaves that group one student short even though other rooms
+     * are free.
+     *
+     * @param  array<int, array{row: int, column: int}>  $occupied
+     */
+    public function freeSeats(int $rows, int $columns, int $capacity, array $occupied = []): int
+    {
+        $capacity = max(0, min($capacity, $rows * $columns));
+
+        if (empty($occupied)) {
+            return $capacity;
+        }
+
+        $occupiedKeys = array_flip(array_map(
+            fn (array $seat) => "{$seat['row']}:{$seat['column']}",
+            $occupied
+        ));
+
+        $free = 0;
+
+        foreach (array_slice($this->seatOrder($rows, $columns), 0, $capacity) as $seat) {
+            if (! isset($occupiedKeys["{$seat['row']}:{$seat['column']}"])) {
+                $free++;
+            }
+        }
+
+        return $free;
+    }
+
+    /**
      * Same fill order convention (top to bottom within a column, in
      * ascending column order) but restricted to a specific subset of a
      * room's columns — used by Mixed seating, where a whole column is

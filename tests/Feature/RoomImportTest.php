@@ -177,4 +177,36 @@ class RoomImportTest extends TestCase
         $this->assertSame(9, $untouched->fresh()->capacity);
         $this->assertSame(1, $other->rooms()->count());
     }
+
+    /**
+     * PHP's content sniffing reports a CSV with only a header and one data row as text/plain (verified on the
+     * live server), and a mime-type based rule then rejected it as "not a csv". The extension is what tells the
+     * spreadsheet reader how to parse the file, so that is what is validated.
+     */
+    public function test_a_csv_that_sniffs_as_plain_text_is_still_accepted(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        // Livewire's test upload needs a fake file; this one is declared text/plain, as the sniffer reports it.
+        $plainText = UploadedFile::fake()->create('rooms.csv', 1, 'text/plain');
+
+        Livewire::actingAs($staff)
+            ->test(Import::class, ['examSession' => $session])
+            ->set('file', $plainText)
+            ->assertHasNoErrors('file')
+            ->assertSet('step', 'map');
+    }
+
+    public function test_a_file_with_a_non_spreadsheet_extension_is_rejected(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(Import::class, ['examSession' => $session])
+            ->set('file', UploadedFile::fake()->createWithContent('rooms.txt', "Room Name,Rows,Columns\nITC-1,5,5\n"))
+            ->assertHasErrors('file')
+            ->assertSet('step', 'upload');
+    }
 }

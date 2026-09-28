@@ -33,26 +33,26 @@
     @if ($showForm)
         <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6 mb-6 border-b border-gray-100 dark:border-gray-700">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="teachers-index-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <input id="teachers-index-name" type="text" wire:model="name" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('name') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Designation</label>
-                <input type="text" wire:model="designation" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="teachers-index-designation" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Designation</label>
+                <input id="teachers-index-designation" type="text" wire:model="designation" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
-                <input type="text" wire:model="department" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="teachers-index-department" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                <input id="teachers-index-department" type="text" wire:model="department" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-                <input type="email" wire:model="email" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="teachers-index-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                <input id="teachers-index-email" type="email" wire:model="email" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('email') <span class="text-sm text-red-600">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label>
-                <input type="text" wire:model="phone" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="teachers-index-phone" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label>
+                <input id="teachers-index-phone" type="text" wire:model="phone" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
             </div>
             <div class="sm:col-span-2 flex items-center gap-3">
                 <x-btn type="submit" icon="check">Save Teacher</x-btn>
@@ -64,7 +64,7 @@
     <div class="flex items-center justify-between mb-2 gap-3">
         <div class="relative w-full max-w-xs">
             <x-icon name="search" class="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search name or email"
+            <input type="text" wire:model.live.debounce.300ms="search" aria-label="Search teachers by name or email" placeholder="Search name or email"
                 class="pl-9 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 text-sm">
         </div>
         <x-per-page-selector />
@@ -104,7 +104,7 @@
                     @foreach ($teachers as $teacher)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/30">
                             <td class="py-3 pl-4 sm:pl-6 pr-2">
-                                <input type="checkbox" wire:model.live="selected" value="{{ $teacher->id }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                <input type="checkbox" wire:model.live="selected" value="{{ $teacher->id }}" aria-label="Select {{ $teacher->name }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                             </td>
                             <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $teacher->name }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $teacher->designation }}</td>

@@ -47,6 +47,27 @@ class DutySheetEmailTest extends TestCase
         ]);
     }
 
+    /**
+     * Mail::fake() never renders the message, so a template that only fails
+     * at render time (it once used <x-mail::message> without being a
+     * Markdown mailable) would sail through the test above and then throw
+     * on the first real send. Render it for real.
+     */
+    public function test_the_duty_sheet_email_actually_renders(): void
+    {
+        $session = ExamSession::factory()->create(['name' => 'Mid Term Spring']);
+        $teacher = Teacher::factory()->for($session)->create(['name' => 'Dr Huria', 'email' => 'huria@example.com']);
+
+        $mail = new TeacherDutySheetMail($teacher, $session, '%PDF-fake', 3);
+        $html = $mail->render();
+
+        $this->assertStringContainsString('Dr Huria', $html);
+        $this->assertStringContainsString('Mid Term Spring', $html);
+        $this->assertStringContainsString('3', $html);
+        $this->assertStringNotContainsString('<x-mail', $html);
+        $this->assertSame('Your Invigilation Duties — Mid Term Spring', $mail->envelope()->subject);
+    }
+
     public function test_emailing_with_no_duties_generated_shows_an_error_and_sends_nothing(): void
     {
         Mail::fake();

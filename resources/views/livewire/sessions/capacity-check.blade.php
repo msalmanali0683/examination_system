@@ -49,18 +49,18 @@
 
         <div class="mt-4 flex items-end gap-4 flex-wrap">
             <div>
-                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Slots per day</label>
-                <input type="number" min="1" wire:model="slotsPerDay" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-capacity-check-slotsperday" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Slots per day</label>
+                <input id="sessions-capacity-check-slotsperday" type="number" min="1" wire:model="slotsPerDay" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('slotsPerDay') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Min subjects per slot</label>
-                <input type="number" min="1" placeholder="Any" wire:model="minSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-capacity-check-minsubjectsperslot" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Min subjects per slot</label>
+                <input id="sessions-capacity-check-minsubjectsperslot" type="number" min="1" placeholder="Any" wire:model="minSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('minSubjectsPerSlot') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">Max subjects per slot</label>
-                <input type="number" min="1" placeholder="Any that fit" wire:model="maxSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                <label for="sessions-capacity-check-maxsubjectsperslot" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Max subjects per slot</label>
+                <input id="sessions-capacity-check-maxsubjectsperslot" type="number" min="1" placeholder="Any that fit" wire:model="maxSubjectsPerSlot" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
                 @error('maxSubjectsPerSlot') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
             </div>
             <x-btn wire:click="simulateSlots" wire:loading.attr="disabled" wire:target="simulateSlots" icon="search">

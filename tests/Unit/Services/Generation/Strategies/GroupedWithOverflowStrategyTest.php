@@ -243,4 +243,41 @@ class GroupedWithOverflowStrategyTest extends TestCase
         $this->assertCount(2, $result->placements);
         $this->assertCount(1, $result->warnings);
     }
+
+    public function test_a_locked_seat_counts_against_the_room_a_group_would_otherwise_just_fit(): void
+    {
+        $nextId = 1;
+        $group = collect($this->enrollments(6, 100, 'A', $nextId));
+
+        $small = $this->room(1, 2, 3);
+        $small['occupied'] = [['row' => 1, 'column' => 3, 'subject_id' => 999]];
+        $big = $this->room(2, 4, 3);
+
+        foreach (['same_subject', 'other_subject', 'same_subject_then_other'] as $source) {
+            $result = (new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: $source))->allocate($group, [$small, $big]);
+
+            $this->assertTrue($result->warnings->isEmpty(), "$source: nobody should be left unseated");
+            $this->assertCount(6, $result->placements, $source);
+            $this->assertSame([2], collect($result->placements)->pluck('roomId')->unique()->values()->all(), $source);
+        }
+    }
+
+    public function test_overflow_leftover_is_measured_in_free_seats_not_nominal_capacity(): void
+    {
+        $nextId = 1;
+        $primary = $this->enrollments(2, 100, 'A', $nextId);
+        $other = $this->enrollments(4, 200, 'A', $nextId);
+
+        $room = $this->room(1, 2, 3); // 6 seats, one locked -> 5 free: A takes 2, leaving 3 for the other subject
+        $room['occupied'] = [['row' => 2, 'column' => 3, 'subject_id' => 999]];
+
+        $result = (new GroupedWithOverflowStrategy(groupBy: 'subject_section', overflowSource: 'other_subject'))
+            ->allocate(collect([...$primary, ...$other]), [$room, $this->room(2, 2, 2)]);
+
+        $this->assertCount(6, $result->placements);
+        $this->assertTrue($result->warnings->isEmpty());
+        $inFirstRoom = collect($result->placements)->where('roomId', 1);
+        $this->assertLessThanOrEqual(5, $inFirstRoom->count(), 'the locked seat must stay free of other students');
+        $this->assertNotContains('2:3', $inFirstRoom->map(fn ($p) => "{$p->row}:{$p->column}")->all());
+    }
 }
