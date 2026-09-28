@@ -51,6 +51,16 @@ class SecurityHeadersTest extends TestCase
         $this->assertHardened($this->actingAs($head)->get(route('sessions.missing-teachers.template', $session))->assertOk());
     }
 
+    public function test_a_request_handled_after_output_has_started_still_works(): void
+    {
+        // Scripts (and the artisan tinker/CLI) that echo before handling a request must not turn the
+        // header clean-up into a warning, which Laravel would raise as a 500.
+        echo '';
+        fwrite(STDOUT, '');
+
+        $this->get('/login')->assertOk()->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+    }
+
     public function test_no_strict_transport_security_is_forced_by_the_app(): void
     {
         $this->get('/login')->assertHeaderMissing('Strict-Transport-Security');

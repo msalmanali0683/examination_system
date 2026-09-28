@@ -24,7 +24,10 @@ class SecurityHeaders
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-        header_remove('X-Powered-By');
+        // Only possible before PHP has started sending output; when it has (scripts, CLI runs), skip rather than warn.
+        if (! headers_sent()) {
+            header_remove('X-Powered-By');
+        }
 
         return $response;
     }
