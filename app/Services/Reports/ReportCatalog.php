@@ -61,7 +61,8 @@ class ReportCatalog
             'methods' => ['xlsx' => 'simpleDatesheetExcel', 'pdf' => 'simpleDatesheetPdf'],
             'flagKey' => 'showInvigilators',
             'flagLabel' => null,
-            'gate' => 'seating',
+            // Only the timetable, not seating — it has no room detail, so it doesn't need seating generated.
+            'gate' => 'timetable',
         ],
         'answer-sheets' => [
             'label' => 'Answer Sheets Required',

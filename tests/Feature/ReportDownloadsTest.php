@@ -19,6 +19,7 @@ use App\Models\Room;
 use App\Models\SeatAssignment;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\SubjectSlotAssignment;
 use App\Models\Teacher;
 use App\Models\TimeSlot;
 use App\Models\User;
@@ -354,7 +355,8 @@ class ReportDownloadsTest extends TestCase
         $roomA = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
         $roomB = Room::factory()->for($session)->create(['rows' => 1, 'columns' => 1, 'capacity' => 1]);
         $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '12:00']);
-        $subject = Subject::factory()->create(['title' => 'Programming Fundamentals']);
+        $subject = Subject::factory()->for($session)->create(['title' => 'Programming Fundamentals']);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
 
         foreach ([$roomA, $roomB] as $room) {
             $student = Student::factory()->create();
@@ -382,6 +384,70 @@ class ReportDownloadsTest extends TestCase
         $this->assertStringContainsString('Programming Fundamentals', $html);
         $this->assertStringContainsString('2nd', $html);
         $this->assertStringContainsString('09:00 - 12:00', $html);
+    }
+
+    /**
+     * Unlike every other datesheet report, the Simple Datesheet has no room detail, so it should be
+     * available the moment the timetable is generated — no need to wait for seating.
+     */
+    public function test_simple_datesheet_lists_a_subject_once_the_timetable_is_set_even_with_no_seating_generated(): void
+    {
+        $session = ExamSession::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00', 'end_time' => '12:00']);
+        $subject = Subject::factory()->for($session)->create(['title' => 'Data Structures']);
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+        Enrollment::factory()->create([
+            'exam_session_id' => $session->id, 'student_id' => Student::factory(), 'subject_id' => $subject->id, 'section' => 'BSCS 3A',
+        ]);
+
+        $rowsByDate = (new ReportDataBuilder)->simpleDatesheetRowsByDate($session);
+
+        $this->assertCount(1, $rowsByDate);
+        $row = $rowsByDate->get('2026-04-20')->first();
+        $this->assertSame('Data Structures', $row->title);
+        $this->assertSame('3rd', $row->semester);
+    }
+
+    public function test_simple_datesheet_leaves_out_a_scheduled_subject_nobody_is_enrolled_in(): void
+    {
+        $session = ExamSession::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->for($session)->create();
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+
+        $rowsByDate = (new ReportDataBuilder)->simpleDatesheetRowsByDate($session);
+
+        $this->assertCount(0, $rowsByDate);
+    }
+
+    /**
+     * The Reports page shows "Nothing to report yet" with a hint naming the actual prerequisite for
+     * each report — Simple Datesheet's is the timetable, not seating, so it must say so and must be
+     * marked ready once only the timetable exists.
+     */
+    public function test_simple_datesheet_page_is_ready_once_the_timetable_exists_without_seating(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $subject = Subject::factory()->for($session)->create();
+        SubjectSlotAssignment::create(['exam_session_id' => $session->id, 'subject_id' => $subject->id, 'time_slot_id' => $slot->id]);
+
+        Livewire::actingAs($staff)
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'simple-datesheet'])
+            ->assertDontSee('Nothing to report yet')
+            ->assertDontSee('Generate seating first');
+    }
+
+    public function test_simple_datesheet_page_says_generate_timetable_first_when_nothing_is_scheduled_yet(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(ReportShow::class, ['examSession' => $session, 'reportType' => 'simple-datesheet'])
+            ->assertSee('Nothing to report yet')
+            ->assertSee('Put subjects on time slots first');
     }
 
     public function test_formatted_datesheet_lists_every_room_a_subject_used_side_by_side(): void

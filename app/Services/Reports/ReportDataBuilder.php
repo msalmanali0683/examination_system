@@ -125,40 +125,50 @@ class ReportDataBuilder
 
     /**
      * A minimal, student-facing datesheet: just date, day, the subject's
-     * full title and its slot, deduplicated so a subject split across
-     * several rooms/sections in the same slot still prints once — no room,
-     * section or invigilator detail. Grouped by date like
+     * full title and its slot — no room, section or invigilator detail.
+     * Built straight from the timetable (subject_slot_assignments) and
+     * enrollments, same as answerSheetRows(), so unlike every other
+     * datesheet report it never needs seating to have been generated —
+     * one row per subject-per-slot is already guaranteed by the
+     * (exam_session_id, subject_id) unique constraint on subject slot
+     * assignments, so there's no per-room duplication to dedupe here the
+     * way seatingCharts()-based reports need to. Grouped by date like
      * datesheetRowsByDate().
      *
      * @param  int[]|null  $timeSlotIds
      */
     public function simpleDatesheetRowsByDate(ExamSession $session, ?string $date = null, ?array $timeSlotIds = null): Collection
     {
-        $charts = $this->seatingCharts($session, $date, $timeSlotIds);
+        $query = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->where('is_excluded', false)
+            ->with(['subject', 'timeSlot']);
+
+        $this->applySlotFilter($query, $date, $timeSlotIds);
+
+        $placements = $query->get();
+
+        $enrollments = Enrollment::where('exam_session_id', $session->id)
+            ->whereIn('subject_id', $placements->pluck('subject_id'))
+            ->get(['subject_id', 'section']);
 
         // Same "every semester this subject touches" label used by
         // formattedDatesheetRows() (see SemesterExtractor::label()), so
         // the two datesheet reports never disagree on a subject's
         // semester.
-        $sectionsBySubject = $charts
-            ->flatMap(fn ($chart) => $chart->subjectsSections)
-            ->groupBy(fn ($ss) => $ss->subject->id)
-            ->map(fn ($rows) => $rows->pluck('section'));
+        $sectionsBySubject = $enrollments->groupBy('subject_id')->map(fn ($rows) => $rows->pluck('section'));
+        $studentCountBySubject = $enrollments->countBy('subject_id');
 
-        $rows = $charts
-            ->flatMap(fn ($chart) => $chart->subjectsSections->map(fn ($ss) => (object) [
-                'subjectId' => $ss->subject->id,
-                'title' => $ss->subject->title,
-                'timeSlot' => $chart->timeSlot,
-            ]))
-            ->unique(fn ($row) => $row->subjectId.'-'.$row->timeSlot->id)
-            ->map(fn ($row) => (object) [
-                'title' => $row->title,
-                'semester' => SemesterExtractor::label($sectionsBySubject->get($row->subjectId, collect())),
-                'date' => $row->timeSlot->date,
-                'day' => $row->timeSlot->date->format('l'),
-                'startTime' => $row->timeSlot->start_time,
-                'slot' => substr($row->timeSlot->start_time, 0, 5).' - '.substr($row->timeSlot->end_time, 0, 5),
+        $rows = $placements
+            // A subject nobody is actually enrolled in yet shouldn't print a slot with nothing under it.
+            ->filter(fn (SubjectSlotAssignment $placement) => $studentCountBySubject->get($placement->subject_id, 0) > 0)
+            ->map(fn (SubjectSlotAssignment $placement) => (object) [
+                'title' => $placement->subject->title,
+                'semester' => SemesterExtractor::label($sectionsBySubject->get($placement->subject_id, collect())),
+                'date' => $placement->timeSlot->date,
+                'day' => $placement->timeSlot->date->format('l'),
+                'startTime' => $placement->timeSlot->start_time,
+                'slot' => substr($placement->timeSlot->start_time, 0, 5).' - '.substr($placement->timeSlot->end_time, 0, 5),
             ]);
 
         return $rows
