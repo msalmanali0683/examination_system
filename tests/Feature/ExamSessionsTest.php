@@ -338,14 +338,39 @@ class ExamSessionsTest extends TestCase
             ->assertHasErrors(['end_time']);
     }
 
-    public function test_user_without_manage_sessions_permission_is_forbidden(): void
+    public function test_user_without_manage_sessions_or_view_reports_permission_is_forbidden(): void
     {
         $staff = User::factory()->create(['role' => 'staff']);
-        $staff->permissionOverrides()->create(['permission' => 'manage_sessions', 'granted' => false]);
+        $staff->permissionOverrides()->createMany([
+            ['permission' => 'manage_sessions', 'granted' => false],
+            ['permission' => 'view_reports', 'granted' => false],
+        ]);
 
         $this->actingAs($staff)
             ->get('/sessions')
             ->assertForbidden();
+    }
+
+    /**
+     * view_reports stands on its own — a user who only has it (staff normally has manage_sessions too,
+     * so this overrides it off) can still reach the session list and a session's Reports tab.
+     */
+    public function test_a_view_reports_only_user_can_see_the_session_list_but_not_manage_it(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $staff->permissionOverrides()->create(['permission' => 'manage_sessions', 'granted' => false]);
+        $session = ExamSession::factory()->create(['name' => 'Midterm Spring 2026']);
+
+        $this->actingAs($staff)
+            ->get('/sessions')
+            ->assertOk()
+            ->assertSee('Midterm Spring 2026')
+            ->assertDontSee('Create Session');
+
+        $this->actingAs($staff)
+            ->get(route('sessions.show', $session))
+            ->assertOk()
+            ->assertDontSee('Manage Rooms');
     }
 
     public function test_reset_enrollments_wipes_enrollments_and_dependent_data_and_reverts_status_to_draft(): void

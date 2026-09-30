@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ExamSession;
 use App\Services\SessionDataCopier;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -28,9 +29,13 @@ class Index extends Component
 
     public ?string $duplicateEndDate = null;
 
+    /**
+     * The list itself is also open to a view_reports-only user (so they have somewhere to pick a
+     * session from to reach its reports) — every mutating action below still requires manage_sessions.
+     */
     public function mount(): void
     {
-        $this->authorize('manage_sessions');
+        abort_unless(Gate::any(['manage_sessions', 'view_reports']), 403);
     }
 
     public function addSession(): void

@@ -8,6 +8,7 @@ use App\Models\DutyAssignment;
 use App\Models\ExamSession;
 use App\Models\SubjectSlotAssignment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -31,9 +32,13 @@ class Show extends Component
 
     public ?string $end_date = null;
 
+    /**
+     * A view_reports-only user can also open this page — the blade shows them just the Reports and
+     * Find Student tabs, hiding rooms/teachers/enrollments/activity, which stay behind manage_sessions.
+     */
     public function mount(ExamSession $examSession): void
     {
-        $this->authorize('manage_sessions');
+        abort_unless(Gate::any(['manage_sessions', 'view_reports']), 403);
         $this->examSession = $examSession;
     }
 

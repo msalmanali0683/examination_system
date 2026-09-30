@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Livewire\Students\Index;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
+use App\Models\Room;
+use App\Models\SeatAssignment;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\TimeSlot;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -236,5 +239,84 @@ class StudentsManagementTest extends TestCase
         $this->openPage($session)
             ->set('search', 'Raza')
             ->assertViewHas('students', fn ($students) => $students->count() === 1 && $students->first()->name === 'Ali Raza');
+    }
+
+    private function seatedStudent(ExamSession $session): Student
+    {
+        $student = Student::factory()->for($session)->create();
+        $enrollment = Enrollment::factory()->create([
+            'exam_session_id' => $session->id,
+            'student_id' => $student->id,
+            'subject_id' => Subject::factory()->for($session),
+        ]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        $room = Room::factory()->for($session)->create();
+        SeatAssignment::create(['exam_session_id' => $session->id, 'enrollment_id' => $enrollment->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id, 'row_number' => 1, 'column_number' => 1]);
+
+        return $student;
+    }
+
+    public function test_deleting_a_student_that_had_a_schedule_sends_the_session_back_to_draft_and_logs_it(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $student = $this->seatedStudent($session);
+
+        $this->openPage($session)
+            ->call('deleteStudent', $student->id)
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+        $this->assertDatabaseHas('activity_logs', ['exam_session_id' => $session->id, 'action' => 'students.deleted']);
+    }
+
+    public function test_bulk_deleting_students_that_had_a_schedule_sends_the_session_back_to_draft(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $student = $this->seatedStudent($session);
+
+        $this->openPage($session)
+            ->set('selected', [$student->id])
+            ->call('bulkDelete')
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_delete_all_that_had_a_schedule_sends_the_session_back_to_draft(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $this->seatedStudent($session);
+
+        $this->openPage($session)
+            ->call('deleteAllStudents')
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_deleting_a_student_from_a_session_with_nothing_generated_does_not_nag_about_regeneration(): void
+    {
+        $session = ExamSession::factory()->create();
+        $student = Student::factory()->for($session)->create();
+
+        $this->openPage($session)
+            ->call('deleteStudent', $student->id)
+            ->assertSet('needsRegeneration', false)
+            ->assertDontSee('need to be regenerated');
+    }
+
+    public function test_bulk_delete_with_nothing_selected_says_so(): void
+    {
+        $session = ExamSession::factory()->create();
+        Student::factory()->for($session)->create();
+
+        $this->openPage($session)
+            ->call('bulkDelete')
+            ->assertSee('Select at least one student');
+
+        $this->assertSame(1, $session->students()->count());
     }
 }

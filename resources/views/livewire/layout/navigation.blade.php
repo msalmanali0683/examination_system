@@ -42,13 +42,13 @@ new class extends Component
             {{ __('Dashboard') }}
         </a>
 
-        @can('manage_sessions')
+        @canany(['manage_sessions', 'view_reports'])
             <a href="{{ route('sessions.index') }}" wire:navigate
                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('sessions.*') ? 'bg-primary-500/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
                 <x-icon name="calendar" class="h-5 w-5 shrink-0 {{ request()->routeIs('sessions.*') ? 'text-primary-400' : 'text-slate-400' }}" />
                 {{ __('Exam Sessions') }}
             </a>
-        @endcan
+        @endcanany
 
         @php $navSession = request()->route('examSession'); @endphp
         @if ($navSession instanceof \App\Models\ExamSession)

@@ -245,4 +245,34 @@ class RoomsManagementTest extends TestCase
             ->set('perPage', 10)
             ->assertViewHas('rooms', fn ($rooms) => $rooms->count() === 10 && $rooms->total() === 15);
     }
+
+    public function test_deleting_a_room_that_had_a_schedule_sends_the_session_back_to_draft_and_logs_it(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $room = Room::factory()->for($session)->create(['name' => 'ITC-310']);
+        $this->seatIn($room);
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteRoom', $room->id)
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+        $this->assertDatabaseHas('activity_logs', ['exam_session_id' => $session->id, 'action' => 'rooms.deleted']);
+    }
+
+    public function test_deleting_a_room_from_a_session_with_nothing_generated_does_not_nag_about_regeneration(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'draft']);
+        $room = Room::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteRoom', $room->id)
+            ->assertSet('needsRegeneration', false)
+            ->assertDontSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+    }
 }

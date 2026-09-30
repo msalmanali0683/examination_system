@@ -2,14 +2,12 @@
 
 namespace App\Livewire\Subjects;
 
+use App\Livewire\Concerns\FlagsRegenerationOnDelete;
 use App\Livewire\Concerns\GuardsFinalizedSession;
 use App\Models\ActivityLog;
-use App\Models\DutyAssignment;
 use App\Models\Enrollment;
 use App\Models\ExamSession;
-use App\Models\SeatAssignment;
 use App\Models\Subject;
-use App\Models\SubjectSlotAssignment;
 use App\Services\SubjectMergeService;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
@@ -22,6 +20,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use FlagsRegenerationOnDelete;
     use GuardsFinalizedSession;
     use WithPagination;
 
@@ -30,12 +29,6 @@ class Index extends Component
     public int $perPage = 25;
 
     public string $search = '';
-
-    /**
-     * Set once subjects have been deleted from a session that already had a timetable, seating plan or duties:
-     * those no longer match the remaining subjects, so the page shows the regenerate-in-order banner.
-     */
-    public bool $needsRegeneration = false;
 
     /**
      * Subject IDs checked for a merge — bound directly to each row's
@@ -151,21 +144,11 @@ class Index extends Component
         $enrollmentCount = Enrollment::where('exam_session_id', $this->examSession->id)->whereIn('subject_id', $allIds)->count();
 
         // Judged before deleting: was there anything generated that is about to stop matching?
-        $hadSchedule = SubjectSlotAssignment::where('exam_session_id', $this->examSession->id)->whereNotNull('time_slot_id')->exists()
-            || SeatAssignment::where('exam_session_id', $this->examSession->id)->exists()
-            || DutyAssignment::where('exam_session_id', $this->examSession->id)->exists();
+        $hadSchedule = $this->sessionHasSchedule();
 
         DB::transaction(fn () => Subject::whereIn('id', $allIds)->delete());
 
-        if ($hadSchedule) {
-            // Same rule as removing every enrollment: what was generated no longer matches the data, so the
-            // session is a draft again until timetable, seating and duties are regenerated.
-            if ($this->examSession->status === 'generated') {
-                $this->examSession->update(['status' => 'draft']);
-            }
-
-            $this->needsRegeneration = true;
-        }
+        $this->markIfHadSchedule($hadSchedule);
 
         $label = $subjects->count() === 1 ? $subjects->first()->code : $subjects->count().' subjects';
 

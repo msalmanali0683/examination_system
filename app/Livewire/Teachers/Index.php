@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Teachers;
 
+use App\Livewire\Concerns\FlagsRegenerationOnDelete;
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\ExamSession;
 use App\Models\Teacher;
 use Illuminate\Validation\Rule;
@@ -16,6 +18,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use FlagsRegenerationOnDelete;
     use GuardsFinalizedSession;
     use WithPagination;
 
@@ -126,10 +129,10 @@ class Index extends Component
     }
 
     /**
-     * A teacher's duty assignments and constraint rows cascade-delete at
-     * the database level, and their enrollment rows just lose the teacher
-     * reference (nullable column) — fine while the session can still be
-     * regenerated, which is why a finalized session refuses it outright.
+     * A teacher's duty assignments and constraint rows cascade-delete at the database level, and their
+     * enrollment rows just lose the teacher reference (nullable column) — fine while the session can
+     * still be regenerated, which is why a finalized session refuses it outright, and why a session that
+     * already had a duty roster drops back to draft.
      */
     public function deleteTeacher(int $id): void
     {
@@ -139,8 +142,16 @@ class Index extends Component
             return;
         }
 
-        $this->examSession->teachers()->findOrFail($id)->delete();
-        session()->flash('status', 'Teacher deleted.');
+        $teacher = $this->examSession->teachers()->findOrFail($id);
+        $hadSchedule = $this->sessionHasSchedule();
+
+        $teacher->delete();
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'teachers.deleted', "Deleted teacher {$teacher->name}.");
+
+        session()->flash('status', "Deleted teacher {$teacher->name}."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     /**
@@ -172,14 +183,26 @@ class Index extends Component
             return;
         }
 
-        $count = $this->examSession->teachers()->whereIn('id', $this->selected)->get()
-            ->each(fn (Teacher $teacher) => $teacher->delete())
-            ->count();
+        $teachers = $this->examSession->teachers()->whereIn('id', $this->selected)->get();
+
+        if ($teachers->isEmpty()) {
+            session()->flash('error', 'Select at least one teacher to delete.');
+
+            return;
+        }
+
+        $hadSchedule = $this->sessionHasSchedule();
+
+        $teachers->each(fn (Teacher $teacher) => $teacher->delete());
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'teachers.deleted', "Deleted {$teachers->count()} teacher(s).");
 
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash('status', "{$count} teacher(s) deleted.");
+        session()->flash('status', "{$teachers->count()} teacher(s) deleted."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     public function cancel(): void

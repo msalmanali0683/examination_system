@@ -99,12 +99,18 @@ class SessionDuplicationTest extends TestCase
 
     public function test_user_without_manage_sessions_permission_cannot_duplicate(): void
     {
+        // The session list itself stays open to a view_reports-only user (staff has it by default
+        // even with manage_sessions revoked) — it's the duplicate action itself that must refuse.
         $staff = User::factory()->create(['role' => 'staff']);
         $staff->permissionOverrides()->create(['permission' => 'manage_sessions', 'granted' => false]);
-        ExamSession::factory()->create();
+        $source = ExamSession::factory()->create();
 
-        $this->actingAs($staff)
-            ->get('/sessions')
-            ->assertForbidden();
+        try {
+            Livewire::actingAs($staff)->test(Index::class)->call('startDuplicate', $source->id);
+        } catch (\Throwable) {
+            // refusing is the expected outcome
+        }
+
+        $this->assertDatabaseCount('exam_sessions', 1);
     }
 }

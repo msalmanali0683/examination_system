@@ -228,4 +228,65 @@ class TeachersManagementTest extends TestCase
         $this->assertDatabaseHas('teachers', ['id' => $teacher->id, 'is_active' => true]);
         $this->assertDatabaseHas('duty_assignments', ['id' => $duty->id]);
     }
+
+    public function test_deleting_a_teacher_that_had_a_schedule_sends_the_session_back_to_draft_and_logs_it(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $teacher = Teacher::factory()->for($session)->create();
+        $room = Room::factory()->for($session)->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teacher->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteTeacher', $teacher->id)
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+        $this->assertDatabaseHas('activity_logs', ['exam_session_id' => $session->id, 'action' => 'teachers.deleted']);
+    }
+
+    public function test_bulk_deleting_teachers_that_had_a_schedule_sends_the_session_back_to_draft(): void
+    {
+        $session = ExamSession::factory()->create(['status' => 'generated']);
+        $teachers = Teacher::factory()->for($session)->count(2)->create();
+        $room = Room::factory()->for($session)->create();
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id]);
+        DutyAssignment::create(['exam_session_id' => $session->id, 'teacher_id' => $teachers->first()->id, 'time_slot_id' => $slot->id, 'room_id' => $room->id]);
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->set('selected', $teachers->pluck('id')->all())
+            ->call('bulkDelete')
+            ->assertSet('needsRegeneration', true)
+            ->assertSee('need to be regenerated');
+
+        $this->assertSame('draft', $session->fresh()->status);
+    }
+
+    public function test_deleting_a_teacher_from_a_session_with_nothing_generated_does_not_nag_about_regeneration(): void
+    {
+        $session = ExamSession::factory()->create();
+        $teacher = Teacher::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('deleteTeacher', $teacher->id)
+            ->assertSet('needsRegeneration', false)
+            ->assertDontSee('need to be regenerated');
+    }
+
+    public function test_bulk_delete_with_nothing_selected_says_so(): void
+    {
+        $session = ExamSession::factory()->create();
+        Teacher::factory()->for($session)->create();
+
+        Livewire::actingAs($this->staff())
+            ->test(Index::class, ['examSession' => $session])
+            ->call('bulkDelete')
+            ->assertSee('Select at least one teacher');
+
+        $this->assertSame(1, $session->teachers()->count());
+    }
 }

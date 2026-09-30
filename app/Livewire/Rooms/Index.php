@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Rooms;
 
+use App\Livewire\Concerns\FlagsRegenerationOnDelete;
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\ExamSession;
 use App\Models\SeatAssignment;
 use Illuminate\Validation\Rule;
@@ -16,6 +18,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use FlagsRegenerationOnDelete;
     use GuardsFinalizedSession;
     use WithPagination;
 
@@ -124,10 +127,9 @@ class Index extends Component
     }
 
     /**
-     * Deleting a room also removes every seat and duty assignment that
-     * used it (both tables' room_id are cascadeOnDelete()) — fine while
-     * the session can still be regenerated, which is why a finalized
-     * session refuses it outright.
+     * Deleting a room also removes every seat and duty assignment that used it (both tables' room_id are
+     * cascadeOnDelete()) — fine while the session can still be regenerated, which is why a finalized
+     * session refuses it outright, and why a session that already had a schedule drops back to draft.
      */
     public function deleteRoom(int $id): void
     {
@@ -137,8 +139,16 @@ class Index extends Component
             return;
         }
 
-        $this->examSession->rooms()->findOrFail($id)->delete();
-        session()->flash('status', 'Room deleted.');
+        $room = $this->examSession->rooms()->findOrFail($id);
+        $hadSchedule = $this->sessionHasSchedule();
+
+        $room->delete();
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'rooms.deleted', "Deleted room {$room->name}.");
+
+        session()->flash('status', "Deleted room {$room->name}."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     public function cancel(): void

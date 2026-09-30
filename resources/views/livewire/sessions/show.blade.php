@@ -1,9 +1,11 @@
 <x-slot name="header">
     <x-page-header :title="$examSession->name" icon="calendar" :back="route('sessions.index')">
         <x-slot name="actions">
-            @if (! $examSession->isFinalized())
-                <x-btn :href="route('sessions.generate', $examSession)" wire:navigate icon="lightning">Generate Timetable</x-btn>
-            @endif
+            @can('manage_sessions')
+                @if (! $examSession->isFinalized())
+                    <x-btn :href="route('sessions.generate', $examSession)" wire:navigate icon="lightning">Generate Timetable</x-btn>
+                @endif
+            @endcan
             @can('finalize_sessions')
                 @if ($examSession->isFinalized())
                     <x-btn wire:click="unlock" wire:confirm="Unlock this session for editing again?" variant="secondary" icon="lock">Unlock</x-btn>
@@ -15,7 +17,7 @@
     </x-page-header>
 </x-slot>
 
-<div x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'rooms' }" class="space-y-6">
+<div x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || '{{ auth()->user()->can('manage_sessions') ? 'rooms' : 'reports' }}' }" class="space-y-6">
 
     @if (session('status'))
         <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
@@ -43,9 +45,11 @@
                 <span class="text-sm text-gray-400 dark:text-gray-500">&middot; {{ $examSession->effectiveDepartmentName() }}</span>
                 <x-badge :color="$examSession->isReportFinal() ? 'green' : 'yellow'">{{ $examSession->reportStampLabel() }}</x-badge>
             </div>
-            @if (! $editingDetails && ! $examSession->isFinalized())
-                <button type="button" wire:click="editDetails" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
-            @endif
+            @can('manage_sessions')
+                @if (! $editingDetails && ! $examSession->isFinalized())
+                    <button type="button" wire:click="editDetails" class="text-sm font-medium text-primary-600 hover:underline">Edit</button>
+                @endif
+            @endcan
         </div>
 
         @if ($editingDetails)
@@ -95,18 +99,20 @@
 
     <x-card :padded="false">
         <div class="border-b border-gray-100 dark:border-gray-700 px-4 sm:px-6 flex gap-1 overflow-x-auto">
-            <button type="button" @click="tab = 'rooms'" :class="tab === 'rooms' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="door" class="h-4 w-4" /> Rooms
-            </button>
-            <button type="button" @click="tab = 'teachers'" :class="tab === 'teachers' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="cap" class="h-4 w-4" /> Teachers
-            </button>
-            <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="calendar" class="h-4 w-4" /> Time Slots
-            </button>
-            <button type="button" @click="tab = 'enrollments'" :class="tab === 'enrollments' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="users" class="h-4 w-4" /> Enrollments
-            </button>
+            @can('manage_sessions')
+                <button type="button" @click="tab = 'rooms'" :class="tab === 'rooms' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="door" class="h-4 w-4" /> Rooms
+                </button>
+                <button type="button" @click="tab = 'teachers'" :class="tab === 'teachers' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="cap" class="h-4 w-4" /> Teachers
+                </button>
+                <button type="button" @click="tab = 'slots'" :class="tab === 'slots' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="calendar" class="h-4 w-4" /> Time Slots
+                </button>
+                <button type="button" @click="tab = 'enrollments'" :class="tab === 'enrollments' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="users" class="h-4 w-4" /> Enrollments
+                </button>
+            @endcan
             @can('view_reports')
                 <button type="button" @click="tab = 'lookup'" :class="tab === 'lookup' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="search" class="h-4 w-4" /> Find Student
@@ -115,9 +121,11 @@
                     <x-icon name="download" class="h-4 w-4" /> Reports
                 </button>
             @endcan
-            <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
-                <x-icon name="clipboard" class="h-4 w-4" /> Activity
-            </button>
+            @can('manage_sessions')
+                <button type="button" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
+                    <x-icon name="clipboard" class="h-4 w-4" /> Activity
+                </button>
+            @endcan
             @can('generate_roster')
                 <button type="button" @click="tab = 'capacity'" :class="tab === 'capacity' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'" class="flex items-center gap-1.5 py-3.5 px-2 border-b-2 text-sm font-medium whitespace-nowrap">
                     <x-icon name="chart-bar" class="h-4 w-4" /> Check Capacity
@@ -126,6 +134,7 @@
         </div>
 
         <div class="p-4 sm:p-6">
+            @can('manage_sessions')
             <div x-show="tab === 'rooms'">
                 <div class="flex items-start justify-between gap-4 flex-wrap">
                     <div>
@@ -232,6 +241,7 @@
                     </div>
                 @endif
             </div>
+            @endcan
             @can('view_reports')
                 <div x-show="tab === 'lookup'">
                     <livewire:sessions.student-lookup :exam-session="$examSession" :key="'lookup-'.$examSession->id" />
@@ -240,23 +250,25 @@
                     <livewire:sessions.report-downloads :exam-session="$examSession" :key="'reports-show-'.$examSession->id" />
                 </div>
             @endcan
-            <div x-show="tab === 'activity'">
-                @if ($activityLogs->isEmpty())
-                    <x-empty-state icon="clipboard" title="No activity yet" description="Actions taken on this session will show up here." />
-                @else
-                    <div class="divide-y divide-gray-100 dark:divide-gray-700 -mx-4 sm:-mx-6">
-                        @foreach ($activityLogs as $log)
-                            <div class="px-4 sm:px-6 py-3 flex items-start justify-between gap-4">
-                                <div class="min-w-0">
-                                    <div class="text-sm text-gray-900 dark:text-gray-100">{{ $log->description }}</div>
-                                    <div class="text-xs text-gray-400 mt-0.5">{{ $log->user?->name ?? 'System' }} &middot; {{ $log->created_at->format('d M Y, g:i A') }}</div>
+            @can('manage_sessions')
+                <div x-show="tab === 'activity'">
+                    @if ($activityLogs->isEmpty())
+                        <x-empty-state icon="clipboard" title="No activity yet" description="Actions taken on this session will show up here." />
+                    @else
+                        <div class="divide-y divide-gray-100 dark:divide-gray-700 -mx-4 sm:-mx-6">
+                            @foreach ($activityLogs as $log)
+                                <div class="px-4 sm:px-6 py-3 flex items-start justify-between gap-4">
+                                    <div class="min-w-0">
+                                        <div class="text-sm text-gray-900 dark:text-gray-100">{{ $log->description }}</div>
+                                        <div class="text-xs text-gray-400 mt-0.5">{{ $log->user?->name ?? 'System' }} &middot; {{ $log->created_at->format('d M Y, g:i A') }}</div>
+                                    </div>
+                                    <x-badge color="gray">{{ $log->action }}</x-badge>
                                 </div>
-                                <x-badge color="gray">{{ $log->action }}</x-badge>
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-            </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @endcan
             @can('generate_roster')
                 <div x-show="tab === 'capacity'">
                     <livewire:sessions.capacity-check :exam-session="$examSession" :key="'capacity-'.$examSession->id" />

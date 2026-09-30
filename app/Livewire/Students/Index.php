@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Students;
 
+use App\Livewire\Concerns\FlagsRegenerationOnDelete;
 use App\Livewire\Concerns\GuardsFinalizedSession;
+use App\Models\ActivityLog;
 use App\Models\ExamSession;
 use App\Models\Student;
 use Illuminate\Validation\Rule;
@@ -16,6 +18,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use FlagsRegenerationOnDelete;
     use GuardsFinalizedSession;
     use WithPagination;
 
@@ -107,11 +110,10 @@ class Index extends Component
     }
 
     /**
-     * A student's enrollments cascade-delete at the database level (see
-     * enrollments.student_id's cascadeOnDelete()), taking their seat
-     * assignment with them — fine while the session can still be
-     * re-imported or regenerated, which is why a finalized session
-     * refuses it outright.
+     * A student's enrollments cascade-delete at the database level (see enrollments.student_id's
+     * cascadeOnDelete()), taking their seat assignment with them — fine while the session can still be
+     * re-imported or regenerated, which is why a finalized session refuses it outright, and why a
+     * session that already had a seating plan drops back to draft.
      */
     public function deleteStudent(int $id): void
     {
@@ -121,8 +123,16 @@ class Index extends Component
             return;
         }
 
-        $this->examSession->students()->findOrFail($id)->delete();
-        session()->flash('status', 'Student deleted.');
+        $student = $this->examSession->students()->findOrFail($id);
+        $hadSchedule = $this->sessionHasSchedule();
+
+        $student->delete();
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'students.deleted', "Deleted student {$student->roll_no}.");
+
+        session()->flash('status', "Deleted student {$student->roll_no}."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     /**
@@ -168,12 +178,25 @@ class Index extends Component
             return;
         }
 
+        $hadSchedule = $this->sessionHasSchedule();
+
         $count = $this->examSession->students()->whereIn('id', $this->selected)->delete();
+
+        if ($count === 0) {
+            session()->flash('error', 'Select at least one student to delete.');
+
+            return;
+        }
+
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'students.deleted', "Deleted {$count} student(s).");
 
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash('status', "{$count} student(s) deleted.");
+        session()->flash('status', "{$count} student(s) deleted."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     /**
@@ -189,6 +212,8 @@ class Index extends Component
             return;
         }
 
+        $hadSchedule = $this->sessionHasSchedule();
+
         $count = $this->studentsQuery()->delete();
 
         if ($count === 0) {
@@ -197,10 +222,15 @@ class Index extends Component
             return;
         }
 
+        $this->markIfHadSchedule($hadSchedule);
+
+        ActivityLog::record($this->examSession, 'students.deleted', "Deleted {$count} student(s).");
+
         $this->selected = [];
         $this->resetPage();
 
-        session()->flash('status', "{$count} student(s) deleted.");
+        session()->flash('status', "{$count} student(s) deleted."
+            .($hadSchedule ? ' The timetable, seating plan and duties need to be regenerated.' : ''));
     }
 
     public function cancel(): void

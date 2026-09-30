@@ -1,9 +1,11 @@
 <x-slot name="header">
     <x-page-header title="Exam Sessions" subtitle="Self-contained exam periods with their own rooms, teachers and enrollments." icon="calendar">
         <x-slot name="actions">
-            @if (! $showForm)
-                <x-btn wire:click="addSession" icon="plus">Create Session</x-btn>
-            @endif
+            @can('manage_sessions')
+                @if (! $showForm)
+                    <x-btn wire:click="addSession" icon="plus">Create Session</x-btn>
+                @endif
+            @endcan
         </x-slot>
     </x-page-header>
 </x-slot>
@@ -95,14 +97,16 @@
                         <x-badge :color="match($session->status) { 'generated' => 'blue', 'finalized' => 'green', default => 'gray' }">
                             {{ ucfirst($session->status) }}
                         </x-badge>
-                        <button type="button" wire:click="startDuplicate({{ $session->id }})" title="Duplicate this session's rooms and teacher constraints" class="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-                            <x-icon name="document" class="h-4 w-4" />
-                        </button>
-                        @if ($session->status !== 'finalized')
-                            <button type="button" wire:click="deleteSession({{ $session->id }})" wire:confirm="Delete &quot;{{ $session->name }}&quot;? This permanently removes its rooms, teacher constraints, time slots, enrollments, and generated seating/duty data. This cannot be undone." title="Delete this session" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400">
-                                <x-icon name="trash" class="h-4 w-4" />
+                        @can('manage_sessions')
+                            <button type="button" wire:click="startDuplicate({{ $session->id }})" title="Duplicate this session's rooms and teacher constraints" class="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                                <x-icon name="document" class="h-4 w-4" />
                             </button>
-                        @endif
+                            @if ($session->status !== 'finalized')
+                                <button type="button" wire:click="deleteSession({{ $session->id }})" wire:confirm="Delete &quot;{{ $session->name }}&quot;? This permanently removes its rooms, teacher constraints, time slots, enrollments, and generated seating/duty data. This cannot be undone." title="Delete this session" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                                    <x-icon name="trash" class="h-4 w-4" />
+                                </button>
+                            @endif
+                        @endcan
                     </div>
                 </div>
             @endforeach

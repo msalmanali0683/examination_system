@@ -17,6 +17,10 @@
 <div class="space-y-6">
 <x-finalized-banner :session="$examSession" />
 
+@if ($needsRegeneration)
+    <x-regeneration-banner :exam-session="$examSession" reason="A room was deleted" />
+@endif
+
 @if (session('status'))
     <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
         {{ session('status') }}
