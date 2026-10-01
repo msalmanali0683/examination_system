@@ -3,6 +3,19 @@
 </x-slot>
 
 <div class="space-y-6">
+
+@if (session('status'))
+    <div class="p-4 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg text-sm">
+        {{ session('status') }}
+    </div>
+@endif
+
+@if (session('error'))
+    <div class="p-4 bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm">
+        {{ session('error') }}
+    </div>
+@endif
+
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
     <x-stat-card label="Exam Sessions" :value="$sessionCount" icon="calendar" color="indigo" />
     <x-stat-card label="In Progress" :value="$activeSessionCount" icon="clipboard" color="blue" />

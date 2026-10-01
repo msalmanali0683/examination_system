@@ -194,9 +194,11 @@ class SlotAvailabilityTest extends TestCase
         $theirRoom = Room::factory()->for($other)->create();
         $theirTeacher = Teacher::factory()->for($other)->create();
 
-        // (HTTP first: Livewire's test helper swaps out the exception handler.)
-        $this->actingAs($this->staff())->get(route('sessions.availability', [$session, 'rooms', $theirRoom->id]))->assertNotFound();
-        $this->actingAs($this->staff())->get(route('sessions.availability', [$session, 'teachers', $theirTeacher->id]))->assertNotFound();
+        // (HTTP first: Livewire's test helper swaps out the exception handler.) A record that
+        // doesn't belong to this session is, from the admin's point of view, just as gone as a
+        // deleted one — same redirect-to-dashboard handling (see bootstrap/app.php).
+        $this->actingAs($this->staff())->get(route('sessions.availability', [$session, 'rooms', $theirRoom->id]))->assertRedirect(route('dashboard'));
+        $this->actingAs($this->staff())->get(route('sessions.availability', [$session, 'teachers', $theirTeacher->id]))->assertRedirect(route('dashboard'));
         $this->actingAs($this->staff())->get(route('sessions.availability', [$session, 'rooms', $myRoom->id]))->assertOk();
 
         $this->assertThrows(fn () => $this->page($session, 'rooms', $theirRoom->id), ModelNotFoundException::class);

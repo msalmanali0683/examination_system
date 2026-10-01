@@ -35,7 +35,9 @@ class SecurityHeadersTest extends TestCase
     public function test_redirects_and_errors_carry_them_too(): void
     {
         $this->assertHardened($this->get('/dashboard')->assertRedirect('/login'));
-        $this->assertHardened($this->actingAs(User::factory()->create(['role' => 'head']))->get('/sessions/999999')->assertNotFound());
+        // A deleted/nonexistent record now redirects to the dashboard rather than a bare 404 (see
+        // bootstrap/app.php) — still a response worth checking headers on.
+        $this->assertHardened($this->actingAs(User::factory()->create(['role' => 'head']))->get('/sessions/999999')->assertRedirect(route('dashboard')));
     }
 
     public function test_a_url_that_matches_no_route_carries_them_too(): void
