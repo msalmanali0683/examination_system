@@ -5,7 +5,9 @@ namespace App\Livewire\Sessions;
 use App\Models\ExamSession;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\RequirementCalculator;
+use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SlotCapacitySimulator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
@@ -32,6 +34,17 @@ class CapacityCheck extends Component
 
     public string $maxSubjectsPerSlot = '';
 
+    /**
+     * Which seating strategy to simulate room-packing with — defaults to the session's own saved
+     * strategy (the most useful "what if I generated today" starting point), but can be swapped to
+     * compare what-ifs without touching the session's real settings. Strict is the most conservative
+     * (one room per subject+section); Combine Sections/Mixed/the overflow variants let several groups
+     * share a room, which can fit more subjects into fewer simulated slots.
+     */
+    public string $seatingStrategy = 'strict';
+
+    public int $mixedSubjectsPerRoom = 2;
+
     public bool $showSlotSimulation = false;
 
     /**
@@ -49,6 +62,8 @@ class CapacityCheck extends Component
     {
         $this->authorize('generate_roster');
         $this->examSession = $examSession;
+        $this->seatingStrategy = $examSession->seating_strategy;
+        $this->mixedSubjectsPerRoom = $examSession->mixed_subjects_per_room;
     }
 
     public function checkCurrent(): void
@@ -73,6 +88,8 @@ class CapacityCheck extends Component
                         }
                     },
                 ],
+                'seatingStrategy' => ['required', Rule::in(array_keys(ExamSession::SEATING_STRATEGIES))],
+                'mixedSubjectsPerRoom' => ['required_if:seatingStrategy,mixed', 'integer', 'min:2', 'max:10'],
             ]);
         } catch (ValidationException $e) {
             $this->dispatch('open-modal', 'capacity-check-error');
@@ -82,19 +99,21 @@ class CapacityCheck extends Component
 
         $min = $this->minSubjectsPerSlot === '' ? null : (int) $this->minSubjectsPerSlot;
         $max = $this->maxSubjectsPerSlot === '' ? null : (int) $this->maxSubjectsPerSlot;
+        $strategy = (new SeatAllocationService)->strategyFor($this->seatingStrategy, $this->mixedSubjectsPerRoom);
 
-        $this->slotRequirementsData = (new SlotCapacitySimulator)->simulate($this->examSession, $min, $max)
+        $this->slotRequirementsData = (new SlotCapacitySimulator($strategy))->simulate($this->examSession, $min, $max)
             ->map(fn (SlotRequirement $r) => get_object_vars($r))
             ->all();
         $this->showSlotSimulation = true;
     }
 
     /**
-     * The query string for this simulation's download links — min/max change simulate()'s grouping;
-     * per_day is display-only (it relabels slots "Day X, Slot Y" the same way render() does below) but
-     * still passed through so the download matches whatever's currently on screen.
+     * The query string for this simulation's download links — min/max/strategy (and mixedSubjectsPerRoom
+     * when relevant) change simulate()'s grouping and packing; per_day is display-only (it relabels
+     * slots "Day X, Slot Y" the same way render() does below) but still passed through so the download
+     * matches whatever's currently on screen.
      *
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public function simulationQuery(): array
     {
@@ -102,6 +121,8 @@ class CapacityCheck extends Component
             'min' => $this->minSubjectsPerSlot !== '' ? (int) $this->minSubjectsPerSlot : null,
             'max' => $this->maxSubjectsPerSlot !== '' ? (int) $this->maxSubjectsPerSlot : null,
             'per_day' => $this->slotsPerDay,
+            'strategy' => $this->seatingStrategy,
+            'mixed_per_room' => $this->seatingStrategy === 'mixed' ? $this->mixedSubjectsPerRoom : null,
         ], fn ($value) => $value !== null);
     }
 

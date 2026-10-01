@@ -18,6 +18,7 @@
         'slotRequirements' => $slotRequirements,
         'min' => $min,
         'max' => $max,
+        'strategyLabel' => $strategyLabel,
     ])
 </body>
 </html>

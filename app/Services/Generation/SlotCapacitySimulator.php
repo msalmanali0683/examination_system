@@ -10,6 +10,7 @@ use App\Services\Generation\DTOs\SeatingResult;
 use App\Services\Generation\DTOs\SeatingWarning;
 use App\Services\Generation\DTOs\SeatPlacement;
 use App\Services\Generation\DTOs\SlotRequirement;
+use App\Services\Generation\Strategies\SeatingStrategy;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
 use Illuminate\Support\Collection;
 
@@ -28,11 +29,18 @@ use Illuminate\Support\Collection;
  */
 class SlotCapacitySimulator
 {
-    private StrictSeatingStrategy $strategy;
+    private SeatingStrategy $strategy;
 
-    public function __construct()
+    /**
+     * Defaults to Strict (the previous hardcoded behaviour) when no strategy is given. Pass the
+     * session's actual configured strategy (or any other, via SeatAllocationService::strategyFor())
+     * to simulate what that strategy's room-sharing would really pack — Strict alone is the most
+     * conservative assumption and can understate how many subjects fit in one slot compared to
+     * Combine Sections/Mixed/the overflow variants, all of which let a room hold more than one group.
+     */
+    public function __construct(?SeatingStrategy $strategy = null)
     {
-        $this->strategy = new StrictSeatingStrategy;
+        $this->strategy = $strategy ?? new StrictSeatingStrategy;
     }
 
     /**

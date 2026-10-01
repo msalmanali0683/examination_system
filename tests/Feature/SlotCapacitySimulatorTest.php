@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Services\Generation\SlotCapacitySimulator;
+use App\Services\Generation\Strategies\CombineSectionsSeatingStrategy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -339,6 +340,45 @@ class SlotCapacitySimulatorTest extends TestCase
         $labeled = SlotCapacitySimulator::withDayAndSlotLabels($result, 0);
 
         $this->assertSame('Day 1, Slot 1 (1 subject)', $labeled->first()->label);
+    }
+
+    /**
+     * Strict (the default when no strategy is given) gives each subject+section its own room, so two
+     * 5-student sections of the same subject can't share the one 10-seat room this test gives them —
+     * the second section finds nowhere left to go and the whole subject goes unseated. Passing
+     * CombineSectionsSeatingStrategy instead groups by subject only, so the real "what if I used
+     * Combine Sections" answer is: both sections fit together, fully seated, one room.
+     */
+    public function test_a_strategy_override_changes_what_fits_compared_to_the_strict_default(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['name' => 'ITC-310', 'rows' => 10, 'columns' => 1, 'capacity' => 10]);
+
+        $subject = Subject::factory()->create(['code' => 'CS101']);
+        $this->enrollStudents($session, $subject, 'BSCS 1A', 5);
+        $this->enrollStudents($session, $subject, 'BSCS 1B', 5);
+
+        $strict = (new SlotCapacitySimulator)->simulate($session)->first();
+        $this->assertTrue($strict->hasUnseatedStudents);
+        $this->assertSame(5, array_sum(array_column($strict->unseatedBreakdown, 'count')));
+
+        $combined = (new SlotCapacitySimulator(new CombineSectionsSeatingStrategy))->simulate($session)->first();
+        $this->assertFalse($combined->hasUnseatedStudents);
+        $this->assertCount(1, $combined->roomBreakdown);
+        $this->assertSame(10, $combined->roomBreakdown[0]['filled']);
+        $this->assertCount(2, $combined->roomBreakdown[0]['sections'], 'both sections share the one room');
+    }
+
+    public function test_no_strategy_argument_defaults_to_strict(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'A', 5);
+        $this->enrollStudents($session, $subject, 'B', 5);
+
+        $default = (new SlotCapacitySimulator)->simulate($session)->first();
+        $this->assertTrue($default->hasUnseatedStudents, 'same outcome as the explicit Strict case above');
     }
 
     public function test_no_enrollments_yet_returns_an_empty_collection(): void

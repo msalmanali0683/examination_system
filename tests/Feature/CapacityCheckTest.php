@@ -167,18 +167,21 @@ class CapacityCheckTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
-        // per_day always rides along (it has a real default, 2, unlike min/max which default to "unset").
+        // per_day and strategy always ride along (real defaults, unlike min/max which default to "unset").
         $component = Livewire::actingAs($staff)->test(CapacityCheck::class, ['examSession' => $session]);
-        $this->assertSame(['per_day' => 2], $component->instance()->simulationQuery());
+        $this->assertSame(['per_day' => 2, 'strategy' => 'strict'], $component->instance()->simulationQuery());
 
         $component->set('minSubjectsPerSlot', '2');
-        $this->assertSame(['min' => 2, 'per_day' => 2], $component->instance()->simulationQuery());
+        $this->assertSame(['min' => 2, 'per_day' => 2, 'strategy' => 'strict'], $component->instance()->simulationQuery());
 
         $component->set('maxSubjectsPerSlot', '5');
-        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 2], $component->instance()->simulationQuery());
+        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 2, 'strategy' => 'strict'], $component->instance()->simulationQuery());
 
         $component->set('slotsPerDay', 3);
-        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 3], $component->instance()->simulationQuery());
+        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 3, 'strategy' => 'strict'], $component->instance()->simulationQuery());
+
+        $component->set('seatingStrategy', 'mixed')->set('mixedSubjectsPerRoom', 3);
+        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 3, 'strategy' => 'mixed', 'mixed_per_room' => 3], $component->instance()->simulationQuery());
     }
 
     public function test_simulated_slots_are_labeled_by_day_according_to_slots_per_day(): void
@@ -250,5 +253,67 @@ class CapacityCheckTest extends TestCase
             ->call('simulateSlots')
             ->assertHasErrors(['slotsPerDay'])
             ->assertViewHas('daysNeeded', 0);
+    }
+
+    public function test_the_seating_strategy_defaults_to_the_sessions_own_saved_strategy(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'combine_sections']);
+
+        $component = Livewire::actingAs($staff)->test(CapacityCheck::class, ['examSession' => $session]);
+
+        $this->assertSame('combine_sections', $component->get('seatingStrategy'));
+    }
+
+    public function test_an_invalid_seating_strategy_is_rejected(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('seatingStrategy', 'not-a-real-strategy')
+            ->call('simulateSlots')
+            ->assertHasErrors(['seatingStrategy'])
+            ->assertSet('showSlotSimulation', false);
+    }
+
+    public function test_mixed_subjects_per_room_is_required_when_the_strategy_is_mixed(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('seatingStrategy', 'mixed')
+            ->set('mixedSubjectsPerRoom', 1)
+            ->call('simulateSlots')
+            ->assertHasErrors(['mixedSubjectsPerRoom']);
+    }
+
+    public function test_choosing_combine_sections_fits_what_strict_alone_cannot(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subject = Subject::factory()->create();
+
+        foreach (['A', 'B'] as $section) {
+            for ($i = 0; $i < 5; $i++) {
+                $student = Student::factory()->create(['roll_no' => str_pad((string) ++self::$rollNoSequence, 8, '0', STR_PAD_LEFT)]);
+                Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => $section]);
+            }
+        }
+
+        $strict = Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->call('simulateSlots');
+        $this->assertTrue($strict->viewData('slotRequirements')->first()->hasUnseatedStudents);
+
+        $combined = Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('seatingStrategy', 'combine_sections')
+            ->call('simulateSlots');
+        $this->assertFalse($combined->viewData('slotRequirements')->first()->hasUnseatedStudents);
     }
 }

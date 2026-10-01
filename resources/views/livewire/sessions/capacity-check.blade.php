@@ -47,6 +47,34 @@
             </div>
         </div>
 
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="sessions-capacity-check-seatingstrategy" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Seating strategy to simulate with</label>
+                <select id="sessions-capacity-check-seatingstrategy" wire:model.live="seatingStrategy" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    <optgroup label="Basic">
+                        <option value="strict">Strict (one room per subject+section)</option>
+                        <option value="combine_sections">Combine sections of the same subject</option>
+                        <option value="mixed">Mix different subjects (whole columns alternate)</option>
+                    </optgroup>
+                    <optgroup label="Fill leftover seats instead of wasting them">
+                        <option value="strict_overflow_section">Strict, then fill leftover seats with another section</option>
+                        <option value="strict_overflow_subject">Strict, then fill leftover seats with a different subject</option>
+                        <option value="strict_overflow_section_then_subject">Strict, then fill leftover seats with another section &mdash; or a different subject if none left</option>
+                        <option value="combine_sections_overflow_subject">Combine sections, then fill leftover seats with a different subject</option>
+                    </optgroup>
+                </select>
+                @error('seatingStrategy') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Defaults to this session's own saved strategy. A strategy that shares rooms between groups (Combine Sections, Mixed, the overflow options) can fit more subjects into fewer simulated slots than Strict.</p>
+            </div>
+            @if ($seatingStrategy === 'mixed')
+                <div>
+                    <label for="sessions-capacity-check-mixedsubjectsperroom" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Subjects per room</label>
+                    <input id="sessions-capacity-check-mixedsubjectsperroom" type="number" min="2" max="10" wire:model="mixedSubjectsPerRoom" class="mt-1 block w-28 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 shadow-sm text-sm">
+                    @error('mixedSubjectsPerRoom') <span class="text-sm text-red-600 block">{{ $message }}</span> @enderror
+                </div>
+            @endif
+        </div>
+
         <div class="mt-4 flex items-end gap-4 flex-wrap">
             <div>
                 <label for="sessions-capacity-check-slotsperday" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Slots per day</label>
@@ -68,7 +96,7 @@
                 <span wire:loading wire:target="simulateSlots">Simulating&hellip;</span>
             </x-btn>
         </div>
-        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Both are optional. Leave Max blank to pack in as many clash-free subjects as the rooms fit; a Min is a best-effort target &mdash; a subject with nowhere clash-free to join still gets its own slot.</p>
+        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Min/Max are both optional. Leave Max blank to pack in as many clash-free subjects as the rooms fit; a Min is a best-effort target &mdash; a subject with nowhere clash-free to join still gets its own slot.</p>
 
         @if ($showSlotSimulation)
             @if ($slotRequirements->isEmpty())

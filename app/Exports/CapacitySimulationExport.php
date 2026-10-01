@@ -16,6 +16,7 @@ class CapacitySimulationExport implements FromView, WithTitle
         private readonly Collection $slotRequirements,
         private readonly ?int $min = null,
         private readonly ?int $max = null,
+        private readonly ?string $strategyKey = null,
     ) {}
 
     public function view(): View
@@ -26,6 +27,7 @@ class CapacitySimulationExport implements FromView, WithTitle
             'slotRequirements' => $this->slotRequirements,
             'min' => $this->min,
             'max' => $this->max,
+            'strategyLabel' => ExamSession::SEATING_STRATEGIES[$this->strategyKey] ?? $this->strategyKey,
         ]);
     }
 

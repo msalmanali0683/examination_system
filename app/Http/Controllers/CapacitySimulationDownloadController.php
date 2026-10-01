@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\CapacitySimulationExport;
 use App\Models\ExamSession;
+use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SlotCapacitySimulator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -25,11 +26,12 @@ class CapacitySimulationDownloadController extends Controller
         Gate::authorize('generate_roster');
 
         [$min, $max] = $this->minMax($request);
-        $simulator = new SlotCapacitySimulator;
+        [$strategyKey, $strategy] = $this->strategy($request, $examSession);
+        $simulator = new SlotCapacitySimulator($strategy);
         $slotRequirements = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($examSession, $min, $max), $this->perDay($request));
 
         return Excel::download(
-            new CapacitySimulationExport($examSession, $simulator->subjectRequirements($examSession), $slotRequirements, $min, $max),
+            new CapacitySimulationExport($examSession, $simulator->subjectRequirements($examSession), $slotRequirements, $min, $max, $strategyKey),
             $this->filename($examSession, 'xlsx')
         );
     }
@@ -39,7 +41,8 @@ class CapacitySimulationDownloadController extends Controller
         Gate::authorize('generate_roster');
 
         [$min, $max] = $this->minMax($request);
-        $simulator = new SlotCapacitySimulator;
+        [$strategyKey, $strategy] = $this->strategy($request, $examSession);
+        $simulator = new SlotCapacitySimulator($strategy);
         $slotRequirements = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($examSession, $min, $max), $this->perDay($request));
 
         return Pdf::loadView('reports.capacity-simulation-pdf', [
@@ -48,6 +51,7 @@ class CapacitySimulationDownloadController extends Controller
             'slotRequirements' => $slotRequirements,
             'min' => $min,
             'max' => $max,
+            'strategyLabel' => ExamSession::SEATING_STRATEGIES[$strategyKey] ?? $strategyKey,
         ])->setPaper('a4', 'portrait')->download($this->filename($examSession, 'pdf'));
     }
 
@@ -63,6 +67,26 @@ class CapacitySimulationDownloadController extends Controller
             ($min !== null && ctype_digit((string) $min)) ? (int) $min : null,
             ($max !== null && ctype_digit((string) $max)) ? (int) $max : null,
         ];
+    }
+
+    /**
+     * Falls back to the session's own saved strategy when the query string doesn't name a valid one —
+     * matches CapacityCheck's own default, so a download requested without visiting the page first
+     * simulates the same way the page would show fresh.
+     *
+     * @return array{0: string, 1: \App\Services\Generation\Strategies\SeatingStrategy}
+     */
+    private function strategy(Request $request, ExamSession $examSession): array
+    {
+        $key = $request->query('strategy');
+        $key = is_string($key) && array_key_exists($key, ExamSession::SEATING_STRATEGIES) ? $key : $examSession->seating_strategy;
+
+        $mixedPerRoom = $request->query('mixed_per_room');
+        $mixedPerRoom = ($mixedPerRoom !== null && ctype_digit((string) $mixedPerRoom) && (int) $mixedPerRoom >= 2)
+            ? (int) $mixedPerRoom
+            : $examSession->mixed_subjects_per_room;
+
+        return [$key, (new SeatAllocationService)->strategyFor($key, $mixedPerRoom)];
     }
 
     /**

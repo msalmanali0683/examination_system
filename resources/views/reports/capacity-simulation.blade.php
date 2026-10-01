@@ -7,6 +7,9 @@
     <tr>
         <td colspan="4" style="text-align:center;font-style:italic;padding:3px;border:1px solid #94A3B8;">
             A what-if preview from the current enrollment data — not the real timetable or seating plan.
+            @if (! empty($strategyLabel))
+                Seating strategy: {{ $strategyLabel }}.
+            @endif
             @if ($min || $max)
                 Simulated with
                 @if ($min) a minimum of {{ $min }} @endif

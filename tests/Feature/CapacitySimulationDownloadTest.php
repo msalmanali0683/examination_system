@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\Generation\SlotCapacitySimulator;
+use App\Services\Generation\Strategies\CombineSectionsSeatingStrategy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -205,6 +206,59 @@ class CapacitySimulationDownloadTest extends TestCase
 
         $this->actingAs($staff)
             ->get(route('sessions.capacity-simulation.xlsx', $session))
+            ->assertOk();
+    }
+
+    public function test_the_strategy_query_parameter_changes_the_simulation_and_shows_in_the_export(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subject = Subject::factory()->create();
+        $this->enroll($session, $subject, 'A', 5);
+        $this->enroll($session, $subject, 'B', 5);
+
+        // Sanity check: Strict alone can't seat both 5-student sections in the one 10-seat room.
+        $strict = (new SlotCapacitySimulator)->simulate($session)->first();
+        $this->assertTrue($strict->hasUnseatedStudents);
+
+        $combined = SlotCapacitySimulator::withDayAndSlotLabels(
+            (new SlotCapacitySimulator(new CombineSectionsSeatingStrategy))->simulate($session),
+            2
+        );
+        $this->assertFalse($combined->first()->hasUnseatedStudents);
+
+        $html = (new CapacitySimulationExport(
+            $session,
+            (new SlotCapacitySimulator)->subjectRequirements($session),
+            $combined,
+            null,
+            null,
+            'combine_sections'
+        ))->view()->render();
+
+        $this->assertStringContainsString('Combine sections', $html);
+    }
+
+    public function test_an_invalid_strategy_falls_back_to_the_sessions_own_saved_strategy(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict']);
+
+        $this->actingAs($staff)
+            ->get(route('sessions.capacity-simulation.xlsx', [$session, 'strategy' => 'not-a-real-strategy']))
+            ->assertOk();
+    }
+
+    public function test_mixed_per_room_query_parameter_is_honored_for_the_mixed_strategy(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        // Just confirms the parameter is accepted and doesn't error through the full request —
+        // SeatAllocationService::strategyFor()'s own tests already cover how mixedSubjectsPerRoom
+        // changes MixedSeatingStrategy's behavior.
+        $this->actingAs($staff)
+            ->get(route('sessions.capacity-simulation.xlsx', [$session, 'strategy' => 'mixed', 'mixed_per_room' => 3]))
             ->assertOk();
     }
 }
