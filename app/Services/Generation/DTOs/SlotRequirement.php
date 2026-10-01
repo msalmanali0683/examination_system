@@ -44,8 +44,8 @@ final class SlotRequirement
         /**
          * Room-by-room detail for this slot: which room, its capacity, which section(s) fill it (in
          * the order they were placed) and how many seats each took, plus how many seats are left over.
-         * Only SlotCapacitySimulator populates this (it's irrelevant to the real, already-generated
-         * timetable's requirement check) — empty for every other caller. Plain nested arrays, not
+         * Populated by both SlotCapacitySimulator (what-if slots) and RequirementCalculator (the real
+         * timetable's slots) — built by SlotBreakdownBuilder either way. Plain nested arrays, not
          * objects, since this travels through a Livewire component's public property.
          *
          * @var array<int, array{roomName: string, capacity: int, filled: int, remaining: int, sections: array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>}>
@@ -53,17 +53,17 @@ final class SlotRequirement
         public readonly array $roomBreakdown = [],
         /**
          * Which section(s) of which subject(s) actually went unseated — ran out of room capacity
-         * entirely, not placed in any room — and how many. Only SlotCapacitySimulator populates this,
-         * same as roomBreakdown above; empty whenever hasUnseatedStudents is false.
+         * entirely, not placed in any room — and how many. Populated alongside roomBreakdown above;
+         * empty whenever hasUnseatedStudents is false.
          *
          * @var array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>
          */
         public readonly array $unseatedBreakdown = [],
         /**
-         * Every subject grouped into this simulated slot, regardless of whether it actually got seated
-         * — unlike roomBreakdown/unseatedBreakdown (which describe the seating OUTCOME), this is the
-         * timetable-level grouping decision itself, so a subject that went entirely unseated still
-         * appears here. Only SlotCapacitySimulator populates this; feeds its "simulated datesheet" view.
+         * Every subject grouped into this slot, regardless of whether it actually got seated — unlike
+         * roomBreakdown/unseatedBreakdown (which describe the seating OUTCOME), this is the timetable-
+         * level grouping decision itself, so a subject that went entirely unseated still appears here.
+         * Feeds the "datesheet" view both SlotCapacitySimulator and RequirementCalculator's downloads use.
          *
          * @var array<int, array{code: string, title: string, semester: string}>
          */

@@ -7,8 +7,6 @@ use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SessionTeacherConstraint;
 use App\Services\Generation\DTOs\SeatingResult;
-use App\Services\Generation\DTOs\SeatingWarning;
-use App\Services\Generation\DTOs\SeatPlacement;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\SeatingStrategy;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
@@ -183,115 +181,11 @@ class SlotCapacitySimulator
                 teachersAvailable: $teachersAvailable,
                 hasUnseatedStudents: $unseated->isNotEmpty(),
                 seatsAvailable: $seatsAvailable,
-                roomBreakdown: $this->roomBreakdown($result->placements, $enrollmentsById, $roomTemplate),
-                unseatedBreakdown: $this->unseatedBreakdown($unseated, $enrollmentsById),
-                subjects: $this->subjectsInSlot($subjectIdsInSlot, $enrollmentsBySubject),
+                roomBreakdown: SlotBreakdownBuilder::roomBreakdown($result->placements, $enrollmentsById, $roomTemplate),
+                unseatedBreakdown: SlotBreakdownBuilder::unseatedBreakdown($unseated, $enrollmentsById),
+                subjects: SlotBreakdownBuilder::subjectsInSlot($subjectIdsInSlot, $enrollmentsBySubject),
             );
         });
-    }
-
-    /**
-     * Every subject grouped into this bin, independent of whether packIntoBins()'s capacity check
-     * left anyone unseated — this is the "which subject is on which simulated slot" decision itself,
-     * same granularity as SubjectSlotAssignment in the real timetable. A subject's semester uses every
-     * section it has in the whole session (not just the ones in this bin), same basis simple/formatted
-     * datesheets already use.
-     *
-     * @param  int[]  $subjectIdsInSlot
-     * @param  Collection<int, Collection<int, Enrollment>>  $enrollmentsBySubject
-     * @return array<int, array{code: string, title: string, semester: string}>
-     */
-    private function subjectsInSlot(array $subjectIdsInSlot, Collection $enrollmentsBySubject): array
-    {
-        return collect($subjectIdsInSlot)
-            ->map(function (int $subjectId) use ($enrollmentsBySubject) {
-                $rows = $enrollmentsBySubject->get($subjectId);
-                $subject = $rows->first()->subject;
-
-                return [
-                    'code' => $subject->code,
-                    'title' => $subject->title,
-                    'semester' => SemesterExtractor::label($rows->pluck('section')),
-                ];
-            })
-            ->sortBy('title')
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Which section(s) of which subject(s) went unseated, and how many — grouped the same way
-     * roomBreakdown() groups what WAS seated, so the two line up for display.
-     *
-     * @param  Collection<int, SeatingWarning>  $unseated
-     * @param  Collection<int, Enrollment>  $enrollmentsById
-     * @return array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>
-     */
-    private function unseatedBreakdown(Collection $unseated, Collection $enrollmentsById): array
-    {
-        return $unseated
-            ->groupBy(fn (SeatingWarning $w) => $enrollmentsById[$w->enrollmentId]->subject_id.'|'.$enrollmentsById[$w->enrollmentId]->section)
-            ->map(function (Collection $rows) use ($enrollmentsById) {
-                $enrollment = $enrollmentsById[$rows->first()->enrollmentId];
-
-                return [
-                    'subjectCode' => $enrollment->subject->code,
-                    'subjectTitle' => $enrollment->subject->title,
-                    'section' => $enrollment->section,
-                    'count' => $rows->count(),
-                ];
-            })
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Room-by-room detail for one simulated slot: which room, its capacity, and which section(s) of
-     * which subject(s) fill it — Strict (what this simulator always uses) gives one subject+section
-     * per room, but a group too large for one room spans several, so a room can still show less than
-     * its own group's total. Grouped by room in the order rooms first received a placement.
-     *
-     * @param  SeatPlacement[]  $placements
-     * @param  Collection<int, Enrollment>  $enrollmentsById
-     * @param  array<int, array{room_id: int, name: string, rows: int, columns: int, capacity: int, occupied: array}>  $roomTemplate
-     * @return array<int, array{roomName: string, capacity: int, filled: int, remaining: int, sections: array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>}>
-     */
-    private function roomBreakdown(array $placements, Collection $enrollmentsById, array $roomTemplate): array
-    {
-        $roomsById = collect($roomTemplate)->keyBy('room_id');
-
-        return collect($placements)
-            ->groupBy('roomId')
-            ->map(function (Collection $roomPlacements, int $roomId) use ($enrollmentsById, $roomsById) {
-                $room = $roomsById->get($roomId);
-
-                $sections = $roomPlacements
-                    ->groupBy(fn (SeatPlacement $p) => $enrollmentsById[$p->enrollmentId]->subject_id.'|'.$enrollmentsById[$p->enrollmentId]->section)
-                    ->map(function (Collection $rows) use ($enrollmentsById) {
-                        $enrollment = $enrollmentsById[$rows->first()->enrollmentId];
-
-                        return [
-                            'subjectCode' => $enrollment->subject->code,
-                            'subjectTitle' => $enrollment->subject->title,
-                            'section' => $enrollment->section,
-                            'count' => $rows->count(),
-                        ];
-                    })
-                    ->values()
-                    ->all();
-
-                $filled = array_sum(array_column($sections, 'count'));
-
-                return [
-                    'roomName' => $room['name'],
-                    'capacity' => $room['capacity'],
-                    'filled' => $filled,
-                    'remaining' => $room['capacity'] - $filled,
-                    'sections' => $sections,
-                ];
-            })
-            ->values()
-            ->all();
     }
 
     /**

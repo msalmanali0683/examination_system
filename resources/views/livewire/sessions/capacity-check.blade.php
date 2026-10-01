@@ -33,6 +33,11 @@
         </div>
 
         @if ($showCurrent)
+            <div class="mt-4 flex items-center gap-2 flex-wrap">
+                <x-btn :href="route('sessions.current-capacity-check.xlsx', $examSession)" variant="secondary" icon="download">Download Excel</x-btn>
+                <x-btn :href="route('sessions.current-capacity-check.pdf', $examSession)" variant="secondary" icon="download">Download PDF</x-btn>
+            </div>
+
             <x-requirement-table :requirements="$currentRequirements" />
         @endif
     </x-card>

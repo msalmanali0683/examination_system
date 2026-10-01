@@ -2,10 +2,10 @@
 
 namespace App\Services\Generation;
 
+use App\Models\Enrollment;
 use App\Models\ExamSession;
 use App\Models\SessionTeacherConstraint;
 use App\Models\SubjectSlotAssignment;
-use App\Models\Teacher;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\SeatingStrategy;
 use Illuminate\Support\Collection;
@@ -69,7 +69,30 @@ class RequirementCalculator
             fn ($rows) => $rows->pluck('conflict_note')->reject(ConflictNoteClassifier::isBlockingClash(...))->unique()->values()->all()
         );
 
-        return $activePreview->map(function ($active) use ($allRoomsPreview, $activeSessionRooms, $allRoomIds, $roomsOffBySlot, $teachersOffBySlot, $activeTeacherIds, $activeTeacherCount, $excludedCount, $constraints, $constrainedNotExcluded, $clashDetailsBySlot, $alertDetailsBySlot, $session, $strategyOverride) {
+        // Which subjects landed on each slot, and every enrollment for the
+        // whole session (not just this slot) — fetched once up front so the
+        // room/unseated/subjects breakdown below (same shape the Capacity
+        // Simulator shows) costs one query per table, not one per slot.
+        $subjectIdsBySlot = SubjectSlotAssignment::where('exam_session_id', $session->id)
+            ->whereNotNull('time_slot_id')
+            ->get(['subject_id', 'time_slot_id'])
+            ->groupBy('time_slot_id')
+            ->map(fn ($rows) => $rows->pluck('subject_id')->all());
+
+        $enrollments = Enrollment::where('exam_session_id', $session->id)
+            ->select('id', 'subject_id', 'section')
+            ->with('subject:id,code,title')
+            ->get();
+        $enrollmentsBySubject = $enrollments->groupBy('subject_id');
+        $enrollmentsById = $enrollments->keyBy('id');
+
+        $roomTemplate = $activeSessionRooms->map(fn ($room) => [
+            'room_id' => $room->id,
+            'name' => $room->name,
+            'capacity' => $room->capacity,
+        ])->all();
+
+        return $activePreview->map(function ($active) use ($allRoomsPreview, $activeSessionRooms, $allRoomIds, $roomsOffBySlot, $teachersOffBySlot, $activeTeacherIds, $activeTeacherCount, $excludedCount, $constraints, $constrainedNotExcluded, $clashDetailsBySlot, $alertDetailsBySlot, $session, $strategyOverride, $subjectIdsBySlot, $enrollmentsBySubject, $enrollmentsById, $roomTemplate) {
             $slot = $active['slot'];
 
             $roomsOff = $roomsOffBySlot[$slot->id] ?? [];
@@ -124,6 +147,7 @@ class RequirementCalculator
             $teachersAvailable = $activeTeacherCount - $excludedCount - $unavailableThisDay - $unavailableThisSlot;
             $clashDetails = $clashDetailsBySlot->get($slot->id, []);
             $alertDetails = $alertDetailsBySlot->get($slot->id, []);
+            $subjectIdsForSlot = $subjectIdsBySlot->get($slot->id, []);
 
             return new SlotRequirement(
                 timeSlotId: $slot->id,
@@ -140,6 +164,9 @@ class RequirementCalculator
                 hasUnresolvedAlert: ! empty($alertDetails),
                 alertDetails: $alertDetails,
                 roomsAvailableSystemWide: $roomsAvailableSystemWide,
+                roomBreakdown: SlotBreakdownBuilder::roomBreakdown($active['result']->placements, $enrollmentsById, $roomTemplate),
+                unseatedBreakdown: SlotBreakdownBuilder::unseatedBreakdown($unseated, $enrollmentsById),
+                subjects: SlotBreakdownBuilder::subjectsInSlot($subjectIdsForSlot, $enrollmentsBySubject),
             );
         })->values();
     }

@@ -436,4 +436,48 @@ class RequirementCalculatorTest extends TestCase
         // untouched by having run a what-if calculation against it.
         $this->assertSame('strict', $session->fresh()->seating_strategy);
     }
+
+    public function test_room_breakdown_and_subjects_are_populated_from_the_real_timetable(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        $room = Room::factory()->for($session)->create(['name' => 'ITC-310', 'rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $this->enrollStudents($session, $subject, 'BSCS 1A', 3);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertCount(1, $requirement->roomBreakdown);
+        $this->assertSame('ITC-310', $requirement->roomBreakdown[0]['roomName']);
+        $this->assertSame(3, $requirement->roomBreakdown[0]['filled']);
+        $this->assertSame('CS101', $requirement->roomBreakdown[0]['sections'][0]['subjectCode']);
+
+        $this->assertCount(1, $requirement->subjects);
+        $this->assertSame('CS101', $requirement->subjects[0]['code']);
+        $this->assertSame('Intro to Programming', $requirement->subjects[0]['title']);
+    }
+
+    public function test_unseated_breakdown_is_populated_when_the_real_timetable_runs_short_on_rooms(): void
+    {
+        $session = ExamSession::factory()->create(['seating_strategy' => 'strict', 'invigilators_per_room' => 1]);
+        Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        $slot = TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20']);
+
+        $subject = Subject::factory()->create(['code' => 'CS101']);
+        $this->enrollStudents($session, $subject, 'BSCS 1A', 5);
+        $this->assignSubjectToSlot($session, $subject, $slot);
+
+        Teacher::factory()->for($session)->count(2)->create(['is_active' => true]);
+
+        $requirement = (new RequirementCalculator)->calculate($session)->first();
+
+        $this->assertTrue($requirement->hasUnseatedStudents);
+        $this->assertNotEmpty($requirement->unseatedBreakdown);
+        $this->assertSame('CS101', $requirement->unseatedBreakdown[0]['subjectCode']);
+        $this->assertSame(2, $requirement->unseatedBreakdown[0]['count']);
+    }
 }
