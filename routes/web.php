@@ -24,6 +24,7 @@ use App\Livewire\Sessions\Show as SessionsShow;
 use App\Livewire\Sessions\Timetable;
 use App\Livewire\Students\Index as StudentsIndex;
 use App\Livewire\Subjects\Index as SubjectsIndex;
+use App\Livewire\Subjects\Show as SubjectsShow;
 use App\Livewire\Teachers\Import as TeachersImport;
 use App\Livewire\Teachers\Index as TeachersIndex;
 use App\Livewire\Users\Index as UsersIndex;
@@ -75,6 +76,10 @@ Route::get('sessions/{examSession}/teachers/import', TeachersImport::class)
 Route::get('sessions/{examSession}/subjects', SubjectsIndex::class)
     ->middleware(['auth'])
     ->name('sessions.subjects.index');
+
+Route::get('sessions/{examSession}/subjects/{subjectId}', SubjectsShow::class)
+    ->middleware(['auth'])
+    ->name('sessions.subjects.show');
 
 Route::get('sessions/{examSession}/students', StudentsIndex::class)
     ->middleware(['auth'])

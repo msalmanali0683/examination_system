@@ -97,7 +97,13 @@
                                     <input type="checkbox" wire:model.live="selected" value="{{ $subject->id }}" aria-label="Select {{ $subject->code }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
                                 @endunless
                             </td>
-                            <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">{{ $subject->code }}</td>
+                            <td class="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">
+                                @if ($subject->isMerged())
+                                    {{ $subject->code }}
+                                @else
+                                    <a href="{{ route('sessions.subjects.show', [$examSession, $subject]) }}" class="hover:underline">{{ $subject->code }}</a>
+                                @endif
+                            </td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->title }}</td>
                             <td class="py-3 pr-4 text-gray-500 dark:text-gray-400">{{ $subject->credit_hours ?? '—' }}</td>
                             <td class="py-3 pr-4">
@@ -108,6 +114,9 @@
                                 @endif
                             </td>
                             <td class="py-3 pr-4 sm:pr-6 text-right whitespace-nowrap">
+                                @unless ($subject->isMerged())
+                                    <a href="{{ route('sessions.subjects.show', [$examSession, $subject]) }}" class="text-sm font-medium text-primary-600 hover:underline mr-3">Sections</a>
+                                @endunless
                                 <button type="button" wire:click="deleteSubject({{ $subject->id }})" wire:confirm="Delete {{ $subject->code }} — {{ $subject->title }}? This also removes its enrollments, the seats assigned for it and its timetable slot in this session. Students are kept. This cannot be undone." aria-label="Delete {{ $subject->code }}" class="text-sm font-medium text-red-600 hover:underline">Delete</button>
                             </td>
                         </tr>
