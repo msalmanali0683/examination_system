@@ -7,6 +7,7 @@ use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SessionTeacherConstraint;
 use App\Services\Generation\DTOs\SeatingResult;
+use App\Services\Generation\DTOs\SeatingWarning;
 use App\Services\Generation\DTOs\SeatPlacement;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
@@ -32,6 +33,29 @@ class SlotCapacitySimulator
     public function __construct()
     {
         $this->strategy = new StrictSeatingStrategy;
+    }
+
+    /**
+     * Relabels each simulated slot as "Day X, Slot Y" given how many slots run per day — a display
+     * concern the simulator itself has no notion of (it only knows "slot 1, slot 2, ..."), applied
+     * after simulate() wherever a days-per-slot setting is in play (the Check Capacity page and its
+     * downloads), so both describe the same simulated slot the same way. Leaves the "(N subjects)"
+     * suffix already on each label untouched.
+     *
+     * @param  Collection<int, SlotRequirement>  $slotRequirements
+     * @return Collection<int, SlotRequirement>
+     */
+    public static function withDayAndSlotLabels(Collection $slotRequirements, int $slotsPerDay): Collection
+    {
+        $perDay = max(1, $slotsPerDay);
+
+        return $slotRequirements->values()->map(function (SlotRequirement $r, int $index) use ($perDay) {
+            $day = intdiv($index, $perDay) + 1;
+            $slotInDay = ($index % $perDay) + 1;
+            $label = preg_replace('/^Simulated Slot \d+/', "Day {$day}, Slot {$slotInDay}", $r->label);
+
+            return new SlotRequirement(...[...get_object_vars($r), 'label' => $label]);
+        });
     }
 
     /**
@@ -128,8 +152,35 @@ class SlotCapacitySimulator
                 hasUnseatedStudents: $unseated->isNotEmpty(),
                 seatsAvailable: $seatsAvailable,
                 roomBreakdown: $this->roomBreakdown($result->placements, $enrollmentsById, $roomTemplate),
+                unseatedBreakdown: $this->unseatedBreakdown($unseated, $enrollmentsById),
             );
         });
+    }
+
+    /**
+     * Which section(s) of which subject(s) went unseated, and how many — grouped the same way
+     * roomBreakdown() groups what WAS seated, so the two line up for display.
+     *
+     * @param  Collection<int, SeatingWarning>  $unseated
+     * @param  Collection<int, Enrollment>  $enrollmentsById
+     * @return array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>
+     */
+    private function unseatedBreakdown(Collection $unseated, Collection $enrollmentsById): array
+    {
+        return $unseated
+            ->groupBy(fn (SeatingWarning $w) => $enrollmentsById[$w->enrollmentId]->subject_id.'|'.$enrollmentsById[$w->enrollmentId]->section)
+            ->map(function (Collection $rows) use ($enrollmentsById) {
+                $enrollment = $enrollmentsById[$rows->first()->enrollmentId];
+
+                return [
+                    'subjectCode' => $enrollment->subject->code,
+                    'subjectTitle' => $enrollment->subject->title,
+                    'section' => $enrollment->section,
+                    'count' => $rows->count(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

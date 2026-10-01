@@ -141,6 +141,33 @@ class CapacitySimulationDownloadTest extends TestCase
         $this->assertSame('CS101', $room['sections'][0]['subjectCode']);
     }
 
+    public function test_per_day_query_parameter_labels_slots_by_day_in_the_export_view(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(2)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subjectA = Subject::factory()->create();
+        $subjectB = Subject::factory()->create();
+        $this->enroll($session, $subjectA, 'A', 2);
+        $this->enroll($session, $subjectB, 'B', 2);
+
+        $simulator = new SlotCapacitySimulator;
+        $slots = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($session, null, 1), 1);
+        $html = (new CapacitySimulationExport($session, $simulator->subjectRequirements($session), $slots))->view()->render();
+
+        $this->assertStringContainsString('Day 1, Slot 1', $html);
+        $this->assertStringContainsString('Day 2, Slot 1', $html);
+    }
+
+    public function test_per_day_query_parameter_defaults_to_two_when_absent_or_invalid(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        $this->actingAs($staff)
+            ->get(route('sessions.capacity-simulation.xlsx', [$session, 'per_day' => 'not-a-number']))
+            ->assertOk();
+    }
+
     public function test_max_query_parameter_is_passed_through_to_the_simulation(): void
     {
         $session = ExamSession::factory()->create();

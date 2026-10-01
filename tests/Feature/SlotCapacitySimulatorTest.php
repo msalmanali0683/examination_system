@@ -269,6 +269,76 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->assertGreaterThan($requirement->roomsAvailable, $requirement->roomsNeeded);
         $this->assertGreaterThan(0, $requirement->roomsShortfall());
         $this->assertFalse($requirement->isMet());
+        $this->assertSame(5, array_sum(array_column($requirement->unseatedBreakdown, 'count')), 'all 10 seats taken, 5 of the 15 enrolled go unseated');
+        $this->assertSame('BSAI 1A', $requirement->unseatedBreakdown[0]['section']);
+    }
+
+    public function test_room_breakdown_and_unseated_breakdown_together_account_for_every_enrolled_student(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['name' => 'Only Room', 'rows' => 4, 'columns' => 1, 'capacity' => 4]);
+
+        $subject = Subject::factory()->create(['code' => 'CS999']);
+        $this->enrollStudents($session, $subject, 'BSAI 3C', 6);
+
+        $requirement = (new SlotCapacitySimulator)->simulate($session)->first();
+
+        $this->assertTrue($requirement->hasUnseatedStudents);
+        $seated = array_sum(array_column($requirement->roomBreakdown[0]['sections'], 'count'));
+        $unseated = array_sum(array_column($requirement->unseatedBreakdown, 'count'));
+        $this->assertSame(4, $seated);
+        $this->assertSame(2, $unseated);
+        $this->assertSame('CS999', $requirement->unseatedBreakdown[0]['subjectCode']);
+        $this->assertSame('BSAI 3C', $requirement->unseatedBreakdown[0]['section']);
+    }
+
+    public function test_unseated_breakdown_is_empty_when_everyone_gets_a_seat(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'BSAI 1A', 5);
+
+        $requirement = (new SlotCapacitySimulator)->simulate($session)->first();
+
+        $this->assertFalse($requirement->hasUnseatedStudents);
+        $this->assertSame([], $requirement->unseatedBreakdown);
+    }
+
+    public function test_with_day_and_slot_labels_numbers_slots_by_day_then_resets(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(4)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+
+        $subjects = Subject::factory()->count(4)->create();
+        foreach ($subjects as $subject) {
+            $this->enrollStudents($session, $subject, 'A', 5);
+        }
+
+        // Capped at 1 per slot forces 4 separate simulated slots.
+        $result = (new SlotCapacitySimulator)->simulate($session, maxSubjectsPerSlot: 1);
+        $this->assertCount(4, $result);
+
+        $labeled = SlotCapacitySimulator::withDayAndSlotLabels($result, 3);
+
+        $this->assertSame('Day 1, Slot 1 (1 subject)', $labeled->get(0)->label);
+        $this->assertSame('Day 1, Slot 2 (1 subject)', $labeled->get(1)->label);
+        $this->assertSame('Day 1, Slot 3 (1 subject)', $labeled->get(2)->label);
+        $this->assertSame('Day 2, Slot 1 (1 subject)', $labeled->get(3)->label);
+    }
+
+    public function test_with_day_and_slot_labels_treats_a_zero_or_negative_per_day_as_one(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'A', 5);
+
+        $result = (new SlotCapacitySimulator)->simulate($session);
+        $labeled = SlotCapacitySimulator::withDayAndSlotLabels($result, 0);
+
+        $this->assertSame('Day 1, Slot 1 (1 subject)', $labeled->first()->label);
     }
 
     public function test_no_enrollments_yet_returns_an_empty_collection(): void

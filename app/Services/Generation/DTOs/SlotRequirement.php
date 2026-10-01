@@ -51,6 +51,14 @@ final class SlotRequirement
          * @var array<int, array{roomName: string, capacity: int, filled: int, remaining: int, sections: array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>}>
          */
         public readonly array $roomBreakdown = [],
+        /**
+         * Which section(s) of which subject(s) actually went unseated — ran out of room capacity
+         * entirely, not placed in any room — and how many. Only SlotCapacitySimulator populates this,
+         * same as roomBreakdown above; empty whenever hasUnseatedStudents is false.
+         *
+         * @var array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>
+         */
+        public readonly array $unseatedBreakdown = [],
     ) {}
 
     /**

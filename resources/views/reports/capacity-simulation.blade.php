@@ -77,6 +77,16 @@
                 </tr>
             @endforeach
         @endif
+        @if (! empty($slot->unseatedBreakdown))
+            <tr>
+                <td colspan="2" style="border:1px solid #94A3B8;padding:3px;font-weight:bold;color:#C00000;">No room left &mdash; not seated</td>
+                <td colspan="2" style="border:1px solid #94A3B8;padding:3px;font-weight:bold;color:#C00000;">
+                    @foreach ($slot->unseatedBreakdown as $sec)
+                        {{ $sec['subjectCode'] }} &ndash; {{ $sec['subjectTitle'] }} ({{ $sec['section'] }}): {{ $sec['count'] }} student{{ $sec['count'] === 1 ? '' : 's' }}@if (! $loop->last)<br>@endif
+                    @endforeach
+                </td>
+            </tr>
+        @endif
     @empty
         <tr>
             <td colspan="4" style="border:1px solid #94A3B8;padding:4px;text-align:center;">No enrollments yet to simulate.</td>

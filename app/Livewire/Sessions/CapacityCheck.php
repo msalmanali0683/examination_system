@@ -16,9 +16,9 @@ class CapacityCheck extends Component
     public bool $showCurrent = false;
 
     /**
-     * How many simulated slots run per day — used only to turn the
-     * auto-grouped slot count into a day count; it has no effect on how
-     * subjects are grouped (see SlotCapacitySimulator).
+     * How many simulated slots run per day — turns the auto-grouped slot count into a day count, and
+     * labels each slot "Day X, Slot Y" accordingly; has no effect on how subjects are grouped (see
+     * SlotCapacitySimulator), purely a display concern layered on afterward.
      */
     public int $slotsPerDay = 2;
 
@@ -90,8 +90,9 @@ class CapacityCheck extends Component
     }
 
     /**
-     * The query string for this simulation's download links — only the two inputs that actually
-     * change simulate()'s grouping; slotsPerDay is display-only math and plays no part in it.
+     * The query string for this simulation's download links — min/max change simulate()'s grouping;
+     * per_day is display-only (it relabels slots "Day X, Slot Y" the same way render() does below) but
+     * still passed through so the download matches whatever's currently on screen.
      *
      * @return array<string, int>
      */
@@ -100,12 +101,14 @@ class CapacityCheck extends Component
         return array_filter([
             'min' => $this->minSubjectsPerSlot !== '' ? (int) $this->minSubjectsPerSlot : null,
             'max' => $this->maxSubjectsPerSlot !== '' ? (int) $this->maxSubjectsPerSlot : null,
+            'per_day' => $this->slotsPerDay,
         ], fn ($value) => $value !== null);
     }
 
     public function render()
     {
         $slotRequirements = collect($this->slotRequirementsData)->map(fn (array $data) => new SlotRequirement(...$data));
+        $slotRequirements = SlotCapacitySimulator::withDayAndSlotLabels($slotRequirements, $this->slotsPerDay);
 
         return view('livewire.sessions.capacity-check', [
             'currentRequirements' => $this->showCurrent ? (new RequirementCalculator)->calculate($this->examSession) : collect(),

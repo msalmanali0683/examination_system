@@ -26,9 +26,10 @@ class CapacitySimulationDownloadController extends Controller
 
         [$min, $max] = $this->minMax($request);
         $simulator = new SlotCapacitySimulator;
+        $slotRequirements = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($examSession, $min, $max), $this->perDay($request));
 
         return Excel::download(
-            new CapacitySimulationExport($examSession, $simulator->subjectRequirements($examSession), $simulator->simulate($examSession, $min, $max), $min, $max),
+            new CapacitySimulationExport($examSession, $simulator->subjectRequirements($examSession), $slotRequirements, $min, $max),
             $this->filename($examSession, 'xlsx')
         );
     }
@@ -39,11 +40,12 @@ class CapacitySimulationDownloadController extends Controller
 
         [$min, $max] = $this->minMax($request);
         $simulator = new SlotCapacitySimulator;
+        $slotRequirements = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($examSession, $min, $max), $this->perDay($request));
 
         return Pdf::loadView('reports.capacity-simulation-pdf', [
             'session' => $examSession,
             'subjectRequirements' => $simulator->subjectRequirements($examSession),
-            'slotRequirements' => $simulator->simulate($examSession, $min, $max),
+            'slotRequirements' => $slotRequirements,
             'min' => $min,
             'max' => $max,
         ])->setPaper('a4', 'portrait')->download($this->filename($examSession, 'pdf'));
@@ -61,6 +63,17 @@ class CapacitySimulationDownloadController extends Controller
             ($min !== null && ctype_digit((string) $min)) ? (int) $min : null,
             ($max !== null && ctype_digit((string) $max)) ? (int) $max : null,
         ];
+    }
+
+    /**
+     * Matches CapacityCheck's own default (2) so a download requested without visiting the page first
+     * labels slots the same way the page would show them fresh.
+     */
+    private function perDay(Request $request): int
+    {
+        $perDay = $request->query('per_day');
+
+        return ($perDay !== null && ctype_digit((string) $perDay) && (int) $perDay > 0) ? (int) $perDay : 2;
     }
 
     private function filename(ExamSession $examSession, string $extension): string

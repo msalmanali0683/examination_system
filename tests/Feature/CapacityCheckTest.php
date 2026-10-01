@@ -167,14 +167,45 @@ class CapacityCheckTest extends TestCase
         $staff = User::factory()->create(['role' => 'staff']);
         $session = ExamSession::factory()->create();
 
+        // per_day always rides along (it has a real default, 2, unlike min/max which default to "unset").
         $component = Livewire::actingAs($staff)->test(CapacityCheck::class, ['examSession' => $session]);
-        $this->assertSame([], $component->instance()->simulationQuery());
+        $this->assertSame(['per_day' => 2], $component->instance()->simulationQuery());
 
         $component->set('minSubjectsPerSlot', '2');
-        $this->assertSame(['min' => 2], $component->instance()->simulationQuery());
+        $this->assertSame(['min' => 2, 'per_day' => 2], $component->instance()->simulationQuery());
 
         $component->set('maxSubjectsPerSlot', '5');
-        $this->assertSame(['min' => 2, 'max' => 5], $component->instance()->simulationQuery());
+        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 2], $component->instance()->simulationQuery());
+
+        $component->set('slotsPerDay', 3);
+        $this->assertSame(['min' => 2, 'max' => 5, 'per_day' => 3], $component->instance()->simulationQuery());
+    }
+
+    public function test_simulated_slots_are_labeled_by_day_according_to_slots_per_day(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(4)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+
+        foreach (Subject::factory()->count(4)->create() as $subject) {
+            $student = Student::factory()->create(['roll_no' => str_pad((string) ++self::$rollNoSequence, 8, '0', STR_PAD_LEFT)]);
+            Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id, 'section' => 'A']);
+        }
+
+        $component = Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('slotsPerDay', 2)
+            ->set('maxSubjectsPerSlot', '1')
+            ->call('simulateSlots');
+
+        $labels = $component->viewData('slotRequirements')->pluck('label')->all();
+
+        $this->assertSame([
+            'Day 1, Slot 1 (1 subject)',
+            'Day 1, Slot 2 (1 subject)',
+            'Day 2, Slot 1 (1 subject)',
+            'Day 2, Slot 2 (1 subject)',
+        ], $labels);
     }
 
     public function test_download_links_use_the_current_min_and_max_once_a_simulation_has_run(): void
@@ -193,8 +224,8 @@ class CapacityCheckTest extends TestCase
             ->call('simulateSlots')
             ->html();
 
-        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.xlsx', [$session, 'min' => 1, 'max' => 3])), $html);
-        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.pdf', [$session, 'min' => 1, 'max' => 3])), $html);
+        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.xlsx', [$session, 'min' => 1, 'max' => 3, 'per_day' => 2])), $html);
+        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.pdf', [$session, 'min' => 1, 'max' => 3, 'per_day' => 2])), $html);
     }
 
     public function test_re_simulating_with_an_invalid_slots_per_day_does_not_crash_on_cached_results(): void

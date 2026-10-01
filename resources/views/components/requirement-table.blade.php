@@ -67,7 +67,7 @@
                             @endif
                         </td>
                     </tr>
-                    @if (! empty($r->roomBreakdown))
+                    @if (! empty($r->roomBreakdown) || ! empty($r->unseatedBreakdown))
                         <tr>
                             <td colspan="5" class="pb-3 pl-4 sm:pl-6 pr-4 sm:pr-6">
                                 <div class="overflow-x-auto rounded-lg ring-1 ring-gray-100 dark:ring-gray-700/60">
@@ -93,6 +93,16 @@
                                                     <td class="py-1.5 px-3 text-gray-500 dark:text-gray-400">{{ $room['filled'] }} / {{ $room['remaining'] }} free</td>
                                                 </tr>
                                             @endforeach
+                                            @if (! empty($r->unseatedBreakdown))
+                                                <tr class="bg-red-50 dark:bg-red-900/20">
+                                                    <td colspan="2" class="py-1.5 px-3 font-medium text-red-600 dark:text-red-400">No room left &mdash; not seated</td>
+                                                    <td colspan="2" class="py-1.5 px-3 font-medium text-red-600 dark:text-red-400">
+                                                        @foreach ($r->unseatedBreakdown as $sec)
+                                                            {{ $sec['subjectCode'] }} ({{ $sec['section'] }}): {{ $sec['count'] }} student{{ $sec['count'] === 1 ? '' : 's' }}{{ ! $loop->last ? ', ' : '' }}
+                                                        @endforeach
+                                                    </td>
+                                                </tr>
+                                            @endif
                                         </tbody>
                                     </table>
                                 </div>
