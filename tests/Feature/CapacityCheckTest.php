@@ -162,6 +162,41 @@ class CapacityCheckTest extends TestCase
             ->assertDispatched('open-modal');
     }
 
+    public function test_simulation_query_only_includes_the_bounds_actually_set(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+
+        $component = Livewire::actingAs($staff)->test(CapacityCheck::class, ['examSession' => $session]);
+        $this->assertSame([], $component->instance()->simulationQuery());
+
+        $component->set('minSubjectsPerSlot', '2');
+        $this->assertSame(['min' => 2], $component->instance()->simulationQuery());
+
+        $component->set('maxSubjectsPerSlot', '5');
+        $this->assertSame(['min' => 2, 'max' => 5], $component->instance()->simulationQuery());
+    }
+
+    public function test_download_links_use_the_current_min_and_max_once_a_simulation_has_run(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        $subject = Subject::factory()->create();
+        $student = Student::factory()->create();
+        Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+
+        $html = Livewire::actingAs($staff)
+            ->test(CapacityCheck::class, ['examSession' => $session])
+            ->set('minSubjectsPerSlot', '1')
+            ->set('maxSubjectsPerSlot', '3')
+            ->call('simulateSlots')
+            ->html();
+
+        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.xlsx', [$session, 'min' => 1, 'max' => 3])), $html);
+        $this->assertStringContainsString(htmlspecialchars(route('sessions.capacity-simulation.pdf', [$session, 'min' => 1, 'max' => 3])), $html);
+    }
+
     public function test_re_simulating_with_an_invalid_slots_per_day_does_not_crash_on_cached_results(): void
     {
         // Regression: after a successful simulate, slotRequirementsData

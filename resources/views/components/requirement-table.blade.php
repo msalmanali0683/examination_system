@@ -17,7 +17,7 @@
             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                 @foreach ($requirements as $r)
                     <tr>
-                        <td class="py-2 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">{{ $r->label }}</td>
+                        <td class="py-2 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100 align-top">{{ $r->label }}</td>
                         <td @class(['py-2 pr-4', 'text-red-600 dark:text-red-400 font-medium' => $r->seatsShortfall() > 0, 'text-gray-500 dark:text-gray-400' => $r->seatsShortfall() === 0])>
                             {{ $r->studentCount }} / {{ $r->seatsAvailable }}
                             @if ($r->seatsShortfall() > 0)
@@ -67,6 +67,38 @@
                             @endif
                         </td>
                     </tr>
+                    @if (! empty($r->roomBreakdown))
+                        <tr>
+                            <td colspan="5" class="pb-3 pl-4 sm:pl-6 pr-4 sm:pr-6">
+                                <div class="overflow-x-auto rounded-lg ring-1 ring-gray-100 dark:ring-gray-700/60">
+                                    <table class="min-w-full text-xs">
+                                        <thead>
+                                            <tr class="text-left text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50">
+                                                <th class="py-1.5 px-3 font-medium">Room</th>
+                                                <th class="py-1.5 px-3 font-medium">Capacity</th>
+                                                <th class="py-1.5 px-3 font-medium">Filled By</th>
+                                                <th class="py-1.5 px-3 font-medium">Filled / Remaining</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                            @foreach ($r->roomBreakdown as $room)
+                                                <tr>
+                                                    <td class="py-1.5 px-3 text-gray-900 dark:text-gray-100">{{ $room['roomName'] }}</td>
+                                                    <td class="py-1.5 px-3 text-gray-500 dark:text-gray-400">{{ $room['capacity'] }}</td>
+                                                    <td class="py-1.5 px-3 text-gray-500 dark:text-gray-400">
+                                                        @foreach ($room['sections'] as $sec)
+                                                            {{ $sec['subjectCode'] }} ({{ $sec['section'] }}): {{ $sec['count'] }}{{ ! $loop->last ? ', ' : '' }}
+                                                        @endforeach
+                                                    </td>
+                                                    <td class="py-1.5 px-3 text-gray-500 dark:text-gray-400">{{ $room['filled'] }} / {{ $room['remaining'] }} free</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

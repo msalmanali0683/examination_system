@@ -89,6 +89,20 @@ class CapacityCheck extends Component
         $this->showSlotSimulation = true;
     }
 
+    /**
+     * The query string for this simulation's download links — only the two inputs that actually
+     * change simulate()'s grouping; slotsPerDay is display-only math and plays no part in it.
+     *
+     * @return array<string, int>
+     */
+    public function simulationQuery(): array
+    {
+        return array_filter([
+            'min' => $this->minSubjectsPerSlot !== '' ? (int) $this->minSubjectsPerSlot : null,
+            'max' => $this->maxSubjectsPerSlot !== '' ? (int) $this->maxSubjectsPerSlot : null,
+        ], fn ($value) => $value !== null);
+    }
+
     public function render()
     {
         $slotRequirements = collect($this->slotRequirementsData)->map(fn (array $data) => new SlotRequirement(...$data));

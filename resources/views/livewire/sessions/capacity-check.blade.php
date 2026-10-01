@@ -93,6 +93,11 @@
                     </div>
                 </div>
 
+                <div class="mt-4 flex items-center gap-2 flex-wrap">
+                    <x-btn :href="route('sessions.capacity-simulation.xlsx', [$examSession, ...$this->simulationQuery()])" variant="secondary" icon="download">Download Excel</x-btn>
+                    <x-btn :href="route('sessions.capacity-simulation.pdf', [$examSession, ...$this->simulationQuery()])" variant="secondary" icon="download">Download PDF</x-btn>
+                </div>
+
                 <x-requirement-table :requirements="$slotRequirements" />
             @endif
         @endif

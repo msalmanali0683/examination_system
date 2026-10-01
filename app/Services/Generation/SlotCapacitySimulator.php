@@ -7,6 +7,7 @@ use App\Models\ExamSession;
 use App\Models\Room;
 use App\Models\SessionTeacherConstraint;
 use App\Services\Generation\DTOs\SeatingResult;
+use App\Services\Generation\DTOs\SeatPlacement;
 use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\Strategies\StrictSeatingStrategy;
 use Illuminate\Support\Collection;
@@ -34,6 +35,29 @@ class SlotCapacitySimulator
     }
 
     /**
+     * One row per subject: how many seats it needs (its enrolled student count) — independent of
+     * simulate()'s slot packing below, so it's available even for a subject that simulate() couldn't
+     * fit anywhere (which would otherwise mean it's simply missing from every simulated slot).
+     *
+     * @return Collection<int, array{code: string, title: string, sections: string, count: int}>
+     */
+    public function subjectRequirements(ExamSession $session): Collection
+    {
+        return Enrollment::where('exam_session_id', $session->id)
+            ->with('subject:id,code,title')
+            ->get()
+            ->groupBy('subject_id')
+            ->map(fn (Collection $rows) => [
+                'code' => $rows->first()->subject->code,
+                'title' => $rows->first()->subject->title,
+                'sections' => $rows->pluck('section')->unique()->sort()->values()->implode(', '),
+                'count' => $rows->count(),
+            ])
+            ->sortBy('code')
+            ->values();
+    }
+
+    /**
      * $minSubjectsPerSlot/$maxSubjectsPerSlot are optional targets, not
      * hard guarantees: max is enforced strictly (a slot never grows past
      * it), while min only biases which slot a subject is offered to first
@@ -50,6 +74,7 @@ class SlotCapacitySimulator
     {
         $enrollments = Enrollment::where('exam_session_id', $session->id)
             ->select('id', 'student_id', 'subject_id', 'section')
+            ->with('subject:id,code,title')
             ->get();
 
         if ($enrollments->isEmpty()) {
@@ -61,6 +86,9 @@ class SlotCapacitySimulator
         // in the session — this runs dozens of times per subject while
         // packing, so that difference is the gap between instant and slow.
         $enrollmentsBySubject = $enrollments->groupBy('subject_id');
+
+        // Looked up once per enrollment id while building each slot's room breakdown below.
+        $enrollmentsById = $enrollments->keyBy('id');
 
         $subjectIds = $enrollmentsBySubject
             ->sortByDesc(fn (Collection $rows) => $rows->count())
@@ -75,7 +103,7 @@ class SlotCapacitySimulator
 
         $bins = $this->packIntoBins($subjectIds, $conflictGraph, $enrollmentsBySubject, $roomTemplate, $minSubjectsPerSlot, $maxSubjectsPerSlot);
 
-        return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $roomTemplate, $roomsAvailable, $seatsAvailable, $teachersAvailable, $session) {
+        return collect($bins)->values()->map(function (array $subjectIdsInSlot, int $index) use ($enrollmentsBySubject, $enrollmentsById, $roomTemplate, $roomsAvailable, $seatsAvailable, $teachersAvailable, $session) {
             $result = $this->allocate($enrollmentsBySubject, $subjectIdsInSlot, $roomTemplate);
             $unseated = $result->warnings->where('type', 'unseated');
             $studentCount = collect($result->placements)->count() + $unseated->count();
@@ -99,8 +127,58 @@ class SlotCapacitySimulator
                 teachersAvailable: $teachersAvailable,
                 hasUnseatedStudents: $unseated->isNotEmpty(),
                 seatsAvailable: $seatsAvailable,
+                roomBreakdown: $this->roomBreakdown($result->placements, $enrollmentsById, $roomTemplate),
             );
         });
+    }
+
+    /**
+     * Room-by-room detail for one simulated slot: which room, its capacity, and which section(s) of
+     * which subject(s) fill it — Strict (what this simulator always uses) gives one subject+section
+     * per room, but a group too large for one room spans several, so a room can still show less than
+     * its own group's total. Grouped by room in the order rooms first received a placement.
+     *
+     * @param  SeatPlacement[]  $placements
+     * @param  Collection<int, Enrollment>  $enrollmentsById
+     * @param  array<int, array{room_id: int, name: string, rows: int, columns: int, capacity: int, occupied: array}>  $roomTemplate
+     * @return array<int, array{roomName: string, capacity: int, filled: int, remaining: int, sections: array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>}>
+     */
+    private function roomBreakdown(array $placements, Collection $enrollmentsById, array $roomTemplate): array
+    {
+        $roomsById = collect($roomTemplate)->keyBy('room_id');
+
+        return collect($placements)
+            ->groupBy('roomId')
+            ->map(function (Collection $roomPlacements, int $roomId) use ($enrollmentsById, $roomsById) {
+                $room = $roomsById->get($roomId);
+
+                $sections = $roomPlacements
+                    ->groupBy(fn (SeatPlacement $p) => $enrollmentsById[$p->enrollmentId]->subject_id.'|'.$enrollmentsById[$p->enrollmentId]->section)
+                    ->map(function (Collection $rows) use ($enrollmentsById) {
+                        $enrollment = $enrollmentsById[$rows->first()->enrollmentId];
+
+                        return [
+                            'subjectCode' => $enrollment->subject->code,
+                            'subjectTitle' => $enrollment->subject->title,
+                            'section' => $enrollment->section,
+                            'count' => $rows->count(),
+                        ];
+                    })
+                    ->values()
+                    ->all();
+
+                $filled = array_sum(array_column($sections, 'count'));
+
+                return [
+                    'roomName' => $room['name'],
+                    'capacity' => $room['capacity'],
+                    'filled' => $filled,
+                    'remaining' => $room['capacity'] - $filled,
+                    'sections' => $sections,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -204,13 +282,14 @@ class SlotCapacitySimulator
      * read-only (PHP arrays copy on write, so nothing leaks between the
      * dozens of independent simulations run while packing).
      *
-     * @return array<int, array{room_id: int, rows: int, columns: int, capacity: int, occupied: array}>
+     * @return array<int, array{room_id: int, name: string, rows: int, columns: int, capacity: int, occupied: array}>
      */
     private function activeRoomTemplate(ExamSession $session): array
     {
         return $session->rooms()->where('is_active', true)->get()
             ->map(fn (Room $room) => [
                 'room_id' => $room->id,
+                'name' => $room->name,
                 'rows' => $room->rows,
                 'columns' => $room->columns,
                 'capacity' => $room->capacity,

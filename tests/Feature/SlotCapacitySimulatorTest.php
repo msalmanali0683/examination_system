@@ -293,4 +293,54 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->assertSame(2, $result->first()->roomsNeeded);
         $this->assertSame(4, $result->first()->teachersNeeded);
     }
+
+    public function test_room_breakdown_names_the_room_its_capacity_and_which_section_fills_it(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['name' => 'ITC-310', 'rows' => 10, 'columns' => 1, 'capacity' => 10]);
+
+        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $this->enrollStudents($session, $subject, 'BSCS 1A', 6);
+
+        $breakdown = (new SlotCapacitySimulator)->simulate($session)->first()->roomBreakdown;
+
+        $this->assertCount(1, $breakdown);
+        $room = $breakdown[0];
+        $this->assertSame('ITC-310', $room['roomName']);
+        $this->assertSame(10, $room['capacity']);
+        $this->assertSame(6, $room['filled']);
+        $this->assertSame(4, $room['remaining']);
+        $this->assertCount(1, $room['sections']);
+        $this->assertSame('CS101', $room['sections'][0]['subjectCode']);
+        $this->assertSame('Intro to Programming', $room['sections'][0]['subjectTitle']);
+        $this->assertSame('BSCS 1A', $room['sections'][0]['section']);
+        $this->assertSame(6, $room['sections'][0]['count']);
+    }
+
+    public function test_room_breakdown_splits_a_group_too_large_for_one_room_across_several(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['name' => 'Room A', 'rows' => 5, 'columns' => 1, 'capacity' => 5]);
+        Room::factory()->for($session)->create(['name' => 'Room B', 'rows' => 5, 'columns' => 1, 'capacity' => 5]);
+
+        $subject = Subject::factory()->create(['code' => 'EE201']);
+        $this->enrollStudents($session, $subject, 'BSEE 2A', 8);
+
+        $breakdown = (new SlotCapacitySimulator)->simulate($session)->first()->roomBreakdown;
+
+        $this->assertCount(2, $breakdown);
+        $this->assertSame(8, collect($breakdown)->sum('filled'));
+        foreach ($breakdown as $room) {
+            $this->assertSame('EE201', $room['sections'][0]['subjectCode']);
+        }
+    }
+
+    public function test_room_breakdown_is_empty_when_nothing_is_enrolled(): void
+    {
+        $session = ExamSession::factory()->create();
+
+        $result = (new SlotCapacitySimulator)->simulate($session);
+
+        $this->assertTrue($result->isEmpty());
+    }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppearanceController;
+use App\Http\Controllers\CapacitySimulationDownloadController;
 use App\Http\Controllers\MissingTeacherTemplateController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Livewire\Dashboard;
@@ -128,6 +129,14 @@ Route::get('sessions/{examSession}/seating', SeatingChart::class)
 Route::get('sessions/{examSession}/duties', DutyBoard::class)
     ->middleware(['auth'])
     ->name('sessions.duties');
+
+Route::get('sessions/{examSession}/capacity-simulation.xlsx', [CapacitySimulationDownloadController::class, 'excel'])
+    ->middleware(['auth'])
+    ->name('sessions.capacity-simulation.xlsx');
+
+Route::get('sessions/{examSession}/capacity-simulation.pdf', [CapacitySimulationDownloadController::class, 'pdf'])
+    ->middleware(['auth'])
+    ->name('sessions.capacity-simulation.pdf');
 
 Route::middleware(['auth'])->prefix('sessions/{examSession}/reports')->name('sessions.reports.')->group(function () {
     Route::get('seating-chart.xlsx', [ReportDownloadController::class, 'seatingChartExcel'])->name('seating-chart.xlsx');

@@ -41,6 +41,16 @@ final class SlotRequirement
          * figure, e.g. SlotCapacitySimulator's hypothetical slots.
          */
         public readonly int $roomsAvailableSystemWide = PHP_INT_MAX,
+        /**
+         * Room-by-room detail for this slot: which room, its capacity, which section(s) fill it (in
+         * the order they were placed) and how many seats each took, plus how many seats are left over.
+         * Only SlotCapacitySimulator populates this (it's irrelevant to the real, already-generated
+         * timetable's requirement check) — empty for every other caller. Plain nested arrays, not
+         * objects, since this travels through a Livewire component's public property.
+         *
+         * @var array<int, array{roomName: string, capacity: int, filled: int, remaining: int, sections: array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>}>
+         */
+        public readonly array $roomBreakdown = [],
     ) {}
 
     /**
