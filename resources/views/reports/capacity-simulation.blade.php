@@ -21,6 +21,35 @@
     </tr>
 
     <tr>
+        <td colspan="4" style="text-align:center;font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Simulated Datesheet</td>
+    </tr>
+    <tr>
+        <td style="font-weight:bold;background:#DCE6F1;border:1px solid #94A3B8;padding:4px;">Day</td>
+        <td style="font-weight:bold;background:#DCE6F1;border:1px solid #94A3B8;padding:4px;">Slot</td>
+        <td style="font-weight:bold;background:#DCE6F1;border:1px solid #94A3B8;padding:4px;">Subject</td>
+        <td style="font-weight:bold;background:#DCE6F1;border:1px solid #94A3B8;padding:4px;">Semester</td>
+    </tr>
+    @forelse ($datesheetRowsByDay as $day => $dayRows)
+        <tr>
+            <td colspan="4" style="text-align:center;font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Day {{ $day }}</td>
+        </tr>
+        @foreach ($dayRows as $row)
+            <tr>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->day }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">Slot {{ $row->slotInDay }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->code }} &ndash; {{ $row->title }}</td>
+                <td style="border:1px solid #94A3B8;padding:3px;">{{ $row->semester }}</td>
+            </tr>
+        @endforeach
+    @empty
+        <tr>
+            <td colspan="4" style="border:1px solid #94A3B8;padding:4px;text-align:center;">No enrollments yet to simulate.</td>
+        </tr>
+    @endforelse
+
+    <tr><td colspan="4">&nbsp;</td></tr>
+
+    <tr>
         <td colspan="4" style="text-align:center;font-weight:bold;background:#C6E0B4;border:1px solid #94A3B8;padding:4px;">Seats Required Per Subject</td>
     </tr>
     <tr>

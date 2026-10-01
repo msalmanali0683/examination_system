@@ -381,6 +381,80 @@ class SlotCapacitySimulatorTest extends TestCase
         $this->assertTrue($default->hasUnseatedStudents, 'same outcome as the explicit Strict case above');
     }
 
+    public function test_subjects_lists_the_bins_subject_even_when_it_goes_entirely_unseated(): void
+    {
+        // No active rooms at all: the one subject can never be placed anywhere, so every one of its
+        // students is unseated (it appears in unseatedBreakdown and nowhere in roomBreakdown) — but
+        // `subjects` must still name it, since that's the timetable-level grouping decision, not the
+        // seating outcome.
+        $session = ExamSession::factory()->create();
+        $subject = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $this->enrollStudents($session, $subject, 'BSCS 1A', 3);
+
+        $result = (new SlotCapacitySimulator)->simulate($session)->first();
+
+        $this->assertTrue($result->hasUnseatedStudents);
+        $this->assertSame([], $result->roomBreakdown, 'nothing could be seated with zero active rooms');
+        $this->assertSame(3, array_sum(array_column($result->unseatedBreakdown, 'count')));
+        $this->assertSame(['CS101'], collect($result->subjects)->pluck('code')->all());
+        $this->assertSame('Intro to Programming', $result->subjects[0]['title']);
+        $this->assertSame('1st', $result->subjects[0]['semester']);
+    }
+
+    public function test_subjects_lists_every_subject_sharing_a_bin(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(2)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        $subjectA = Subject::factory()->create(['code' => 'CS101']);
+        $subjectB = Subject::factory()->create(['code' => 'EE201']);
+        $this->enrollStudents($session, $subjectA, 'A', 5);
+        $this->enrollStudents($session, $subjectB, 'B', 3);
+
+        $result = (new SlotCapacitySimulator)->simulate($session);
+
+        $this->assertCount(1, $result, 'both clash-free subjects fit together in one simulated slot');
+        $this->assertSame(['CS101', 'EE201'], collect($result->first()->subjects)->pluck('code')->sort()->values()->all());
+    }
+
+    public function test_datesheet_rows_by_day_groups_by_day_and_lists_every_subject_in_each_slot(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(4)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+
+        $subjects = Subject::factory()->count(4)->create();
+        foreach ($subjects as $i => $subject) {
+            $subject->update(['code' => 'SUBJ'.$i]);
+            $this->enrollStudents($session, $subject, 'A', 5);
+        }
+
+        // Capped at 1 per slot forces 4 separate simulated slots, 2 per day at per_day=2.
+        $result = (new SlotCapacitySimulator)->simulate($session, maxSubjectsPerSlot: 1);
+        $labeled = SlotCapacitySimulator::withDayAndSlotLabels($result, 2);
+
+        $rowsByDay = SlotCapacitySimulator::datesheetRowsByDay($labeled);
+
+        $this->assertCount(2, $rowsByDay);
+        $this->assertCount(2, $rowsByDay->get(1));
+        $this->assertCount(2, $rowsByDay->get(2));
+        $allCodes = $rowsByDay->flatten()->pluck('code')->sort()->values()->all();
+        $this->assertSame(['SUBJ0', 'SUBJ1', 'SUBJ2', 'SUBJ3'], $allCodes);
+    }
+
+    public function test_datesheet_rows_by_day_without_day_labels_collapses_into_one_day(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->create(['rows' => 10, 'columns' => 1, 'capacity' => 10]);
+        $subject = Subject::factory()->create();
+        $this->enrollStudents($session, $subject, 'A', 5);
+
+        // No withDayAndSlotLabels() call — day/slotInDay stay null on every SlotRequirement.
+        $result = (new SlotCapacitySimulator)->simulate($session);
+        $rowsByDay = SlotCapacitySimulator::datesheetRowsByDay($result);
+
+        $this->assertCount(1, $rowsByDay);
+        $this->assertTrue($rowsByDay->has(1));
+    }
+
     public function test_no_enrollments_yet_returns_an_empty_collection(): void
     {
         $session = ExamSession::factory()->create();

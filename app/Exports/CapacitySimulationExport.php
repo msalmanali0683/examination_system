@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\ExamSession;
+use App\Services\Generation\SlotCapacitySimulator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -25,6 +26,7 @@ class CapacitySimulationExport implements FromView, WithTitle
             'session' => $this->session,
             'subjectRequirements' => $this->subjectRequirements,
             'slotRequirements' => $this->slotRequirements,
+            'datesheetRowsByDay' => SlotCapacitySimulator::datesheetRowsByDay($this->slotRequirements),
             'min' => $this->min,
             'max' => $this->max,
             'strategyLabel' => ExamSession::SEATING_STRATEGIES[$this->strategyKey] ?? $this->strategyKey,

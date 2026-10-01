@@ -59,6 +59,21 @@ final class SlotRequirement
          * @var array<int, array{subjectCode: string, subjectTitle: string, section: string, count: int}>
          */
         public readonly array $unseatedBreakdown = [],
+        /**
+         * Every subject grouped into this simulated slot, regardless of whether it actually got seated
+         * — unlike roomBreakdown/unseatedBreakdown (which describe the seating OUTCOME), this is the
+         * timetable-level grouping decision itself, so a subject that went entirely unseated still
+         * appears here. Only SlotCapacitySimulator populates this; feeds its "simulated datesheet" view.
+         *
+         * @var array<int, array{code: string, title: string, semester: string}>
+         */
+        public readonly array $subjects = [],
+        /**
+         * Set by withDayAndSlotLabels() alongside the "Day X, Slot Y" label rewrite — null for every
+         * other caller (a real, already-dated slot has no need for a synthetic day/slot number).
+         */
+        public readonly ?int $day = null,
+        public readonly ?int $slotInDay = null,
     ) {}
 
     /**

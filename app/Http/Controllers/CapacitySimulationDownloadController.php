@@ -49,6 +49,7 @@ class CapacitySimulationDownloadController extends Controller
             'session' => $examSession,
             'subjectRequirements' => $simulator->subjectRequirements($examSession),
             'slotRequirements' => $slotRequirements,
+            'datesheetRowsByDay' => SlotCapacitySimulator::datesheetRowsByDay($slotRequirements),
             'min' => $min,
             'max' => $max,
             'strategyLabel' => ExamSession::SEATING_STRATEGIES[$strategyKey] ?? $strategyKey,

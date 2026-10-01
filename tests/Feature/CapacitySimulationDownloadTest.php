@@ -122,6 +122,32 @@ class CapacitySimulationDownloadTest extends TestCase
         $this->assertMatchesRegularExpression('/CS101.*Intro to Programming.*BSCS 1A.*>5</s', $html);
     }
 
+    public function test_the_simulated_datesheet_section_lists_each_subject_under_its_day_and_slot(): void
+    {
+        $session = ExamSession::factory()->create();
+        Room::factory()->for($session)->count(2)->create(['rows' => 20, 'columns' => 1, 'capacity' => 20]);
+        $subjectA = Subject::factory()->create(['code' => 'CS101', 'title' => 'Intro to Programming']);
+        $subjectB = Subject::factory()->create(['code' => 'EE201', 'title' => 'Circuits']);
+        $this->enroll($session, $subjectA, 'BSCS 1A', 5);
+        $this->enroll($session, $subjectB, 'BSEE 2A', 3);
+
+        $simulator = new SlotCapacitySimulator;
+        // Force two separate simulated slots so there's an actual Day/Slot split to check.
+        $slots = SlotCapacitySimulator::withDayAndSlotLabels($simulator->simulate($session, null, 1), 1);
+
+        $html = (new CapacitySimulationExport(
+            $session,
+            $simulator->subjectRequirements($session),
+            $slots,
+        ))->view()->render();
+
+        $this->assertStringContainsString('Simulated Datesheet', $html);
+        $this->assertStringContainsString('Day 1', $html);
+        $this->assertStringContainsString('Day 2', $html);
+        $this->assertStringContainsString('Intro to Programming', $html);
+        $this->assertStringContainsString('Circuits', $html);
+    }
+
     public function test_the_room_allocation_section_shows_which_room_and_section_fills_it(): void
     {
         $session = ExamSession::factory()->create();

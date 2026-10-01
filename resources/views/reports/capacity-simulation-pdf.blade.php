@@ -16,6 +16,7 @@
         'session' => $session,
         'subjectRequirements' => $subjectRequirements,
         'slotRequirements' => $slotRequirements,
+        'datesheetRowsByDay' => $datesheetRowsByDay,
         'min' => $min,
         'max' => $max,
         'strategyLabel' => $strategyLabel,

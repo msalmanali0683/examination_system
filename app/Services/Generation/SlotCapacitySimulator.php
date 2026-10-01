@@ -62,8 +62,32 @@ class SlotCapacitySimulator
             $slotInDay = ($index % $perDay) + 1;
             $label = preg_replace('/^Simulated Slot \d+/', "Day {$day}, Slot {$slotInDay}", $r->label);
 
-            return new SlotRequirement(...[...get_object_vars($r), 'label' => $label]);
+            return new SlotRequirement(...[...get_object_vars($r), 'label' => $label, 'day' => $day, 'slotInDay' => $slotInDay]);
         });
+    }
+
+    /**
+     * A "datesheet" view of the simulation: one row per subject in each simulated slot, grouped by
+     * day — the same minimal shape as the real Simple Datesheet report, but "Day X"/"Slot Y" instead
+     * of a real date, since these slots are hypothetical. $slotRequirements must already have gone
+     * through withDayAndSlotLabels() (day/slotInDay are null otherwise, and everything collapses into
+     * a single "day" group).
+     *
+     * @param  Collection<int, SlotRequirement>  $slotRequirements
+     * @return Collection<int, Collection<int, object{day: int, slotInDay: int, code: string, title: string, semester: string}>>
+     */
+    public static function datesheetRowsByDay(Collection $slotRequirements): Collection
+    {
+        return $slotRequirements
+            ->flatMap(fn (SlotRequirement $r) => collect($r->subjects)->map(fn (array $s) => (object) [
+                'day' => $r->day ?? 1,
+                'slotInDay' => $r->slotInDay ?? $r->timeSlotId,
+                'code' => $s['code'],
+                'title' => $s['title'],
+                'semester' => $s['semester'],
+            ]))
+            ->sortBy(fn ($row) => sprintf('%05d-%05d-%s', $row->day, $row->slotInDay, $row->title))
+            ->groupBy('day');
     }
 
     /**
@@ -161,8 +185,38 @@ class SlotCapacitySimulator
                 seatsAvailable: $seatsAvailable,
                 roomBreakdown: $this->roomBreakdown($result->placements, $enrollmentsById, $roomTemplate),
                 unseatedBreakdown: $this->unseatedBreakdown($unseated, $enrollmentsById),
+                subjects: $this->subjectsInSlot($subjectIdsInSlot, $enrollmentsBySubject),
             );
         });
+    }
+
+    /**
+     * Every subject grouped into this bin, independent of whether packIntoBins()'s capacity check
+     * left anyone unseated — this is the "which subject is on which simulated slot" decision itself,
+     * same granularity as SubjectSlotAssignment in the real timetable. A subject's semester uses every
+     * section it has in the whole session (not just the ones in this bin), same basis simple/formatted
+     * datesheets already use.
+     *
+     * @param  int[]  $subjectIdsInSlot
+     * @param  Collection<int, Collection<int, Enrollment>>  $enrollmentsBySubject
+     * @return array<int, array{code: string, title: string, semester: string}>
+     */
+    private function subjectsInSlot(array $subjectIdsInSlot, Collection $enrollmentsBySubject): array
+    {
+        return collect($subjectIdsInSlot)
+            ->map(function (int $subjectId) use ($enrollmentsBySubject) {
+                $rows = $enrollmentsBySubject->get($subjectId);
+                $subject = $rows->first()->subject;
+
+                return [
+                    'code' => $subject->code,
+                    'title' => $subject->title,
+                    'semester' => SemesterExtractor::label($rows->pluck('section')),
+                ];
+            })
+            ->sortBy('title')
+            ->values()
+            ->all();
     }
 
     /**
