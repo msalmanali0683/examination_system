@@ -10,7 +10,8 @@
 # undone — the pre-deploy snapshot in ~/backups is the way back for those.
 #
 # Nothing here needs a secret: the repository is public and the server only reads from it.
-# Log: ~/deploy.log      Retry a failed commit: rm ~/.auto-deploy-failed (or push a new commit).
+# Push to live takes about a minute or two. Log: ~/deploy.log
+# Retry a failed commit: rm ~/.auto-deploy-failed (or push a new commit).
 
 set -u
 export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
