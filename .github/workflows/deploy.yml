@@ -48,6 +48,9 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
+      - name: Check the server deploy script parses
+        run: bash -n deploy/auto-deploy.sh
+
       - name: Run the test suite
         run: php artisan test
 

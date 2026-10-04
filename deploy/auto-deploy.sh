@@ -109,8 +109,8 @@ fi
 
 "$PHP" artisan migrate --force >>"$LOG" 2>&1 || rollback "migration failed (changes it made before failing are not undone)"
 rebuild_caches || rollback "cache rebuild failed"
-"$PHP" artisan queue:restart >>"$LOG" 2>&1
-"$PHP" artisan up >>"$LOG" 2>&1
+"$PHP" artisan queue:restart >/dev/null 2>&1
+"$PHP" artisan up >/dev/null 2>&1
 
 sleep 3
 after=$(http_code)
@@ -120,3 +120,10 @@ fi
 
 rm -f "$FAILED_MARK"
 log "OK deployed ${new:0:7} (site HTTP $before -> $after)"
+
+# Pick up changes to this script itself; they apply from the next run. It is swapped in by rename,
+# so the copy that is running right now is untouched, and only if the new one passes a syntax check.
+if [ -f "$APP/deploy/auto-deploy.sh" ] && ! cmp -s "$APP/deploy/auto-deploy.sh" "$HOME/auto-deploy.sh" && bash -n "$APP/deploy/auto-deploy.sh" 2>/dev/null; then
+    cp "$APP/deploy/auto-deploy.sh" "$HOME/.auto-deploy.sh.new" && chmod 700 "$HOME/.auto-deploy.sh.new" \
+        && mv -f "$HOME/.auto-deploy.sh.new" "$HOME/auto-deploy.sh" && log "updated ~/auto-deploy.sh from the repo"
+fi
