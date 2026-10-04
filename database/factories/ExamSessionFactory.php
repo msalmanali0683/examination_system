@@ -27,6 +27,7 @@ class ExamSessionFactory extends Factory
             'invigilators_per_room' => 2,
             'teacher_subject_exclusion' => false,
             'respect_room_capacity' => false,
+            'share_slots' => false,
         ];
     }
 }

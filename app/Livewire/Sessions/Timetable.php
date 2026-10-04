@@ -15,6 +15,7 @@ use App\Services\Generation\ConflictNoteClassifier;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SemesterExtractor;
 use App\Services\Generation\SlotAvailability;
+use App\Services\Generation\SubjectSemesters;
 use App\Services\Generation\TimetableGenerator;
 use App\Services\SubjectMergeService;
 use Illuminate\Support\Facades\DB;
@@ -258,19 +259,7 @@ class Timetable extends Component
      */
     private function semestersForSubjects(int $sessionId, array $subjectIds): array
     {
-        return Enrollment::where('exam_session_id', $sessionId)
-            ->whereIn('subject_id', $subjectIds)
-            ->select('subject_id', 'section')
-            ->selectRaw('count(*) as c')
-            ->groupBy('subject_id', 'section')
-            ->get()
-            ->groupBy('subject_id')
-            ->map(function ($rows) {
-                $dominant = SemesterExtractor::dominant($rows->pluck('c', 'section'));
-
-                return $dominant === null ? [] : [$dominant];
-            })
-            ->all();
+        return SubjectSemesters::forSubjects($sessionId, $subjectIds);
     }
 
     /**
@@ -554,8 +543,10 @@ class Timetable extends Component
         $semesterBySubject = $this->semestersForSubjects($sessionId, $subjectIds);
 
         $graph = (new ConflictGraphBuilder)->build($enrollments);
-        $roomsFit = $this->examSession->respect_room_capacity ? $this->roomsFitChecker($sessionId, $excludedIds) : null;
-        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays, $roomsFit, $semesterBySubject);
+        // Sharing a slot is only safe if the rooms can seat everyone, so it needs the same fit check.
+        $shareSlots = $this->examSession->share_slots;
+        $roomsFit = ($this->examSession->respect_room_capacity || $shareSlots) ? $this->roomsFitChecker($sessionId, $excludedIds) : null;
+        $result = (new TimetableGenerator)->generate($subjectIds, $pinned, $timeSlotIds, $graph, $labels, $slotDays, $roomsFit, $semesterBySubject, $shareSlots);
 
         DB::transaction(function () use ($result, $sessionId, $pinned, $excludedIds) {
             foreach ($result->assignments as $subjectId => $slotId) {

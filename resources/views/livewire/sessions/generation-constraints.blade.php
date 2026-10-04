@@ -69,6 +69,15 @@
             </label>
         </div>
         <div class="sm:col-span-3">
+            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input type="checkbox" wire:model="share_slots" class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                <span>
+                    Fill spare rooms by letting subjects share a slot
+                    <span class="block mt-0.5 text-xs text-gray-500 dark:text-gray-400">When the rooms have space left, the timetable puts another subject in the same slot &mdash; only if the two share no student and the active rooms can seat both together (e.g. one subject needs 2 of 5 rooms, so a different semester's subject takes the other rooms). A subject the leftover rooms can't seat is not squeezed in. This also keeps every slot within room capacity. Use <em>Check Capacity &rarr; Slot Sharing Check</em> to see how many more seats the ones that didn't fit would need.</span>
+                </span>
+            </label>
+        </div>
+        <div class="sm:col-span-3">
             <x-btn type="submit" variant="dark" icon="check">Save Settings</x-btn>
         </div>
     </form>

@@ -100,4 +100,19 @@ class GenerationConstraintsTest extends TestCase
         $this->assertFalse($component->viewData('hasSeating'));
         $this->assertFalse($component->viewData('hasDuties'));
     }
+
+    public function test_staff_can_save_share_slots(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create();
+        $this->assertFalse($session->share_slots);
+
+        Livewire::actingAs($staff)
+            ->test(GenerationConstraints::class, ['examSession' => $session])
+            ->assertSet('share_slots', false)
+            ->set('share_slots', true)
+            ->call('saveSettings');
+
+        $this->assertTrue($session->fresh()->share_slots);
+    }
 }

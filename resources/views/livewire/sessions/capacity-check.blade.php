@@ -135,4 +135,93 @@
             @endif
         @endif
     </x-card>
+
+    <x-card>
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Slot Sharing Check</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    For every subject that has a slot all to itself in the current timetable: could it share another slot instead &mdash; with no student in common and the same-semester day rule intact &mdash; and if the rooms can't seat both, how many more seats are missing. Each row is judged on its own against the timetable as it stands; to apply sharing for real, turn on <em>Fill spare rooms by letting subjects share a slot</em> in Generation Settings and regenerate the timetable.
+                </p>
+            </div>
+            <x-btn wire:click="checkSharing" wire:loading.attr="disabled" wire:target="checkSharing" variant="secondary" icon="search">
+                <span wire:loading.remove wire:target="checkSharing">Check sharing</span>
+                <span wire:loading wire:target="checkSharing">Checking&hellip;</span>
+            </x-btn>
+        </div>
+
+        @if ($showSharing)
+            @if (empty($sharingRows))
+                <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">No subject has a slot to itself, or there is no timetable yet &mdash; generate the timetable first.</p>
+            @else
+                @php
+                    $fitCount = collect($sharingRows)->where('status', 'fits')->count();
+                    $shortCount = collect($sharingRows)->where('status', 'short')->count();
+                    $noneCount = collect($sharingRows)->where('status', 'none')->count();
+                @endphp
+                <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-green-700 dark:text-green-400">{{ $fitCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Can share now (frees a slot each)</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-yellow-700 dark:text-yellow-400">{{ $shortCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Would share, but need more seats</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <div class="text-2xl font-semibold text-gray-700 dark:text-gray-300">{{ $noneCount }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">No clash-free slot to share</div>
+                    </div>
+                </div>
+
+                <div class="mt-4 overflow-x-auto -mx-4 sm:-mx-6">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <thead>
+                            <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                <th class="py-2 pl-4 sm:pl-6 pr-4">Subject</th>
+                                <th class="py-2 pr-4">Semester</th>
+                                <th class="py-2 pr-4">Students</th>
+                                <th class="py-2 pr-4">Now alone in</th>
+                                <th class="py-2 pr-4">Could share</th>
+                                <th class="py-2 pr-4 sm:pr-6">Result</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            @foreach ($sharingRows as $row)
+                                <tr>
+                                    <td class="py-2 pl-4 sm:pl-6 pr-4 text-gray-900 dark:text-gray-100">
+                                        <span class="font-medium">{{ $row['code'] }}</span>
+                                        <span class="text-gray-500 dark:text-gray-400">&mdash; {{ $row['title'] }}</span>
+                                    </td>
+                                    <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $row['semester'] }}</td>
+                                    <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">{{ $row['students'] }}</td>
+                                    <td class="py-2 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ $row['fromLabel'] }}</td>
+                                    <td class="py-2 pr-4 text-gray-500 dark:text-gray-400">
+                                        @if ($row['toLabel'])
+                                            <span class="whitespace-nowrap">{{ $row['toLabel'] }}</span>
+                                            <span class="block text-xs">with {{ $row['with'] }}</span>
+                                        @else
+                                            &mdash;
+                                        @endif
+                                    </td>
+                                    <td class="py-2 pr-4 sm:pr-6">
+                                        @if ($row['status'] === 'fits')
+                                            <x-badge color="green">Fits</x-badge>
+                                        @elseif ($row['status'] === 'short')
+                                            <x-badge color="yellow">Needs {{ $row['seatsShort'] }} more {{ $row['seatsShort'] === 1 ? 'seat' : 'seats' }}</x-badge>
+                                            @if ($row['roomsHint'] > 0)
+                                                <span class="block mt-1 text-xs text-gray-500 dark:text-gray-400">&asymp; {{ $row['roomsHint'] }} more {{ $row['roomsHint'] === 1 ? 'room' : 'rooms' }} of the largest size</span>
+                                            @endif
+                                        @else
+                                            <x-badge color="gray">No clash-free slot</x-badge>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        @endif
+    </x-card>
 </div>

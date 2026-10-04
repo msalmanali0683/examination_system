@@ -7,6 +7,7 @@ use App\Services\Generation\DTOs\SlotRequirement;
 use App\Services\Generation\RequirementCalculator;
 use App\Services\Generation\SeatAllocationService;
 use App\Services\Generation\SlotCapacitySimulator;
+use App\Services\Generation\SlotSharingAdvisor;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
@@ -58,6 +59,16 @@ class CapacityCheck extends Component
      */
     public array $slotRequirementsData = [];
 
+    public bool $showSharing = false;
+
+    /**
+     * The last Slot Sharing Check, as plain arrays. Like the simulator it only runs on a click — it
+     * seats every candidate pairing, so it must never be a side effect of an unrelated re-render.
+     *
+     * @var array<int, array>
+     */
+    public array $sharingRows = [];
+
     public function mount(ExamSession $examSession): void
     {
         $this->authorize('generate_roster');
@@ -105,6 +116,14 @@ class CapacityCheck extends Component
             ->map(fn (SlotRequirement $r) => get_object_vars($r))
             ->all();
         $this->showSlotSimulation = true;
+    }
+
+    public function checkSharing(): void
+    {
+        $this->authorize('generate_roster');
+
+        $this->sharingRows = (new SlotSharingAdvisor)->analyze($this->examSession)->all();
+        $this->showSharing = true;
     }
 
     /**

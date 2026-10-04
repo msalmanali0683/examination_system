@@ -70,6 +70,15 @@ class TimetableGenerator
      *                                                (a subject can span more than one, e.g. mixed sections).
      *                                                Missing/empty for a subject means "unknown" — treated as
      *                                                same-semester with everything (see above).
+     * @param  bool  $shareSlots  when true (and $roomsFit is given), a subject prefers joining a slot that
+     *                            already has other subjects — as long as none of them shares a student with
+     *                            it, the same-semester day rule above still holds, and $roomsFit says the
+     *                            rooms can seat everyone together. This is what fills spare rooms: a subject
+     *                            that only needs 2 of 5 rooms leaves the other 3 for a different subject in
+     *                            the same slot, instead of every subject getting a slot to itself. A subject
+     *                            the leftover rooms cannot seat is simply not shared — it falls back to the
+     *                            normal spreading rules. Without this flag, sharing only ever happens when
+     *                            slots run out, exactly as before.
      */
     public function generate(
         array $subjectIds,
@@ -80,6 +89,7 @@ class TimetableGenerator
         array $slotDays = [],
         ?callable $roomsFit = null,
         array $semesterBySubject = [],
+        bool $shareSlots = false,
     ): TimetableResult {
         $dayOf = fn (int $slotId): string => $slotDays[$slotId] ?? 'slot-'.$slotId;
 
@@ -158,12 +168,19 @@ class TimetableGenerator
                         }
                     }
 
+                    $slotClashFree = $this->clashWeight($conflictGraph, $subjectId, $slotOccupantIds) === 0;
+                    $fits = $roomsFit === null || $roomsFit([...$slotOccupantIds, $subjectId], $slotId);
+
                     $candidate = [
                         'day' => $day,
                         'slot' => $slotId,
-                        'slotClashFree' => $this->clashWeight($conflictGraph, $subjectId, $slotOccupantIds) === 0,
-                        'fits' => $roomsFit === null || $roomsFit([...$slotOccupantIds, $subjectId], $slotId),
+                        'slotClashFree' => $slotClashFree,
+                        'fits' => $fits,
                         'sameSemesterDayWeight' => $sameSemesterDayWeight,
+                        // Joining a slot that already has someone in it, safely: no shared student, rooms
+                        // can seat everyone, and (via sameSemesterDayWeight) no same-semester day clash.
+                        'shares' => $shareSlots && $roomsFit !== null && $slotOccupantIds !== []
+                            && $slotClashFree && $fits && $sameSemesterDayWeight === 0,
                         'gapScore' => $gapScore,
                         'dayLoad' => $dayLoad,
                         'slotLoad' => count($slotOccupantIds),
@@ -512,8 +529,8 @@ class TimetableGenerator
     }
 
     /**
-     * @param  array{day: string, slot: int, slotClashFree: bool, fits: bool, sameSemesterDayWeight: int, gapScore: int, dayLoad: int, slotLoad: int}  $a
-     * @param  array{day: string, slot: int, slotClashFree: bool, fits: bool, sameSemesterDayWeight: int, gapScore: int, dayLoad: int, slotLoad: int}  $b
+     * @param  array{day: string, slot: int, slotClashFree: bool, fits: bool, sameSemesterDayWeight: int, shares: bool, gapScore: int, dayLoad: int, slotLoad: int}  $a
+     * @param  array{day: string, slot: int, slotClashFree: bool, fits: bool, sameSemesterDayWeight: int, shares: bool, gapScore: int, dayLoad: int, slotLoad: int}  $b
      */
     private function isBetterCandidate(array $a, array $b): bool
     {
@@ -527,6 +544,11 @@ class TimetableGenerator
 
         if ($a['sameSemesterDayWeight'] !== $b['sameSemesterDayWeight']) {
             return $a['sameSemesterDayWeight'] < $b['sameSemesterDayWeight'];
+        }
+
+        // Sharing a slot only ever outranks the spreading rules below, never the hard rules above.
+        if ($a['shares'] !== $b['shares']) {
+            return $a['shares'];
         }
 
         if ($a['gapScore'] !== $b['gapScore']) {

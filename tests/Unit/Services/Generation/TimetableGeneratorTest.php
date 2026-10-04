@@ -488,4 +488,124 @@ class TimetableGeneratorTest extends TestCase
         $this->assertNotSame($slotDays[$result->assignments[1]], $slotDays[$result->assignments[2]]);
         $this->assertTrue($result->conflicts->isEmpty());
     }
+
+    public function test_share_slots_puts_a_clash_free_subject_into_an_occupied_slot_when_the_rooms_can_seat_both(): void
+    {
+        // Two subjects with no student in common, rooms for plenty. Normally they would each get their
+        // own slot (spreading); with sharing on, the second joins the first so the spare rooms are used.
+        $arguments = [
+            'subjectIds' => [1, 2],
+            'pinned' => [],
+            'timeSlotIds' => [100, 200],
+            'conflictGraph' => [],
+            'subjectLabels' => $this->labels([1, 2]),
+            'slotDays' => [100 => 'day1', 200 => 'day2'],
+            'roomsFit' => fn (array $ids) => true,
+            'semesterBySubject' => [1 => [1], 2 => [3]],
+        ];
+
+        $spread = (new TimetableGenerator)->generate(...$arguments);
+        $this->assertNotSame($spread->assignments[1], $spread->assignments[2], 'control: without sharing they spread out');
+
+        $shared = (new TimetableGenerator)->generate(...$arguments, shareSlots: true);
+        $this->assertSame($shared->assignments[1], $shared->assignments[2]);
+        $this->assertTrue($shared->conflicts->isEmpty());
+    }
+
+    public function test_share_slots_never_puts_subjects_that_share_a_student_into_one_slot(): void
+    {
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 200],
+            conflictGraph: [1 => [2 => 3], 2 => [1 => 3]],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 200 => 'day2'],
+            roomsFit: fn (array $ids) => true,
+            semesterBySubject: [1 => [1], 2 => [3]],
+            shareSlots: true,
+        );
+
+        $this->assertNotSame($result->assignments[1], $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_share_slots_does_not_squeeze_in_a_subject_the_leftover_rooms_cannot_seat(): void
+    {
+        // Rooms only ever seat one subject at a time, so there is nothing to share — the second subject
+        // keeps its own slot and nothing is reported as a problem.
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 200],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 200 => 'day2'],
+            roomsFit: fn (array $ids) => count($ids) <= 1,
+            semesterBySubject: [1 => [1], 2 => [3]],
+            shareSlots: true,
+        );
+
+        $this->assertNotSame($result->assignments[1], $result->assignments[2]);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_share_slots_fills_a_slot_up_to_what_the_rooms_allow_then_opens_the_next(): void
+    {
+        // Five clash-free subjects, rooms for two subjects per slot, three slots on three days:
+        // 2 + 2 + 1, not one subject per slot and not everything piled into the first.
+        $slotDays = [100 => 'day1', 200 => 'day2', 300 => 'day3'];
+
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2, 3, 4, 5],
+            pinned: [],
+            timeSlotIds: [100, 200, 300],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2, 3, 4, 5]),
+            slotDays: $slotDays,
+            roomsFit: fn (array $ids) => count($ids) <= 2,
+            semesterBySubject: [1 => [1], 2 => [2], 3 => [3], 4 => [4], 5 => [5]],
+            shareSlots: true,
+        );
+
+        $perSlot = collect($result->assignments)->countBy()->sortKeys()->all();
+        $this->assertSame([100 => 2, 200 => 2, 300 => 1], $perSlot);
+        $this->assertTrue($result->conflicts->isEmpty());
+    }
+
+    public function test_share_slots_does_nothing_without_a_room_fit_check(): void
+    {
+        // Sharing is only safe when the rooms can be asked whether everyone fits; with no checker the
+        // generator behaves exactly as it always has.
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [],
+            timeSlotIds: [100, 200],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 200 => 'day2'],
+            semesterBySubject: [1 => [1], 2 => [3]],
+            shareSlots: true,
+        );
+
+        $this->assertNotSame($result->assignments[1], $result->assignments[2]);
+    }
+
+    public function test_share_slots_still_keeps_a_pinned_subject_where_it_was_pinned(): void
+    {
+        $result = (new TimetableGenerator)->generate(
+            subjectIds: [1, 2],
+            pinned: [1 => 200],
+            timeSlotIds: [100, 200],
+            conflictGraph: [],
+            subjectLabels: $this->labels([1, 2]),
+            slotDays: [100 => 'day1', 200 => 'day2'],
+            roomsFit: fn (array $ids) => true,
+            semesterBySubject: [1 => [1], 2 => [3]],
+            shareSlots: true,
+        );
+
+        $this->assertSame(200, $result->assignments[1]);
+        $this->assertSame(200, $result->assignments[2], 'the free subject joins the pinned one in its slot');
+    }
 }

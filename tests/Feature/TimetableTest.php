@@ -957,4 +957,69 @@ class TimetableTest extends TestCase
         $this->assertNull($foreignSubject->fresh()->merged_into_id);
         $this->assertNull($mySubject->fresh()->merged_into_id);
     }
+
+    /** A subject with $count distinct students enrolled — no student in common with any other subject. */
+    private function subjectWithStudents(ExamSession $session, int $count): Subject
+    {
+        $subject = Subject::factory()->for($session)->create();
+
+        for ($i = 0; $i < $count; $i++) {
+            $student = Student::factory()->create();
+            Enrollment::factory()->create(['exam_session_id' => $session->id, 'student_id' => $student->id, 'subject_id' => $subject->id]);
+        }
+
+        return $subject;
+    }
+
+    public function test_generate_with_share_slots_puts_two_clash_free_subjects_in_one_slot_when_the_rooms_can_seat_both(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['share_slots' => true, 'seating_strategy' => 'strict']);
+        Room::factory()->for($session)->count(2)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
+        $a = $this->subjectWithStudents($session, 3);
+        $b = $this->subjectWithStudents($session, 3);
+
+        Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session])->call('generateTimetable');
+
+        $slotOf = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('time_slot_id', 'subject_id');
+        $this->assertSame($slotOf[$a->id], $slotOf[$b->id], 'two rooms, two small subjects: they share the first slot');
+        $this->assertTrue(SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('conflict_note')->filter()->isEmpty());
+    }
+
+    public function test_generate_without_share_slots_still_gives_each_subject_its_own_slot(): void
+    {
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['share_slots' => false, 'seating_strategy' => 'strict']);
+        Room::factory()->for($session)->count(2)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
+        $a = $this->subjectWithStudents($session, 3);
+        $b = $this->subjectWithStudents($session, 3);
+
+        Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session])->call('generateTimetable');
+
+        $slotOf = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('time_slot_id', 'subject_id');
+        $this->assertNotSame($slotOf[$a->id], $slotOf[$b->id]);
+    }
+
+    public function test_generate_with_share_slots_does_not_squeeze_in_a_subject_the_rooms_cannot_seat(): void
+    {
+        // One 3-seat room: under Strict each subject needs a room of its own, so two subjects cannot
+        // share a slot. The second keeps its own slot and nothing is flagged as a problem.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $session = ExamSession::factory()->create(['share_slots' => true, 'seating_strategy' => 'strict']);
+        Room::factory()->for($session)->create(['rows' => 3, 'columns' => 1, 'capacity' => 3]);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-20', 'start_time' => '09:00']);
+        TimeSlot::factory()->create(['exam_session_id' => $session->id, 'date' => '2026-04-21', 'start_time' => '09:00']);
+        $a = $this->subjectWithStudents($session, 3);
+        $b = $this->subjectWithStudents($session, 3);
+
+        Livewire::actingAs($staff)->test(Timetable::class, ['examSession' => $session])->call('generateTimetable');
+
+        $slotOf = SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('time_slot_id', 'subject_id');
+        $this->assertNotSame($slotOf[$a->id], $slotOf[$b->id]);
+        $this->assertTrue(SubjectSlotAssignment::where('exam_session_id', $session->id)->pluck('conflict_note')->filter()->isEmpty());
+    }
 }

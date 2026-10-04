@@ -48,6 +48,15 @@ class GenerationConstraints extends Component
      */
     public bool $respect_room_capacity = false;
 
+    /**
+     * When on, Generate Timetable actively fills spare rooms: a subject joins a slot that already has
+     * another subject whenever they share no student and the active rooms can seat both together
+     * (e.g. one subject needs 2 of 5 rooms, so a different subject takes the other rooms in that slot).
+     * Implies the room-capacity awareness above — it can't judge "fits" without it. Off by default: every
+     * subject then gets a slot of its own until slots run out.
+     */
+    public bool $share_slots = false;
+
     public function mount(ExamSession $examSession): void
     {
         $this->authorize('manage_sessions');
@@ -57,6 +66,7 @@ class GenerationConstraints extends Component
         $this->invigilators_per_room = $examSession->invigilators_per_room;
         $this->teacher_subject_exclusion = $examSession->teacher_subject_exclusion;
         $this->respect_room_capacity = $examSession->respect_room_capacity;
+        $this->share_slots = $examSession->share_slots;
     }
 
     public function saveSettings(): void
@@ -73,6 +83,7 @@ class GenerationConstraints extends Component
             'invigilators_per_room' => ['required', 'integer', 'min:1', 'max:10'],
             'teacher_subject_exclusion' => ['boolean'],
             'respect_room_capacity' => ['boolean'],
+            'share_slots' => ['boolean'],
         ]);
 
         // Not relevant outside Mixed mode — keep it a sane default rather
