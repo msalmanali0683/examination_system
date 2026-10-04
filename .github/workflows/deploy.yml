@@ -1,0 +1,60 @@
+name: Test, build and publish to production
+
+# Every push to main: run the whole test suite, build the CSS/JS (the live server has no
+# Node), and publish the result as the `production` branch. The live server watches that
+# branch and deploys it by itself (see deploy/auto-deploy.sh) — nothing here holds a
+# password, key or token, and a failing test stops the publish.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push replaces a run that is still going.
+concurrency:
+  group: publish-production
+  cancel-in-progress: true
+
+permissions:
+  contents: write # only used to update the `production` branch
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, dom, fileinfo, gd, zip, sqlite3, pdo_sqlite, intl, bcmath
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Build assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare the app for testing
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run the test suite
+        run: php artisan test
+
+      - name: Publish the production branch (source + built assets)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f public/build
+          git commit -m "Production build of ${GITHUB_SHA::7}"
+          git push --force origin HEAD:refs/heads/production
